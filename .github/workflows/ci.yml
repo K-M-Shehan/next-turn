@@ -26,4 +26,4 @@ jobs:
         run: dotnet build ./src/backend/NextTurn.Api/NextTurn.Api.csproj --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test ./tests --configuration Release --no-build
+        run: dotnet test ./src/backend/NextTurn.Api/NextTurn.Api.csproj --configuration Release --no-build
