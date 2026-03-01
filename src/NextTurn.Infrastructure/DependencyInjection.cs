@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using NextTurn.Application.Common.Interfaces;
 using NextTurn.Domain.Auth.Repositories;
 using NextTurn.Infrastructure.Auth;
@@ -39,12 +39,21 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(
             provider => provider.GetRequiredService<ApplicationDbContext>());
 
+        // ── Multi-tenancy ─────────────────────────────────────────────────────
+        // IHttpContextAccessor makes the current HttpContext available in DI services.
+        // Required by HttpTenantContext to read HttpContext.Items populated by TenantMiddleware.
+        services.AddHttpContextAccessor();
+        // Scoped: one HttpTenantContext per HTTP request, same lifetime as DbContext.
+        services.AddScoped<ITenantContext, HttpTenantContext>();
+
         // ── Repositories ──────────────────────────────────────────────────────
         // Scoped lifetime matches DbContext — one instance per HTTP request.
         services.AddScoped<IUserRepository, UserRepository>();
-        // ── Security ──────────────────────────────────────────────────────────────
+
+        // ── Security ──────────────────────────────────────────────────────────
         // Singleton is safe — BcryptPasswordHasher holds no state.
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
+
         return services;
     }
 }

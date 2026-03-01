@@ -5,6 +5,11 @@
     <ProjectReference Include="..\NextTurn.Domain\NextTurn.Domain.csproj" />
   </ItemGroup>
 
+  <!-- Required for IHttpContextAccessor used in HttpTenantContext -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
