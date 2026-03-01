@@ -1,6 +1,8 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using NextTurn.API.Models.Auth;
+using NextTurn.Application.Auth.Commands.LoginUser;
 using NextTurn.Application.Auth.Commands.RegisterUser;
 
 namespace NextTurn.API.Controllers;
