@@ -1,12 +1,17 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.IdentityModel.Tokens;
+using NextTurn.Domain.Auth;
+using NextTurn.Infrastructure.Persistence;
 using Respawn;
 using Testcontainers.MsSql;
-using NextTurn.Infrastructure.Persistence;
 
 namespace NextTurn.IntegrationTests;
 
@@ -98,5 +103,71 @@ public sealed class NextTurnWebApplicationFactory
 
         // Use a dedicated test environment to suppress production-only behaviour.
         builder.UseEnvironment("Testing");
+    }
+
+    // ── Token factory ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Mints a signed JWT for the given role without going through the login endpoint.
+    /// Uses the same secret / issuer / audience injected by ConfigureWebHost so the
+    /// API's JwtBearer handler will accept the token as valid.
+    ///
+    /// Call this in integration tests that need a pre-authenticated client:
+    ///   _client.DefaultRequestHeaders.Authorization =
+    ///       new AuthenticationHeaderValue("Bearer", _factory.CreateTokenForRole(UserRole.Staff));
+    /// </summary>
+    public string CreateTokenForRole(
+        UserRole role,
+        Guid?    userId   = null,
+        Guid?    tenantId = null,
+        int      expiryMinutes = 60)
+    {
+        const string secret   = "integration-test-secret-32-chars!!";
+        const string issuer   = "https://localhost:5001";
+        const string audience = "NextTurnClient";
+
+        var key         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        // For already-expired tokens (expiryMinutes < 0), both notBefore and expires
+        // must be in the past. notBefore is set one minute before expires to keep the
+        // JwtSecurityToken constructor happy (expires must be after notBefore).
+        var expires   = DateTime.UtcNow.AddMinutes(expiryMinutes);
+        var notBefore = expiryMinutes < 0
+            ? expires.AddMinutes(-1)
+            : DateTime.UtcNow;
+
+        var claims = new[]
+        {
+            new Claim(JwtRegisteredClaimNames.Sub,   (userId   ?? Guid.NewGuid()).ToString()),
+            new Claim(JwtRegisteredClaimNames.Email, $"test-{role.ToString().ToLower()}@example.com"),
+            new Claim(JwtRegisteredClaimNames.Name,  $"Test {role}"),
+            new Claim("role",                        role.ToString()),
+            new Claim("tid",                         (tenantId ?? Guid.NewGuid()).ToString()),
+            new Claim(JwtRegisteredClaimNames.Jti,   Guid.NewGuid().ToString()),
+        };
+
+        var token = new JwtSecurityToken(
+            issuer:             issuer,
+            audience:           audience,
+            claims:             claims,
+            notBefore:          notBefore,
+            expires:            expires,
+            signingCredentials: credentials);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
+    /// Convenience overload: creates an <see cref="HttpClient"/> pre-configured with
+    /// a Bearer token for the given role.
+    /// </summary>
+    public HttpClient CreateClientForRole(UserRole role, Guid? tenantId = null)
+    {
+        var client = CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", CreateTokenForRole(role, tenantId: tenantId));
+        return client;
     }
 }

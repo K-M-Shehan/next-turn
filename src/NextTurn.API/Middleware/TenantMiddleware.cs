@@ -55,6 +55,17 @@ public sealed class TenantMiddleware
         // ── 3. Reject if unresolved ───────────────────────────────────────────
         if (tenantId == null)
         {
+            // If the user has no valid identity (no token / invalid token), pass the
+            // request through so UseAuthorization() can return the correct 401.
+            // Returning 400 here would mask the authentication failure.
+            if (context.User.Identity?.IsAuthenticated != true)
+            {
+                await _next(context);
+                return;
+            }
+
+            // Authenticated user with a token that lacks a 'tid' claim — that means
+            // a malformed token slipped through, which is a bad request (not a 401).
             _logger.LogWarning(
                 "Request to {Method} {Path} rejected: TenantId could not be resolved " +
                 "from JWT claim '{Claim}' or header '{Header}'.",

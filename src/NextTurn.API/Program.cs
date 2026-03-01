@@ -120,11 +120,13 @@ app.UseHttpsRedirection();
 app.UseMiddleware<DomainExceptionMiddleware>();
 app.UseMiddleware<ValidationExceptionMiddleware>();
 
+app.UseAuthentication();
+
 // Resolve TenantId from JWT claim 'tid' or X-Tenant-Id header.
-// Placed after exception middlewares so tenant errors are also caught properly.
+// Must run AFTER UseAuthentication() so context.User is populated from the JWT
+// before TenantMiddleware attempts to read the 'tid' claim.
 app.UseMiddleware<TenantMiddleware>();
 
-app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();

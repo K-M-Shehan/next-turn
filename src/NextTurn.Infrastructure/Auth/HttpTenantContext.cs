@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Domain.Common;
 using NextTurn.Infrastructure.Common;
 
 namespace NextTurn.Infrastructure.Auth;
@@ -52,9 +53,8 @@ public sealed class HttpTenantContext : ITenantContext
                 return tenantId;
             }
 
-            throw new InvalidOperationException(
-                "TenantId has not been set. Ensure TenantMiddleware is registered " +
-                "in the request pipeline before any endpoint that requires a tenant context.");
+            throw new DomainException(
+                "A valid tenant identifier must be provided via the 'X-Tenant-Id' header or a JWT 'tid' claim.");
         }
     }
 }
