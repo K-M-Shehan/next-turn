@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Domain.Auth.Repositories;
+using NextTurn.Infrastructure.Auth;
 using NextTurn.Infrastructure.Persistence;
 
 namespace NextTurn.Infrastructure;
@@ -36,6 +38,10 @@ public static class DependencyInjection
         // layer handlers can depend on the interface, not the concrete class
         services.AddScoped<IApplicationDbContext>(
             provider => provider.GetRequiredService<ApplicationDbContext>());
+
+        // ── Repositories ──────────────────────────────────────────────────────
+        // Scoped lifetime matches DbContext — one instance per HTTP request.
+        services.AddScoped<IUserRepository, UserRepository>();
 
         return services;
     }
