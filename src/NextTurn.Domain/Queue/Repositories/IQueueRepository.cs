@@ -54,4 +54,19 @@ public interface IQueueRepository
     /// Used to enforce the "no duplicate join" constraint.
     /// </summary>
     Task<bool> HasActiveEntryAsync(Guid queueId, Guid userId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns all queues owned by the specified organisation.
+    /// Used by the org admin dashboard to list queues and generate shareable links.
+    /// Returns an empty list if the organisation has no queues.
+    /// </summary>
+    Task<IReadOnlyList<QueueEntity>> GetByOrganisationIdAsync(Guid organisationId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns the user's active entry (<see cref="QueueEntryStatus.Waiting"/> or
+    /// <see cref="QueueEntryStatus.Serving"/>) in the specified queue, or <c>null</c>
+    /// if the user has no active entry.
+    /// Used by <c>GetQueueStatusQueryHandler</c> to retrieve the user's current ticket.
+    /// </summary>
+    Task<QueueEntry?> GetUserActiveEntryAsync(Guid queueId, Guid userId, CancellationToken cancellationToken);
 }
