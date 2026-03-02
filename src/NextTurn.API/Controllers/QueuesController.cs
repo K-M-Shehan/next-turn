@@ -6,6 +6,7 @@ using NextTurn.API.Models.Queues;
 using NextTurn.Application.Queue.Commands.CreateQueue;
 using NextTurn.Application.Queue.Commands.JoinQueue;
 using NextTurn.Application.Queue.Queries.GetQueueStatus;
+using NextTurn.Application.Queue.Queries.ListOrgQueues;
 
 namespace NextTurn.API.Controllers;
 
@@ -131,6 +132,28 @@ public sealed class QueuesController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
 
         return CreatedAtAction(nameof(GetQueueStatus), new { queueId = result.QueueId }, result);
+    }
+
+    /// <summary>
+    /// List all queues for the authenticated org admin's organisation.
+    /// Used by the admin dashboard on page load.
+    /// </summary>
+    [HttpGet]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(typeof(IReadOnlyList<OrgQueueSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListQueues(CancellationToken cancellationToken)
+    {
+        var tenantIdClaim = User.FindFirstValue("tid");
+
+        if (!Guid.TryParse(tenantIdClaim, out var organisationId))
+            return Unauthorized();
+
+        var query  = new ListOrgQueuesQuery(organisationId);
+        var result = await _sender.Send(query, cancellationToken);
+
+        return Ok(result);
     }
 
     /// <summary>
