@@ -24,6 +24,7 @@ import { DashboardPage } from './pages/Dashboard'
 import { AccessDeniedPage } from './pages/AccessDenied'
 import { OrgRegistrationPage } from './pages/OrgRegistration'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { QueuePage } from './pages/Queue'
 
 // ── Role-restricted stub pages ────────────────────────────────────────────────
 // Temporary placeholders so the route guards have real targets during NT-12
@@ -75,6 +76,16 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['SystemAdmin']}>
             <SystemAdminStub />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Any authenticated user — join a specific queue */}
+      <Route
+        path="/queues/:tenantId/:queueId"
+        element={
+          <ProtectedRoute>
+            <QueuePage />
           </ProtectedRoute>
         }
       />
