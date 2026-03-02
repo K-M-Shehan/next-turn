@@ -9,6 +9,7 @@ using NextTurn.Infrastructure.BusinessRegistry;
 using NextTurn.Infrastructure.Email;
 using NextTurn.Infrastructure.Organisation;
 using NextTurn.Infrastructure.Persistence;
+using NextTurn.Infrastructure.Queue;
 
 namespace NextTurn.Infrastructure;
 
@@ -71,6 +72,11 @@ public static class DependencyInjection
         // in a later sprint — swap these registrations then.
         services.AddScoped<IEmailService, StubEmailService>();
         services.AddScoped<IBusinessRegistryService, StubBusinessRegistryService>();
+
+        // ── Queue state (Sprint 1 stub) ────────────────────────────────────────
+        // StubQueueStateService derives position from SQL COUNT queries.
+        // Sprint 2+: swap for a Redis-backed implementation — no caller changes needed.
+        services.AddScoped<IQueueStateService, StubQueueStateService>();
 
         return services;
     }

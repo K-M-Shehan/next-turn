@@ -3,6 +3,8 @@ using NextTurn.Application.Common.Interfaces;
 using NextTurn.Domain.Auth.Entities;
 using NextTurn.Infrastructure.Persistence.Configurations.Auth;
 using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
+using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
+using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 
 namespace NextTurn.Infrastructure.Persistence;
 
@@ -29,7 +31,12 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     // ── DbSets (one per aggregate root) ──────────────────────────────────────
 
-    public DbSet<User> Users => Set<User>();    public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+    public DbSet<User>             Users        => Set<User>();
+    public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+
+    // Queue module (NT-16) — EF Core entity configurations and migration added in NT-16-3.
+    public DbSet<QueueEntity> Queues       => Set<QueueEntity>();
+    public DbSet<QueueEntry>  QueueEntries => Set<QueueEntry>();
     // ── Model configuration ───────────────────────────────────────────────────
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
