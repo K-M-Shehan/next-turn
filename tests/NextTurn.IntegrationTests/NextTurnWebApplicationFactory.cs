@@ -12,6 +12,11 @@ using NextTurn.Domain.Auth;
 using NextTurn.Infrastructure.Persistence;
 using Respawn;
 using Testcontainers.MsSql;
+using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
+using NextTurn.Domain.Organisation.Enums;
+using NextTurn.Domain.Organisation.ValueObjects;
+using NextTurn.Domain.Auth.ValueObjects;
+using QueueEntity = NextTurn.Domain.Queue.Entities.Queue;
 
 namespace NextTurn.IntegrationTests;
 
@@ -169,5 +174,60 @@ public sealed class NextTurnWebApplicationFactory
             new System.Net.Http.Headers.AuthenticationHeaderValue(
                 "Bearer", CreateTokenForRole(role, tenantId: tenantId));
         return client;
+    }
+
+    // ── Test data helpers ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Seeds a test organisation and an active queue into the test database.
+    /// Returns the IDs so callers can build requests and JWT claims against them.
+    ///
+    /// Call this inside a test's <c>InitializeAsync</c> (after <c>ResetDatabaseAsync</c>)
+    /// to ensure the queue exists before the test runs.
+    ///
+    /// Example usage in an integration test class:
+    /// <code>
+    /// public async Task InitializeAsync()
+    /// {
+    ///     await _factory.ResetDatabaseAsync();
+    ///     (_tenantId, _queueId) = await _factory.SeedQueueAsync();
+    /// }
+    /// </code>
+    /// </summary>
+    /// <param name="maxCapacity">Override to test queue-full scenarios (e.g. set to 1).</param>
+    /// <param name="avgServiceTimeSecs">Seconds per customer — drives ETA in results.</param>
+    public async Task<(Guid TenantId, Guid QueueId)> SeedQueueAsync(
+        int maxCapacity       = 50,
+        int avgServiceTimeSecs = 300)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        // ── Organisation (serves as tenant) ───────────────────────────────────
+        // Use a unique name per call — there is a UNIQUE index on Organisation.Name,
+        // so calling SeedQueueAsync more than once per test would collide if the name
+        // were fixed (e.g. in queue-full tests that seed a second, capacity=1 queue).
+        var org = OrganisationEntity.Create(
+            name:       $"Test Organisation {Guid.NewGuid()}",
+            address:    new Address("1 Test Street", "Test City", "T1 1ST", "GB"),
+            type:       OrganisationType.Government,
+            adminEmail: new EmailAddress("admin@test.nextturn.dev"));
+
+        db.Organisations.Add(org);
+        await db.SaveChangesAsync();
+
+        var tenantId = org.Id;
+
+        // ── Queue ─────────────────────────────────────────────────────────────
+        var queue = QueueEntity.Create(
+            organisationId:            tenantId,
+            name:                      "Test Queue",
+            maxCapacity:               maxCapacity,
+            averageServiceTimeSeconds: avgServiceTimeSecs);
+
+        db.Queues.Add(queue);
+        await db.SaveChangesAsync();
+
+        return (tenantId, queue.Id);
     }
 }

@@ -3,6 +3,8 @@ using NextTurn.Application.Common.Interfaces;
 using NextTurn.Domain.Auth.Entities;
 using NextTurn.Infrastructure.Persistence.Configurations.Auth;
 using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
+using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
+using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 
 namespace NextTurn.Infrastructure.Persistence;
 
@@ -29,7 +31,13 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     // ── DbSets (one per aggregate root) ──────────────────────────────────────
 
-    public DbSet<User> Users => Set<User>();    public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+    public DbSet<User>             Users        => Set<User>();
+    public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+
+    // Queue module (NT-16) — EF Core entity configurations and migration added in NT-16-3.
+    public DbSet<QueueEntity> Queues       => Set<QueueEntity>();
+    public DbSet<QueueEntry>  QueueEntries => Set<QueueEntry>();
+
     // ── Model configuration ───────────────────────────────────────────────────
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -41,11 +49,30 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
 
         // ── Global Query Filters (multi-tenancy) ─────────────────────────────
-        // Every query on this table automatically appends WHERE TenantId = @currentTenantId.
+        // Every query on a tenant-aware entity automatically appends a tenant WHERE clause.
         // This is enforced at the EF Core level — forgetting to filter in a repository
         // is not possible because the filter is always active.
+
+        // Users: direct TenantId column on the entity.
         modelBuilder.Entity<User>()
             .HasQueryFilter(u => u.TenantId == _tenantContext.TenantId);
+
+        // Queues: OrganisationId IS the tenant identifier for this module.
+        // Every queue belongs to exactly one organisation (= one tenant).
+        modelBuilder.Entity<QueueEntity>()
+            .HasQueryFilter(q => q.OrganisationId == _tenantContext.TenantId);
+
+        // QueueEntries: no TenantId column — isolation is enforced via a correlated
+        // subquery through Queue.OrganisationId. This is an EF Core supported pattern
+        // for filtering child entities that don't carry their own tenant key.
+        // Set<QueueEntity>() resolves the Queue DbSet (with its own filter disabled here
+        // to avoid double-filtering) using IgnoreQueryFilters is not needed — EF Core
+        // does not recursively apply filters inside filter lambdas.
+        modelBuilder.Entity<QueueEntry>()
+            .HasQueryFilter(e =>
+                Set<QueueEntity>().Any(q =>
+                    q.Id == e.QueueId &&
+                    q.OrganisationId == _tenantContext.TenantId));
     }
 
     // ── SaveChanges override ──────────────────────────────────────────────────

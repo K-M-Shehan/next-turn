@@ -4,11 +4,13 @@ using Microsoft.Extensions.Configuration;
 using NextTurn.Application.Common.Interfaces;
 using NextTurn.Domain.Auth.Repositories;
 using NextTurn.Domain.Organisation.Repositories;
+using NextTurn.Domain.Queue.Repositories;
 using NextTurn.Infrastructure.Auth;
 using NextTurn.Infrastructure.BusinessRegistry;
 using NextTurn.Infrastructure.Email;
 using NextTurn.Infrastructure.Organisation;
 using NextTurn.Infrastructure.Persistence;
+using NextTurn.Infrastructure.Queue;
 
 namespace NextTurn.Infrastructure;
 
@@ -54,6 +56,7 @@ public static class DependencyInjection
         // Scoped lifetime matches DbContext — one instance per HTTP request.
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IOrganisationRepository, OrganisationRepository>();
+        services.AddScoped<IQueueRepository, QueueRepository>();
 
         // ── Security ──────────────────────────────────────────────────────────
         // Singleton is safe — BcryptPasswordHasher holds no state.
@@ -71,6 +74,11 @@ public static class DependencyInjection
         // in a later sprint — swap these registrations then.
         services.AddScoped<IEmailService, StubEmailService>();
         services.AddScoped<IBusinessRegistryService, StubBusinessRegistryService>();
+
+        // ── Queue state (Sprint 1 stub) ────────────────────────────────────────
+        // StubQueueStateService derives position from SQL COUNT queries.
+        // Sprint 2+: swap for a Redis-backed implementation — no caller changes needed.
+        services.AddScoped<IQueueStateService, StubQueueStateService>();
 
         return services;
     }
