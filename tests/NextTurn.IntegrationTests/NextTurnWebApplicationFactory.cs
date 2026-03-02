@@ -204,8 +204,11 @@ public sealed class NextTurnWebApplicationFactory
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
         // ── Organisation (serves as tenant) ───────────────────────────────────
+        // Use a unique name per call — there is a UNIQUE index on Organisation.Name,
+        // so calling SeedQueueAsync more than once per test would collide if the name
+        // were fixed (e.g. in queue-full tests that seed a second, capacity=1 queue).
         var org = OrganisationEntity.Create(
-            name:       "Test Organisation",
+            name:       $"Test Organisation {Guid.NewGuid()}",
             address:    new Address("1 Test Street", "Test City", "T1 1ST", "GB"),
             type:       OrganisationType.Government,
             adminEmail: new EmailAddress("admin@test.nextturn.dev"));
