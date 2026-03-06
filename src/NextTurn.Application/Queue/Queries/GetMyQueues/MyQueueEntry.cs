@@ -5,6 +5,7 @@ namespace NextTurn.Application.Queue.Queries.GetMyQueues;
 /// </summary>
 public record MyQueueEntry(
     Guid   QueueId,
+    Guid   OrganisationId,
     string QueueName,
     int    TicketNumber,
     string QueueStatus);

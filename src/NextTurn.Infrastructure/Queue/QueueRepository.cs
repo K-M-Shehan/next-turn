@@ -127,24 +127,29 @@ public sealed class QueueRepository : IQueueRepository
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<(Guid QueueId, string QueueName, int TicketNumber, string Status)>>
+    public async Task<IReadOnlyList<(Guid QueueId, Guid OrganisationId, string QueueName, int TicketNumber, string Status)>>
         GetUserActiveEntriesAsync(Guid userId, CancellationToken cancellationToken)
     {
         return await _context.QueueEntries
+            // IgnoreQueryFilters so consumer users (TenantId = Guid.Empty) can see
+            // entries across any org — the correlated subquery filter is bypassed here.
+            .IgnoreQueryFilters()
             .Where(e => e.UserId == userId &&
                         (e.Status == QueueEntryStatus.Waiting || e.Status == QueueEntryStatus.Serving))
             .Join(
-                _context.Queues,
+                // Also bypass the Queues global filter (OrganisationId filter).
+                _context.Queues.IgnoreQueryFilters(),
                 entry => entry.QueueId,
                 queue  => queue.Id,
                 (entry, queue) => new
                 {
                     queue.Id,
+                    queue.OrganisationId,
                     queue.Name,
                     entry.TicketNumber,
                     StatusStr = queue.Status.ToString(),
                 })
-            .Select(x => ValueTuple.Create(x.Id, x.Name, x.TicketNumber, x.StatusStr))
+            .Select(x => ValueTuple.Create(x.Id, x.OrganisationId, x.Name, x.TicketNumber, x.StatusStr))
             .ToListAsync(cancellationToken);
     }
 }

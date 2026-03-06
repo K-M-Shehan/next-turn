@@ -84,6 +84,6 @@ public interface IQueueRepository
     /// Active means <see cref="QueueEntryStatus.Waiting"/> or <see cref="QueueEntryStatus.Serving"/>.
     /// Used by the end-user dashboard to show "My Queues".
     /// </summary>
-    Task<IReadOnlyList<(Guid QueueId, string QueueName, int TicketNumber, string Status)>>
+    Task<IReadOnlyList<(Guid QueueId, Guid OrganisationId, string QueueName, int TicketNumber, string Status)>>
         GetUserActiveEntriesAsync(Guid userId, CancellationToken cancellationToken);
 }

@@ -24,7 +24,7 @@ public class GetMyQueuesQueryHandler
             .GetUserActiveEntriesAsync(query.UserId, cancellationToken);
 
         return entries
-            .Select(e => new MyQueueEntry(e.QueueId, e.QueueName, e.TicketNumber, e.Status))
+            .Select(e => new MyQueueEntry(e.QueueId, e.OrganisationId, e.QueueName, e.TicketNumber, e.Status))
             .ToList();
     }
 }
