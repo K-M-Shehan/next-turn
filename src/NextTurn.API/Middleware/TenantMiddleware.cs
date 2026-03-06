@@ -43,13 +43,17 @@ public sealed class TenantMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // ── 1. Try JWT claim ──────────────────────────────────────────────────
-        var tenantId = TryResolveFromClaims(context.User);
+        // ── 1. Try X-Tenant-Id header first ──────────────────────────────────
+        // The header takes priority so that pages operating on a specific org's
+        // resources (e.g. queue operations) can always supply the correct tenant,
+        // even when the authenticated user's JWT 'tid' belongs to a different org
+        // (e.g. a consumer user with tid=Guid.Empty joining another org's queue).
+        var tenantId = TryResolveFromHeader(context.Request);
 
-        // ── 2. Fallback to X-Tenant-Id header ────────────────────────────────
+        // ── 2. Fallback to JWT 'tid' claim ────────────────────────────────────
         if (tenantId == null)
         {
-            tenantId = TryResolveFromHeader(context.Request);
+            tenantId = TryResolveFromClaims(context.User);
         }
 
         // ── 3. Reject if unresolved ───────────────────────────────────────────
