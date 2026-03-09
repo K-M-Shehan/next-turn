@@ -1,34 +1,37 @@
 /**
- * RegisterPage — Full-page split-screen user registration UI.
+ * GlobalRegisterPage — Consumer account registration.
  *
- * Route: /register/:tenantId
- *   tenantId → sent as X-Tenant-Id header (multi-tenant isolation)
+ * Route: /register  (no tenantId — end-users are not bound to any org)
  *
- * UX states: idle → submitting → success | error
+ * This mirrors RegisterPage but calls POST /api/auth/register-global instead of
+ * POST /api/auth/register. The created account has TenantId = Guid.Empty and
+ * can join queues from any organisation.
+ *
+ * On success redirects to /login (global login page).
  */
 import { useForm, type SubmitHandler } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useParams, Link } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useState } from 'react'
 
 import { registerSchema, getPasswordStrength } from '../../schemas/registerSchema'
 import type { RegisterFormValues } from '../../schemas/registerSchema'
-import { registerUser } from '../../api/auth'
+import { registerGlobalUser } from '../../api/auth'
 import type { ApiError } from '../../types/api'
 
-import { FormField } from '../../components/ui/FormField'
-import { TextInput } from '../../components/ui/TextInput'
-import { PasswordInput } from '../../components/ui/PasswordInput'
+import { FormField }          from '../../components/ui/FormField'
+import { TextInput }          from '../../components/ui/TextInput'
+import { PasswordInput }      from '../../components/ui/PasswordInput'
 import { PasswordStrengthBar } from '../../components/ui/PasswordStrengthBar'
-import { Button } from '../../components/ui/Button'
+import { Button }             from '../../components/ui/Button'
 
 import logoImg from '../../assets/nextTurn-logo.png'
-import styles from './RegisterPage.module.css'
+// Reuse the existing RegisterPage CSS module — same layout, same design system.
+import styles from '../Register/RegisterPage.module.css'
 
-export function RegisterPage() {
-  const { tenantId } = useParams<{ tenantId: string }>()
+export function GlobalRegisterPage() {
   const [serverError, setServerError] = useState<string | null>(null)
-  const [submitted, setSubmitted] = useState(false)
+  const [submitted,   setSubmitted]   = useState(false)
 
   const {
     register,
@@ -40,22 +43,17 @@ export function RegisterPage() {
     mode: 'onTouched',
   })
 
-  const passwordValue = watch('password', '')
+  const passwordValue    = watch('password', '')
   const passwordStrength = getPasswordStrength(passwordValue)
 
   const onSubmit: SubmitHandler<RegisterFormValues> = async (data) => {
-    if (!tenantId) {
-      setServerError('This registration link is invalid. Please contact your organization for a valid link.')
-      return
-    }
-
     setServerError(null)
 
     try {
-      await registerUser(tenantId, {
-        name: data.name,
-        email: data.email,
-        phone: data.phone || null,
+      await registerGlobalUser({
+        name:     data.name,
+        email:    data.email,
+        phone:    data.phone || null,
         password: data.password,
       })
       setSubmitted(true)
@@ -63,10 +61,8 @@ export function RegisterPage() {
       const apiErr = err as ApiError
 
       if (apiErr.status === 400) {
-        // Domain error — e.g. "email already in use"
         setServerError(apiErr.detail ?? 'Registration failed. Please try again.')
       } else if (apiErr.status === 422) {
-        // Validation error from server (should be caught by Zod first, but be defensive)
         const firstError = apiErr.errors
           ? Object.values(apiErr.errors)[0]?.[0]
           : undefined
@@ -75,24 +71,6 @@ export function RegisterPage() {
         setServerError(apiErr.detail ?? 'Something went wrong. Please try again later.')
       }
     }
-  }
-
-  if (!tenantId) {
-    return (
-      <div className={styles.page}>
-        <HeroPanel />
-        <div className={styles.formPanel}>
-          <div className={styles.errorCard}>
-            <span className={styles.errorCardIcon}>🔗</span>
-            <h2 className={styles.errorCardTitle}>Invalid Registration Link</h2>
-            <p className={styles.errorCardBody}>
-              This link is missing an organization identifier.
-              Please ask your organization for the correct registration URL.
-            </p>
-          </div>
-        </div>
-      </div>
-    )
   }
 
   if (submitted) {
@@ -106,10 +84,10 @@ export function RegisterPage() {
             </div>
             <h2 className={styles.successTitle}>Account Created!</h2>
             <p className={styles.successBody}>
-              Welcome to NextTurn. Your account has been created successfully.
-              You can now sign in and start managing your place in the queue.
+              Welcome to NextTurn. Your account is ready — you can now sign in
+              and join any organisation's queue.
             </p>
-            <Link to={`/login/${tenantId}`} className={styles.successLink}>
+            <Link to="/login" className={styles.successLink}>
               Go to Sign In →
             </Link>
           </div>
@@ -128,7 +106,7 @@ export function RegisterPage() {
           <div className={styles.formHeader}>
             <h1 className={styles.formTitle}>Create your account</h1>
             <p className={styles.formSubtitle}>
-              Join your organization's queue management system.
+              Sign up once — join queues at any organisation.
             </p>
           </div>
 
@@ -140,11 +118,7 @@ export function RegisterPage() {
             </div>
           )}
 
-          <form
-            className={styles.form}
-            onSubmit={handleSubmit(onSubmit)}
-            noValidate
-          >
+          <form className={styles.form} onSubmit={handleSubmit(onSubmit)} noValidate>
             {/* Full Name */}
             <FormField label="Full Name" htmlFor="name" error={errors.name?.message} required>
               <TextInput
@@ -231,7 +205,7 @@ export function RegisterPage() {
           {/* Footer */}
           <p className={styles.formFooter}>
             Already have an account?{' '}
-            <Link to={`/login/${tenantId}`} className={styles.link}>
+            <Link to="/login" className={styles.link}>
               Sign in
             </Link>
           </p>
@@ -247,38 +221,28 @@ export function RegisterPage() {
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* Hero panel (left side)                                               */
-/* ------------------------------------------------------------------ */
+/* ── Hero panel ─────────────────────────────────────────────────────────── */
 function HeroPanel() {
   return (
     <div className={styles.hero} aria-hidden="true">
       <div className={styles.heroContent}>
-        {/* Logo */}
         <div className={styles.logo}>
           <img src={logoImg} alt="NextTurn" className={styles.logoImg} />
         </div>
-
-        {/* Tagline */}
         <h2 className={styles.heroTagline}>
           Skip the Wait.<br />Take Control.
         </h2>
         <p className={styles.heroDesc}>
-          A smarter queue and appointment platform built for organizations that
-          value your time as much as their own.
+          Create one account and join queues at any participating organisation —
+          hospitals, clinics, government offices, and more.
         </p>
-
-        {/* Feature highlights */}
         <ul className={styles.features}>
-          <FeatureItem icon={<QueueIcon />} text="Join queues from anywhere, anytime" />
-          <FeatureItem icon={<CalendarIcon />} text="Book, reschedule, or cancel appointments" />
-          <FeatureItem icon={<BellIcon />} text="Get notified when it's your turn" />
-          <FeatureItem icon={<ShieldIcon />} text="Your data is securely isolated per organization" />
+          <FeatureItem icon={<QueueIcon />}    text="Join queues at any organisation" />
+          <FeatureItem icon={<BellIcon />}     text="Get notified when it's your turn" />
+          <FeatureItem icon={<ShieldIcon />}   text="Your data is always secure" />
         </ul>
       </div>
-
-      {/* Decorative blobs */}
-      <div className={styles.blobTop} aria-hidden="true" />
+      <div className={styles.blobTop}    aria-hidden="true" />
       <div className={styles.blobBottom} aria-hidden="true" />
     </div>
   )
@@ -293,35 +257,17 @@ function FeatureItem({ icon, text }: { icon: React.ReactNode; text: string }) {
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* SVG icon set                                                         */
-/* ------------------------------------------------------------------ */
+/* ── SVG icons ──────────────────────────────────────────────────────────── */
 function QueueIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
       stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6"/>
-      <line x1="8" y1="12" x2="21" y2="12"/>
-      <line x1="8" y1="18" x2="21" y2="18"/>
-      <line x1="3" y1="6" x2="3.01" y2="6"/>
-      <line x1="3" y1="12" x2="3.01" y2="12"/>
-      <line x1="3" y1="18" x2="3.01" y2="18"/>
+      <line x1="8" y1="6" x2="21" y2="6"/>  <line x1="8" y1="12" x2="21" y2="12"/>
+      <line x1="8" y1="18" x2="21" y2="18"/> <line x1="3" y1="6" x2="3.01" y2="6"/>
+      <line x1="3" y1="12" x2="3.01" y2="12"/> <line x1="3" y1="18" x2="3.01" y2="18"/>
     </svg>
   )
 }
-
-function CalendarIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8"  y1="2" x2="8"  y2="6"/>
-      <line x1="3"  y1="10" x2="21" y2="10"/>
-    </svg>
-  )
-}
-
 function BellIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -331,7 +277,6 @@ function BellIcon() {
     </svg>
   )
 }
-
 function ShieldIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -340,7 +285,6 @@ function ShieldIcon() {
     </svg>
   )
 }
-
 function CheckIcon() {
   return (
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
@@ -349,7 +293,6 @@ function CheckIcon() {
     </svg>
   )
 }
-
 function ErrorBannerIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
