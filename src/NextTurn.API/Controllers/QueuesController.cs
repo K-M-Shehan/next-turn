@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using NextTurn.API.Models.Queues;
 using NextTurn.Application.Queue.Commands.CreateQueue;
 using NextTurn.Application.Queue.Commands.JoinQueue;
+using NextTurn.Application.Queue.Commands.LeaveQueue;
 using NextTurn.Application.Queue.Queries.GetMyQueues;
 using NextTurn.Application.Queue.Queries.GetQueueStatus;
 using NextTurn.Application.Queue.Queries.ListOrgQueues;
@@ -82,6 +83,43 @@ public sealed class QueuesController : ControllerBase
         var result  = await _sender.Send(command, cancellationToken);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Leave (cancel entry in) a queue.
+    /// </summary>
+    /// <remarks>
+    /// Requires a valid JWT (Authorization: Bearer {token}) and an X-Tenant-Id header.
+    ///
+    /// The authenticated user's ID is extracted from the JWT <c>sub</c> claim.
+    /// The user may only cancel their own entry.
+    ///
+    /// Success response: 204 No Content
+    ///
+    /// Error responses:
+    ///   400 — queue not found, or user is not in this queue
+    ///   401 — missing or invalid JWT
+    ///   422 — validation failed (malformed queueId GUID)
+    /// </remarks>
+    [HttpPost("{queueId:guid}/leave")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> LeaveQueue(
+        Guid queueId,
+        CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                       ?? User.FindFirstValue("sub");
+
+        if (!Guid.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var command = new LeaveQueueCommand(queueId, userId);
+        await _sender.Send(command, cancellationToken);
+
+        return NoContent();
     }
 
     /// <summary>
