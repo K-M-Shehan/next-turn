@@ -2,8 +2,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NextTurn.Domain.Auth;
+using NextTurn.Domain.Queue.Enums;
 using NextTurn.IntegrationTests;
+using NextTurn.Infrastructure.Persistence;
 
 namespace NextTurn.IntegrationTests.Queue;
 
@@ -15,11 +19,12 @@ namespace NextTurn.IntegrationTests.Queue;
 ///
 /// Covered scenarios:
 ///   1. Authenticated user leaves a valid queue they're in → 204 No Content
-///   2. No JWT → 401 Unauthorized
-///   3. Queue not found (unknown GUID) → 400 "Queue not found." (no, actually the user not in queue error)
-///   4. User not in queue → 400 "You are not in this queue."
-///   5. Malformed queueId GUID in route → 422 Unprocessable Entity
-///   6. Leave same queue twice → 400 on second attempt (user no longer in queue)
+///   2. Entry status persists as Cancelled in the database
+///   3. Global consumer (TenantId = Guid.Empty) can leave queues too
+///   4. No JWT → 401 Unauthorized
+///   5. User not in queue → 400 "You are not in this queue."
+///   6. Malformed queueId GUID in route → 422 Unprocessable Entity
+///   7. Leave same queue twice → 400 on second attempt (user no longer in queue)
 /// </summary>
 [Collection("Integration")]
 public sealed class LeaveQueueIntegrationTests
@@ -61,7 +66,7 @@ public sealed class LeaveQueueIntegrationTests
     }
 
     [Fact]
-    public async Task LeaveQueue_WithValidRequest_RemovesUserFromQueue()
+    public async Task LeaveQueue_WithValidRequest_PersistsCancelledStatusInDatabase()
     {
         // Pre-condition: User joins
         var joinResponse = await PostJoinAsync(_queueId, TestUserId, _tenantId);
@@ -74,6 +79,34 @@ public sealed class LeaveQueueIntegrationTests
         // Attempt to get status — should fail because user is no longer in queue
         var statusResponse = await GetStatusAsync(_queueId, TestUserId, _tenantId);
         statusResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var entry = await db.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == TestUserId);
+
+        entry.Should().NotBeNull();
+        entry!.Status.Should().Be(QueueEntryStatus.Cancelled);
+    }
+
+    [Fact]
+    public async Task LeaveQueue_WithGlobalConsumerUser_Returns204NoContent()
+    {
+        var consumerUserId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+
+        // Consumer JWT carries tid = Guid.Empty while X-Tenant-Id scopes the queue request.
+        var client = _factory.CreateClient();
+        var token = _factory.CreateTokenForRole(UserRole.User, userId: consumerUserId, tenantId: Guid.Empty);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        client.DefaultRequestHeaders.Add("X-Tenant-Id", _tenantId.ToString());
+
+        var join = await client.PostAsync($"/api/queues/{_queueId}/join", null);
+        join.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var leave = await client.PostAsync($"/api/queues/{_queueId}/leave", null);
+        leave.StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     // ── 2. No JWT → 401 ───────────────────────────────────────────────────────
@@ -107,7 +140,7 @@ public sealed class LeaveQueueIntegrationTests
     // ── 4. Leave twice → 400 on second attempt ────────────────────────────────
 
     [Fact]
-    public async Task LeaveQueue_WhenUserLeavesTowice_SecondReturns400()
+    public async Task LeaveQueue_WhenUserLeavesTwice_SecondReturns400()
     {
         // Precondition: User joins
         var joinResponse = await PostJoinAsync(_queueId, TestUserId, _tenantId);
