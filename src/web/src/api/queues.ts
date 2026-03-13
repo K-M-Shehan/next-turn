@@ -229,3 +229,35 @@ export async function getMyQueues(): Promise<MyQueueEntry[]> {
     throw parseApiError(err)
   }
 }
+
+/**
+ * POST /api/queues/{queueId}/leave
+ *
+ * Cancels the authenticated user's active entry in a queue.
+ * The API extracts the userId from the JWT sub claim server-side.
+ *
+ * @throws ApiError on:
+ *   400 — queue not found, or user is not in this queue
+ *   401 — missing or invalid JWT
+ *   422 — validation failed (malformed queueId GUID)
+ */
+export async function leaveQueue(
+  queueId: string,
+  tenantId: string,
+): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.post(
+      `/queues/${queueId}/leave`,
+      null,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
