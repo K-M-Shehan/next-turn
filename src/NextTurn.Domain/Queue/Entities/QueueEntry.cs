@@ -70,4 +70,23 @@ public class QueueEntry
             status:       QueueEntryStatus.Waiting,
             joinedAt:     DateTimeOffset.UtcNow);
     }
+
+    /// <summary>
+    /// Transitions the entry to <see cref="QueueEntryStatus.Cancelled"/> status.
+    /// Represents a user voluntarily leaving the queue.
+    /// 
+    /// Invariant: The entry must be in <see cref="QueueEntryStatus.Waiting"/> or
+    /// <see cref="QueueEntryStatus.Serving"/> status to be cancellable.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the entry is already in a terminal state (Served, Cancelled, NoShow).
+    /// </exception>
+    public void Cancel()
+    {
+        if (Status != QueueEntryStatus.Waiting && Status != QueueEntryStatus.Serving)
+            throw new InvalidOperationException(
+                $"Cannot cancel a queue entry in {Status} status. Only Waiting or Serving entries may be cancelled.");
+
+        Status = QueueEntryStatus.Cancelled;
+    }
 }
