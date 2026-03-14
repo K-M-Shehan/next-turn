@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getAvailableAppointmentSlots, bookAppointment, type AvailableAppointmentSlot } from '../../api/appointments'
+import {
+  getAvailableAppointmentSlots,
+  bookAppointment,
+  rescheduleAppointment,
+  type AvailableAppointmentSlot,
+} from '../../api/appointments'
 import { getTokenPayload } from '../../utils/authToken'
 import type { ApiError } from '../../types/api'
 import logoImg from '../../assets/nextTurn-logo.png'
@@ -14,8 +19,15 @@ const GUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 type BookingState =
   | { status: 'idle' }
   | { status: 'booking' }
-  | { status: 'success'; appointmentId: string }
+  | { status: 'success'; appointmentId: string; message: string }
   | { status: 'error'; detail: string }
+
+type CurrentAppointment = {
+  appointmentId: string
+  organisationId: string
+  slotStart: string
+  slotEnd: string
+}
 
 function isGuid(value: string): boolean {
   return GUID_REGEX.test(value.trim())
@@ -33,6 +45,10 @@ function formatSlotLabel(slot: AvailableAppointmentSlot): string {
   const end = new Date(slot.slotEnd)
 
   return `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+}
+
+function formatSlotRange(slotStart: string, slotEnd: string): string {
+  return formatSlotLabel({ slotStart, slotEnd })
 }
 
 export function AppointmentPage() {
@@ -53,6 +69,7 @@ export function AppointmentPage() {
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState<string | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<AvailableAppointmentSlot | null>(null)
+  const [currentAppointment, setCurrentAppointment] = useState<CurrentAppointment | null>(null)
   const [booking, setBooking] = useState<BookingState>({ status: 'idle' })
 
   useEffect(() => {
@@ -100,13 +117,48 @@ export function AppointmentPage() {
     setBooking({ status: 'booking' })
 
     try {
-      const result = await bookAppointment({
-        organisationId,
-        slotStart: selectedSlot.slotStart,
-        slotEnd: selectedSlot.slotEnd,
-      })
+      if (currentAppointment) {
+        const result = await rescheduleAppointment(
+          currentAppointment.appointmentId,
+          {
+            newSlotStart: selectedSlot.slotStart,
+            newSlotEnd: selectedSlot.slotEnd,
+          },
+          organisationId,
+        )
 
-      setBooking({ status: 'success', appointmentId: result.appointmentId })
+        setCurrentAppointment({
+          appointmentId: result.appointmentId,
+          organisationId,
+          slotStart: result.slotStart,
+          slotEnd: result.slotEnd,
+        })
+
+        setBooking({
+          status: 'success',
+          appointmentId: result.appointmentId,
+          message: 'Appointment rescheduled. New appointment ID:',
+        })
+      } else {
+        const result = await bookAppointment({
+          organisationId,
+          slotStart: selectedSlot.slotStart,
+          slotEnd: selectedSlot.slotEnd,
+        })
+
+        setCurrentAppointment({
+          appointmentId: result.appointmentId,
+          organisationId,
+          slotStart: selectedSlot.slotStart,
+          slotEnd: selectedSlot.slotEnd,
+        })
+
+        setBooking({
+          status: 'success',
+          appointmentId: result.appointmentId,
+          message: 'Appointment confirmed. ID:',
+        })
+      }
 
       setSlots(prev =>
         prev.filter(s => s.slotStart !== selectedSlot.slotStart || s.slotEnd !== selectedSlot.slotEnd)
@@ -122,6 +174,7 @@ export function AppointmentPage() {
   }
 
   const hasValidOrg = isGuid(organisationId)
+  const isRescheduleMode = currentAppointment !== null
 
   return (
     <div className={styles.page}>
@@ -135,9 +188,11 @@ export function AppointmentPage() {
 
       <main className={styles.main}>
         <section className={styles.leftCol}>
-          <h1 className={styles.heading}>Book an appointment</h1>
+          <h1 className={styles.heading}>{isRescheduleMode ? 'Reschedule appointment' : 'Book an appointment'}</h1>
           <p className={styles.subheading}>
-            Choose a date, view available slots for your selected organisation, then confirm.
+            {isRescheduleMode
+              ? 'Your current appointment is shown on the right. Pick a new available slot and confirm reschedule.'
+              : 'Choose a date, view available slots for your selected organisation, then confirm.'}
           </p>
 
           <label htmlFor="organisationId" className={styles.label}>Organisation ID</label>
@@ -147,6 +202,8 @@ export function AppointmentPage() {
             value={organisationId}
             onChange={e => {
               setOrganisationId(e.target.value)
+              setCurrentAppointment(null)
+              setSelectedSlot(null)
               setBooking({ status: 'idle' })
             }}
             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -172,8 +229,20 @@ export function AppointmentPage() {
         </section>
 
         <section className={styles.rightCol}>
+          {currentAppointment && (
+            <div className={styles.currentAppointmentCard} data-testid="current-appointment-card">
+              <p className={styles.currentAppointmentTitle}>Current appointment</p>
+              <p className={styles.currentAppointmentLine}>
+                Appointment ID: <strong>{currentAppointment.appointmentId}</strong>
+              </p>
+              <p className={styles.currentAppointmentLine}>
+                Slot: <strong>{formatSlotRange(currentAppointment.slotStart, currentAppointment.slotEnd)}</strong>
+              </p>
+            </div>
+          )}
+
           <div className={styles.slotHeader}>
-            <h2>Available slots</h2>
+            <h2>{isRescheduleMode ? 'New available slots' : 'Available slots'}</h2>
             <span>{toDateOnly(selectedDate)}</span>
           </div>
 
@@ -221,19 +290,21 @@ export function AppointmentPage() {
               disabled={!selectedSlot || booking.status === 'booking'}
               onClick={handleConfirmBooking}
             >
-              {booking.status === 'booking' ? 'Booking...' : 'Confirm appointment'}
+              {booking.status === 'booking'
+                ? (isRescheduleMode ? 'Rescheduling...' : 'Booking...')
+                : (isRescheduleMode ? 'Confirm reschedule' : 'Confirm appointment')}
             </button>
 
             {selectedSlot && (
               <p className={styles.selectedHint}>
-                Selected: {formatSlotLabel(selectedSlot)}
+                {isRescheduleMode ? 'New slot:' : 'Selected:'} {formatSlotLabel(selectedSlot)}
               </p>
             )}
           </div>
 
           {booking.status === 'success' && (
             <div className={`${styles.stateCard} ${styles.successCard}`}>
-              Appointment confirmed. ID: <strong>{booking.appointmentId}</strong>
+              {booking.message} <strong>{booking.appointmentId}</strong>
             </div>
           )}
 

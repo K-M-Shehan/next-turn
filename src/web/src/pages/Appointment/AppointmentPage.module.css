@@ -115,6 +115,31 @@
   margin-bottom: var(--space-4);
 }
 
+.currentAppointmentCard {
+  border: 1px solid rgba(35, 114, 39, 0.25);
+  background: linear-gradient(135deg, rgba(35, 114, 39, 0.08), rgba(255, 215, 134, 0.18));
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.currentAppointmentTitle {
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.currentAppointmentLine {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.currentAppointmentLine + .currentAppointmentLine {
+  margin-top: var(--space-2);
+}
+
 .slotHeader h2 {
   font-size: var(--font-size-xl);
 }

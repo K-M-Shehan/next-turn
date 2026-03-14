@@ -10,6 +10,12 @@ export interface BookAppointmentResult {
   appointmentId: string
 }
 
+export interface RescheduleAppointmentResult {
+  appointmentId: string
+  slotStart: string
+  slotEnd: string
+}
+
 export interface BookAppointmentBody {
   organisationId: string
   slotStart: string
@@ -48,6 +54,30 @@ export async function bookAppointment(body: BookAppointmentBody): Promise<BookAp
         'X-Tenant-Id': body.organisationId,
       },
     })
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+export async function rescheduleAppointment(
+  appointmentId: string,
+  body: { newSlotStart: string; newSlotEnd: string },
+  organisationId: string,
+): Promise<RescheduleAppointmentResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.put<RescheduleAppointmentResult>(
+      `/appointments/${appointmentId}/reschedule`,
+      body,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': organisationId,
+        },
+      }
+    )
 
     return data
   } catch (err) {
