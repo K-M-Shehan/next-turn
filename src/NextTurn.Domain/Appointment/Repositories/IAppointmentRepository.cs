@@ -9,10 +9,21 @@ public interface IAppointmentRepository
 {
     Task AddAsync(AppointmentEntity appointment, CancellationToken cancellationToken);
 
+    Task<AppointmentEntity?> GetByIdAsync(Guid appointmentId, CancellationToken cancellationToken);
+
+    Task UpdateAsync(AppointmentEntity appointment, CancellationToken cancellationToken);
+
     Task<bool> HasOverlapAsync(
         Guid organisationId,
         DateTimeOffset slotStart,
         DateTimeOffset slotEnd,
+        CancellationToken cancellationToken);
+
+    Task<bool> HasOverlapExcludingAsync(
+        Guid organisationId,
+        DateTimeOffset slotStart,
+        DateTimeOffset slotEnd,
+        Guid excludedAppointmentId,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<AppointmentEntity>> GetByOrganisationAndDateAsync(
