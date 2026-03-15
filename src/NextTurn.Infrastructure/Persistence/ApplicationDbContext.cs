@@ -101,7 +101,18 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             {
                 // Use EF Core's Property API to bypass the private setter on TenantId.
                 // EF Core can set any tracked property regardless of C# access modifiers.
-                entry.Property(nameof(User.TenantId)).CurrentValue = _tenantContext.TenantId;
+                //
+                // Global consumer users intentionally use TenantId = Guid.Empty and do
+                // not require tenant context on registration. If no tenant is resolved
+                // for this request, keep Guid.Empty as-is.
+                try
+                {
+                    entry.Property(nameof(User.TenantId)).CurrentValue = _tenantContext.TenantId;
+                }
+                catch (Domain.Common.DomainException)
+                {
+                    // No tenant context available (e.g. register-global) — keep Guid.Empty.
+                }
             }
         }
 
