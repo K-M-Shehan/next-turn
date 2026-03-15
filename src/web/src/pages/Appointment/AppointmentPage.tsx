@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   getAvailableAppointmentSlots,
   bookAppointment,
+  cancelAppointment,
   rescheduleAppointment,
   type AvailableAppointmentSlot,
 } from '../../api/appointments'
@@ -71,6 +72,8 @@ export function AppointmentPage() {
   const [selectedSlot, setSelectedSlot] = useState<AvailableAppointmentSlot | null>(null)
   const [currentAppointment, setCurrentAppointment] = useState<CurrentAppointment | null>(null)
   const [booking, setBooking] = useState<BookingState>({ status: 'idle' })
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
 
   useEffect(() => {
     if (!isGuid(organisationId)) {
@@ -173,6 +176,51 @@ export function AppointmentPage() {
     }
   }
 
+  async function handleConfirmCancel() {
+    if (!currentAppointment || !isGuid(organisationId)) return
+
+    setIsCancelling(true)
+
+    try {
+      const result = await cancelAppointment(currentAppointment.appointmentId, organisationId)
+
+      if (toDateOnly(new Date(currentAppointment.slotStart)) === toDateOnly(selectedDate)) {
+        setSlots(prev => {
+          const exists = prev.some(
+            s => s.slotStart === currentAppointment.slotStart && s.slotEnd === currentAppointment.slotEnd,
+          )
+
+          if (exists) return prev
+
+          return [...prev, {
+            slotStart: currentAppointment.slotStart,
+            slotEnd: currentAppointment.slotEnd,
+          }].sort((a, b) => a.slotStart.localeCompare(b.slotStart))
+        })
+      }
+
+      setCurrentAppointment(null)
+      setSelectedSlot(null)
+      setShowCancelModal(false)
+
+      setBooking({
+        status: 'success',
+        appointmentId: result.appointmentId,
+        message: result.lateCancellation
+          ? 'Appointment cancelled (late cancellation recorded). ID:'
+          : 'Appointment cancelled. ID:',
+      })
+    } catch (err) {
+      const apiErr = err as ApiError
+      setBooking({
+        status: 'error',
+        detail: apiErr.detail ?? 'Could not cancel appointment.',
+      })
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
   const hasValidOrg = isGuid(organisationId)
   const isRescheduleMode = currentAppointment !== null
 
@@ -204,6 +252,7 @@ export function AppointmentPage() {
               setOrganisationId(e.target.value)
               setCurrentAppointment(null)
               setSelectedSlot(null)
+              setShowCancelModal(false)
               setBooking({ status: 'idle' })
             }}
             placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -238,6 +287,14 @@ export function AppointmentPage() {
               <p className={styles.currentAppointmentLine}>
                 Slot: <strong>{formatSlotRange(currentAppointment.slotStart, currentAppointment.slotEnd)}</strong>
               </p>
+              <button
+                type="button"
+                className={styles.cancelTriggerBtn}
+                onClick={() => setShowCancelModal(true)}
+                data-testid="open-cancel-modal-btn"
+              >
+                Cancel appointment
+              </button>
             </div>
           )}
 
@@ -315,6 +372,39 @@ export function AppointmentPage() {
           )}
         </section>
       </main>
+
+      {showCancelModal && currentAppointment && (
+        <div className={styles.modalOverlay} onClick={() => setShowCancelModal(false)} role="presentation">
+          <div className={styles.modalCard} onClick={e => e.stopPropagation()}>
+            <h2 className={styles.modalTitle}>Cancel appointment?</h2>
+            <p className={styles.modalBody}>
+              This will free the slot for other users.
+            </p>
+            <p className={styles.modalBody}>
+              Slot: <strong>{formatSlotRange(currentAppointment.slotStart, currentAppointment.slotEnd)}</strong>
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.modalSecondaryBtn}
+                onClick={() => setShowCancelModal(false)}
+                disabled={isCancelling}
+              >
+                Keep appointment
+              </button>
+              <button
+                type="button"
+                className={styles.modalDangerBtn}
+                onClick={handleConfirmCancel}
+                disabled={isCancelling}
+                data-testid="confirm-cancel-btn"
+              >
+                {isCancelling ? 'Cancelling...' : 'Confirm cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
