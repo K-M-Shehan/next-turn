@@ -72,13 +72,24 @@ public class Appointment
         Status = AppointmentStatus.Cancelled;
     }
 
-    public void Reschedule(DateTimeOffset slotStart, DateTimeOffset slotEnd)
+    public Appointment Reschedule(DateTimeOffset slotStart, DateTimeOffset slotEnd)
     {
+        if (SlotStart <= DateTimeOffset.UtcNow)
+            throw new DomainException("Past appointments cannot be rescheduled.");
+
+        if (Status != AppointmentStatus.Confirmed)
+            throw new DomainException("Only confirmed appointments can be rescheduled.");
+
         if (slotEnd <= slotStart)
             throw new DomainException("Slot end must be after slot start.");
 
-        SlotStart = slotStart;
-        SlotEnd = slotEnd;
+        if (slotStart <= DateTimeOffset.UtcNow)
+            throw new DomainException("New slot must be in the future.");
+
+        // Mark the original entry as no longer active so its slot becomes available.
         Status = AppointmentStatus.Rescheduled;
+
+        // Create a new appointment for the replacement slot.
+        return Create(OrganisationId, UserId, slotStart, slotEnd);
     }
 }
