@@ -9,6 +9,7 @@ using NextTurn.Application.Appointment.Commands.ConfigureAppointmentSchedule;
 using NextTurn.Application.Appointment.Commands.CreateAppointmentProfile;
 using NextTurn.Application.Appointment.Commands.RescheduleAppointment;
 using NextTurn.Application.Appointment.Common;
+using NextTurn.Application.Appointment.Queries.GetAppointmentBookingContext;
 using NextTurn.Application.Appointment.Queries.GetAppointmentSchedule;
 using NextTurn.Application.Appointment.Queries.GetAvailableSlots;
 using NextTurn.Application.Appointment.Queries.ListAppointmentProfiles;
@@ -64,6 +65,21 @@ public sealed class AppointmentsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var query = new GetAvailableSlotsQuery(organisationId, appointmentProfileId, date);
+        var result = await _sender.Send(query, cancellationToken);
+
+        return Ok(result);
+    }
+
+    [HttpGet("booking-context")]
+    [ProducesResponseType(typeof(GetAppointmentBookingContextResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> GetBookingContext(
+        [FromQuery] Guid organisationId,
+        [FromQuery] Guid appointmentProfileId,
+        CancellationToken cancellationToken)
+    {
+        var query = new GetAppointmentBookingContextQuery(organisationId, appointmentProfileId);
         var result = await _sender.Send(query, cancellationToken);
 
         return Ok(result);

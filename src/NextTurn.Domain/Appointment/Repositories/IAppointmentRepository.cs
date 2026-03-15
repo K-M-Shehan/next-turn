@@ -30,6 +30,13 @@ public interface IAppointmentRepository
         Guid excludedAppointmentId,
         CancellationToken cancellationToken);
 
+    Task<bool> HasActiveAppointmentForUserOnDateAsync(
+        Guid organisationId,
+        Guid userId,
+        DateOnly date,
+        Guid? excludedAppointmentId,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<AppointmentEntity>> GetByOrganisationAndDateAsync(
         Guid organisationId,
         Guid appointmentProfileId,

@@ -3,10 +3,12 @@ import { DayPicker } from 'react-day-picker'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   getAvailableAppointmentSlots,
+  getAppointmentBookingContext,
   bookAppointment,
   cancelAppointment,
   rescheduleAppointment,
   type AvailableAppointmentSlot,
+  type AppointmentBookingContext,
 } from '../../api/appointments'
 import { getTokenPayload } from '../../utils/authToken'
 import type { ApiError } from '../../types/api'
@@ -69,16 +71,46 @@ export function AppointmentPage() {
   }, [tenantId, tokenPayload?.tid])
 
   const [organisationId, setOrganisationId] = useState(initialOrganisationId)
-  const [appointmentProfileId, setAppointmentProfileId] = useState(routeAppointmentProfileId ?? '')
+  const [appointmentProfileId] = useState(routeAppointmentProfileId ?? '')
   const [selectedDate, setSelectedDate] = useState<Date>(new Date())
   const [slots, setSlots] = useState<AvailableAppointmentSlot[]>([])
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsError, setSlotsError] = useState<string | null>(null)
+  const [bookingContext, setBookingContext] = useState<AppointmentBookingContext | null>(null)
+  const [bookingContextLoading, setBookingContextLoading] = useState(false)
+  const [bookingContextError, setBookingContextError] = useState<string | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<AvailableAppointmentSlot | null>(null)
   const [currentAppointment, setCurrentAppointment] = useState<CurrentAppointment | null>(null)
   const [booking, setBooking] = useState<BookingState>({ status: 'idle' })
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
+
+  useEffect(() => {
+    setOrganisationId(initialOrganisationId)
+  }, [initialOrganisationId])
+
+  useEffect(() => {
+    if (!isGuid(organisationId) || !isGuid(appointmentProfileId)) {
+      setBookingContext(null)
+      setBookingContextError('Open this page from a valid appointment booking link.')
+      return
+    }
+
+    setBookingContextLoading(true)
+    setBookingContextError(null)
+
+    getAppointmentBookingContext(organisationId, appointmentProfileId)
+      .then(data => {
+        setBookingContext(data)
+      })
+      .catch((err: ApiError) => {
+        setBookingContext(null)
+        setBookingContextError(err.detail ?? 'Could not load appointment details.')
+      })
+      .finally(() => {
+        setBookingContextLoading(false)
+      })
+  }, [organisationId, appointmentProfileId])
 
   useEffect(() => {
     if (!isGuid(organisationId) || !isGuid(appointmentProfileId)) {
@@ -106,13 +138,15 @@ export function AppointmentPage() {
 
   function handleBack() {
     const role = tokenPayload?.role
-    if (tenantId && (role === 'OrgAdmin' || role === 'SystemAdmin')) {
-      navigate(`/admin/${tenantId}`)
+    const destinationTenantId = tenantId ?? organisationId
+
+    if (destinationTenantId && (role === 'OrgAdmin' || role === 'SystemAdmin')) {
+      navigate(`/admin/${destinationTenantId}`)
       return
     }
 
-    if (tenantId) {
-      navigate(`/dashboard/${tenantId}`)
+    if (destinationTenantId) {
+      navigate(`/dashboard/${destinationTenantId}`)
       return
     }
 
@@ -233,6 +267,7 @@ export function AppointmentPage() {
   const hasValidOrg = isGuid(organisationId)
   const hasValidProfile = isGuid(appointmentProfileId)
   const isRescheduleMode = currentAppointment !== null
+  const hasValidContext = hasValidOrg && hasValidProfile
 
   return (
     <div className={styles.page}>
@@ -246,50 +281,40 @@ export function AppointmentPage() {
 
       <main className={styles.main}>
         <section className={styles.leftCol}>
-          <h1 className={styles.heading}>{isRescheduleMode ? 'Reschedule appointment' : 'Book an appointment'}</h1>
+          <h1 className={styles.heading}>{isRescheduleMode ? 'Reschedule your appointment' : 'Book your appointment'}</h1>
           <p className={styles.subheading}>
             {isRescheduleMode
-              ? 'Your current appointment is shown on the right. Pick a new available slot and confirm reschedule.'
-              : 'Choose a date, view available slots for your selected organisation, then confirm.'}
+              ? 'Pick a new available slot and confirm to move your appointment.'
+              : 'Choose a date and time slot, then confirm your appointment in one step.'}
           </p>
 
-          <label htmlFor="organisationId" className={styles.label}>Organisation ID</label>
-          <input
-            id="organisationId"
-            className={styles.input}
-            value={organisationId}
-            onChange={e => {
-              setOrganisationId(e.target.value)
-              setCurrentAppointment(null)
-              setSelectedSlot(null)
-              setShowCancelModal(false)
-              setBooking({ status: 'idle' })
-            }}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          />
+          <div className={styles.detailsCard}>
+            <p className={styles.detailsEyebrow}>Appointment details</p>
+            {bookingContextLoading && <p className={styles.detailsMuted}>Loading appointment details...</p>}
+            {!bookingContextLoading && bookingContextError && (
+              <p className={styles.detailsError}>{bookingContextError}</p>
+            )}
+            {!bookingContextLoading && !bookingContextError && bookingContext && (
+              <>
+                <div className={styles.detailRow}>
+                  <span className={styles.detailLabel}>Organisation</span>
+                  <strong>{bookingContext.organisationName}</strong>
+                </div>
+                <div className={styles.detailRow}>
+                  <span className={styles.detailLabel}>Appointment</span>
+                  <strong>{bookingContext.appointmentProfileName}</strong>
+                </div>
+                <div className={styles.detailRow}>
+                  <span className={styles.detailLabel}>Status</span>
+                  <strong>{bookingContext.isProfileActive ? 'Open for booking' : 'Currently unavailable'}</strong>
+                </div>
+              </>
+            )}
+          </div>
 
-          <label htmlFor="appointmentProfileId" className={styles.label}>Appointment Profile ID</label>
-          <input
-            id="appointmentProfileId"
-            className={styles.input}
-            value={appointmentProfileId}
-            onChange={e => {
-              setAppointmentProfileId(e.target.value)
-              setCurrentAppointment(null)
-              setSelectedSlot(null)
-              setShowCancelModal(false)
-              setBooking({ status: 'idle' })
-            }}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          />
-
-          {!hasValidOrg && organisationId.trim().length > 0 && (
-            <p className={styles.validation}>Enter a valid organisation ID to load slots.</p>
-          )}
-
-          {!hasValidProfile && appointmentProfileId.trim().length > 0 && (
-            <p className={styles.validation}>Enter a valid appointment profile ID to load slots.</p>
-          )}
+          <div className={styles.policyBanner}>
+            <strong>Booking policy:</strong> one appointment per day per user.
+          </div>
 
           <div className={styles.calendarWrap}>
             <DayPicker
@@ -341,7 +366,7 @@ export function AppointmentPage() {
           )}
 
           {!slotsLoading && !slotsError && (!hasValidOrg || !hasValidProfile) && (
-            <div className={styles.stateCard}>Enter valid organisation and appointment profile IDs to view slots.</div>
+            <div className={styles.stateCard}>Open this page using a valid appointment link to view slots.</div>
           )}
 
           {!slotsLoading && !slotsError && hasValidOrg && hasValidProfile && slots.length === 0 && (
@@ -374,7 +399,12 @@ export function AppointmentPage() {
             <button
               type="button"
               className={styles.confirmBtn}
-              disabled={!selectedSlot || booking.status === 'booking'}
+              disabled={
+                !selectedSlot ||
+                booking.status === 'booking' ||
+                !bookingContext?.isProfileActive ||
+                !hasValidContext
+              }
               onClick={handleConfirmBooking}
             >
               {booking.status === 'booking'
@@ -386,6 +416,10 @@ export function AppointmentPage() {
               <p className={styles.selectedHint}>
                 {isRescheduleMode ? 'New slot:' : 'Selected:'} {formatSlotLabel(selectedSlot)}
               </p>
+            )}
+
+            {!bookingContextLoading && bookingContext && !bookingContext.isProfileActive && (
+              <p className={styles.validation}>This appointment profile is currently not accepting bookings.</p>
             )}
           </div>
 

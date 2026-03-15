@@ -70,6 +70,27 @@ public sealed class AppointmentRepository : IAppointmentRepository
                 cancellationToken);
     }
 
+    public async Task<bool> HasActiveAppointmentForUserOnDateAsync(
+        Guid organisationId,
+        Guid userId,
+        DateOnly date,
+        Guid? excludedAppointmentId,
+        CancellationToken cancellationToken)
+    {
+        var startOfDay = new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        var endOfDay = startOfDay.AddDays(1);
+
+        return await _context.Appointments
+            .AnyAsync(a =>
+                    a.OrganisationId == organisationId &&
+                    a.UserId == userId &&
+                    (!excludedAppointmentId.HasValue || a.Id != excludedAppointmentId.Value) &&
+                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed) &&
+                    a.SlotStart < endOfDay &&
+                    startOfDay < a.SlotEnd,
+                cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AppointmentEntity>> GetByOrganisationAndDateAsync(
         Guid organisationId,
         Guid appointmentProfileId,

@@ -32,6 +32,15 @@ public sealed class BookAppointmentCommandHandlerTests
             .Setup(r => r.AddAsync(It.IsAny<AppointmentEntity>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        _appointmentRepositoryMock
+            .Setup(r => r.HasActiveAppointmentForUserOnDateAsync(
+                OrganisationId,
+                UserId,
+                DateOnly.FromDateTime(SlotStart.UtcDateTime),
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+
         _contextMock
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
@@ -97,6 +106,27 @@ public sealed class BookAppointmentCommandHandlerTests
 
         await act.Should().ThrowAsync<ConflictDomainException>()
             .WithMessage("This time slot is already booked.");
+    }
+
+    [Fact]
+    public async Task Handle_WhenUserAlreadyHasAppointmentThatDay_ThrowsConflictDomainException()
+    {
+        _appointmentRepositoryMock
+            .Setup(r => r.HasActiveAppointmentForUserOnDateAsync(
+                OrganisationId,
+                UserId,
+                DateOnly.FromDateTime(SlotStart.UtcDateTime),
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var act = async () => await _handler.Handle(ValidCommand(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConflictDomainException>()
+            .WithMessage("You can only book one appointment per day.");
+
+        _appointmentRepositoryMock.Verify(r => r.AddAsync(It.IsAny<AppointmentEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+        _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

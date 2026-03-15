@@ -37,6 +37,17 @@ public sealed class BookAppointmentCommandHandler : IRequestHandler<BookAppointm
         if (hasOverlap)
             throw new ConflictDomainException("This time slot is already booked.");
 
+        var bookingDate = DateOnly.FromDateTime(request.SlotStart.UtcDateTime);
+        bool hasExistingAppointmentOnDate = await _appointmentRepository.HasActiveAppointmentForUserOnDateAsync(
+            request.OrganisationId,
+            request.UserId,
+            bookingDate,
+            excludedAppointmentId: null,
+            cancellationToken);
+
+        if (hasExistingAppointmentOnDate)
+            throw new ConflictDomainException("You can only book one appointment per day.");
+
         var appointment = AppointmentEntity.Create(
             request.OrganisationId,
             request.AppointmentProfileId,

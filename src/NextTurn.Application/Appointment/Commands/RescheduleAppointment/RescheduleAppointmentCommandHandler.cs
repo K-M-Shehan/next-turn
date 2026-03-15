@@ -51,6 +51,17 @@ public sealed class RescheduleAppointmentCommandHandler
         if (hasOverlap)
             throw new ConflictDomainException("This time slot is already booked.");
 
+        var newSlotDate = DateOnly.FromDateTime(request.NewSlotStart.UtcDateTime);
+        bool hasExistingAppointmentOnDate = await _appointmentRepository.HasActiveAppointmentForUserOnDateAsync(
+            appointment.OrganisationId,
+            appointment.UserId,
+            newSlotDate,
+            appointment.Id,
+            cancellationToken);
+
+        if (hasExistingAppointmentOnDate)
+            throw new ConflictDomainException("You can only keep one appointment per day.");
+
         var oldSlotStart = appointment.SlotStart;
         var oldSlotEnd = appointment.SlotEnd;
 

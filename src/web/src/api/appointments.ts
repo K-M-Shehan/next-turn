@@ -27,6 +27,15 @@ export interface AppointmentProfileSummary {
   shareableLink: string
 }
 
+export interface AppointmentBookingContext {
+  organisationId: string
+  organisationName: string
+  appointmentProfileId: string
+  appointmentProfileName: string
+  isProfileActive: boolean
+  shareableLink: string
+}
+
 export interface BookAppointmentResult {
   appointmentId: string
 }
@@ -65,6 +74,29 @@ export async function getAvailableAppointmentSlots(
         organisationId,
         appointmentProfileId,
         date,
+      },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': organisationId,
+      },
+    })
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+export async function getAppointmentBookingContext(
+  organisationId: string,
+  appointmentProfileId: string,
+): Promise<AppointmentBookingContext> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<AppointmentBookingContext>('/appointments/booking-context', {
+      params: {
+        organisationId,
+        appointmentProfileId,
       },
       headers: {
         Authorization: `Bearer ${token}`,
