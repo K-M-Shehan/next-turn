@@ -11,12 +11,6 @@ public sealed class AppointmentRepository : IAppointmentRepository
 {
     private readonly ApplicationDbContext _context;
 
-    private static readonly AppointmentStatus[] ActiveStatuses =
-    {
-        AppointmentStatus.Pending,
-        AppointmentStatus.Confirmed
-    };
-
     public AppointmentRepository(ApplicationDbContext context)
     {
         _context = context;
@@ -48,7 +42,7 @@ public sealed class AppointmentRepository : IAppointmentRepository
         return await _context.Appointments
             .AnyAsync(a =>
                     a.OrganisationId == organisationId &&
-                    ActiveStatuses.Contains(a.Status) &&
+                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed) &&
                     a.SlotStart < slotEnd &&
                     slotStart < a.SlotEnd,
                 cancellationToken);
@@ -65,7 +59,7 @@ public sealed class AppointmentRepository : IAppointmentRepository
             .AnyAsync(a =>
                     a.Id != excludedAppointmentId &&
                     a.OrganisationId == organisationId &&
-                    ActiveStatuses.Contains(a.Status) &&
+                    (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed) &&
                     a.SlotStart < slotEnd &&
                     slotStart < a.SlotEnd,
                 cancellationToken);
@@ -82,7 +76,7 @@ public sealed class AppointmentRepository : IAppointmentRepository
         return await _context.Appointments
             .Where(a =>
                 a.OrganisationId == organisationId &&
-                ActiveStatuses.Contains(a.Status) &&
+                (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed) &&
                 a.SlotStart < endOfDay &&
                 startOfDay < a.SlotEnd)
             .OrderBy(a => a.SlotStart)

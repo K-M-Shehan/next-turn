@@ -43,6 +43,16 @@ public sealed class TenantMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Endpoints marked [AllowAnonymous] must bypass tenant resolution.
+        // Examples: /api/auth/register-global, /api/auth/login-global,
+        // /api/auth/register, /api/auth/login, /api/organisations.
+        var endpoint = context.GetEndpoint();
+        if (endpoint?.Metadata.GetMetadata<Microsoft.AspNetCore.Authorization.IAllowAnonymous>() is not null)
+        {
+            await _next(context);
+            return;
+        }
+
         // ── 1. Try X-Tenant-Id header first ──────────────────────────────────
         // The header takes priority so that pages operating on a specific org's
         // resources (e.g. queue operations) can always supply the correct tenant,

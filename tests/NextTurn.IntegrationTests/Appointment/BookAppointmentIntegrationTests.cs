@@ -119,7 +119,8 @@ public sealed class BookAppointmentIntegrationTests
 
         var orgASlots = await orgASlotsResponse.Content.ReadFromJsonAsync<List<SlotDto>>();
         orgASlots.Should().NotBeNull();
-        orgASlots!.Should().NotContain(s => s.SlotStart == slotStart);
+        orgASlots!.Should().Contain(s => s.SlotStart == slotStart && s.IsBooked,
+            "booked slot should be returned as unavailable (IsBooked=true)");
 
         var orgBClient = AuthenticatedClient(UserRole.User, Guid.NewGuid(), otherTenantId);
         var orgBSlotsResponse = await orgBClient.GetAsync($"/api/appointments/slots?organisationId={otherTenantId}&date={date}");
@@ -127,7 +128,8 @@ public sealed class BookAppointmentIntegrationTests
 
         var orgBSlots = await orgBSlotsResponse.Content.ReadFromJsonAsync<List<SlotDto>>();
         orgBSlots.Should().NotBeNull();
-        orgBSlots!.Should().Contain(s => s.SlotStart == slotStart);
+        orgBSlots!.Should().Contain(s => s.SlotStart == slotStart && !s.IsBooked,
+            "the same slot in another organisation should remain available");
     }
 
     private HttpClient AuthenticatedClient(UserRole role, Guid userId, Guid tenantId)
@@ -151,5 +153,5 @@ public sealed class BookAppointmentIntegrationTests
 
     private sealed record ProblemDetailsPayload(string Detail);
 
-    private sealed record SlotDto(DateTimeOffset SlotStart, DateTimeOffset SlotEnd);
+    private sealed record SlotDto(DateTimeOffset SlotStart, DateTimeOffset SlotEnd, bool IsBooked);
 }

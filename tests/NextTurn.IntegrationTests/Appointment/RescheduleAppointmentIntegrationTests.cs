@@ -70,9 +70,9 @@ public sealed class RescheduleAppointmentIntegrationTests
         var slots = await slotListResponse.Content.ReadFromJsonAsync<List<SlotDto>>();
         slots.Should().NotBeNull();
 
-        slots!.Should().Contain(s => s.SlotStart == oldStart && s.SlotEnd == oldEnd,
+        slots!.Should().Contain(s => s.SlotStart == oldStart && s.SlotEnd == oldEnd && !s.IsBooked,
             "old slot should become available after successful reschedule");
-        slots.Should().NotContain(s => s.SlotStart == newStart && s.SlotEnd == newEnd,
+        slots.Should().Contain(s => s.SlotStart == newStart && s.SlotEnd == newEnd && s.IsBooked,
             "new slot should remain occupied by the replacement appointment");
 
         var otherUserClient = AuthenticatedClient(UserRole.User, Guid.NewGuid(), _tenantId);
@@ -107,5 +107,5 @@ public sealed class RescheduleAppointmentIntegrationTests
 
     private sealed record RescheduleAppointmentApiResult(Guid AppointmentId, DateTimeOffset SlotStart, DateTimeOffset SlotEnd);
 
-    private sealed record SlotDto(DateTimeOffset SlotStart, DateTimeOffset SlotEnd);
+    private sealed record SlotDto(DateTimeOffset SlotStart, DateTimeOffset SlotEnd, bool IsBooked);
 }
