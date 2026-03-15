@@ -16,6 +16,11 @@ export interface RescheduleAppointmentResult {
   slotEnd: string
 }
 
+export interface CancelAppointmentResult {
+  appointmentId: string
+  lateCancellation: boolean
+}
+
 export interface BookAppointmentBody {
   organisationId: string
   slotStart: string
@@ -71,6 +76,29 @@ export async function rescheduleAppointment(
     const { data } = await apiClient.put<RescheduleAppointmentResult>(
       `/appointments/${appointmentId}/reschedule`,
       body,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': organisationId,
+        },
+      }
+    )
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+export async function cancelAppointment(
+  appointmentId: string,
+  organisationId: string,
+): Promise<CancelAppointmentResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.post<CancelAppointmentResult>(
+      `/appointments/${appointmentId}/cancel`,
+      null,
       {
         headers: {
           Authorization: `Bearer ${token}`,
