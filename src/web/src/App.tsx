@@ -31,6 +31,7 @@ import { QueuePage }            from './pages/Queue'
 import { AppointmentPage }      from './pages/Appointment'
 import { AdminDashboardPage }   from './pages/Admin'
 import { StaffDashboardPage }   from './pages/Staff'
+import { StaffInviteAcceptPage } from './pages/StaffInviteAccept'
 import { OrgLoginLookupPage }   from './pages/OrgLoginLookup'
 import { TermsPage, PrivacyPage } from './pages/Legal'
 
@@ -136,6 +137,8 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      <Route path="/staff/invite/accept" element={<StaffInviteAcceptPage />} />
 
       {/* Public — no tenant context required; org doesn't exist yet */}
       <Route path="/register-org" element={<OrgRegistrationPage />} />

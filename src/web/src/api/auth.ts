@@ -19,6 +19,18 @@ export interface CreateStaffUserRequest {
   password: string
 }
 
+export interface InviteStaffUserRequest {
+  name: string
+  email: string
+  phone?: string
+}
+
+export interface InviteStaffUserResult {
+  userId: string
+  invitePath: string
+  expiresAt: string
+}
+
 export interface StaffUserSummary {
   userId: string
   name: string
@@ -136,6 +148,49 @@ export async function createStaffUser(
     })
 
     return { ok: true }
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * POST /api/auth/staff/invite
+ * Invites a staff user to create their own password via secure invite link.
+ */
+export async function inviteStaffUser(
+  tenantId: string,
+  body: InviteStaffUserRequest,
+): Promise<InviteStaffUserResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.post<InviteStaffUserResult>('/auth/staff/invite', body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': tenantId,
+      },
+    })
+
+    return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * POST /api/auth/staff/invite/accept
+ * Public endpoint for staff to accept invite and set password.
+ */
+export async function acceptStaffInvite(
+  token: string,
+  password: string,
+): Promise<void> {
+  try {
+    await apiClient.post('/auth/staff/invite/accept', {
+      token,
+      password,
+    })
   } catch (err) {
     const parsed: ApiError = parseApiError(err)
     throw parsed

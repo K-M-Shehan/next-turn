@@ -52,6 +52,18 @@ public sealed class UserRepository : IUserRepository
     }
 
     /// <inheritdoc/>
+    public async Task<User?> GetByStaffInviteTokenHashAsync(
+        string tokenHash,
+        CancellationToken cancellationToken = default)
+    {
+        return await _context.Users
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(
+                u => u.StaffInviteTokenHash == tokenHash && u.Role == UserRole.Staff,
+                cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task<bool> ExistsAsync(
         EmailAddress email,
         CancellationToken cancellationToken = default)

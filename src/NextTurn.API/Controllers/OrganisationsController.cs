@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NextTurn.API.Models.Organisations;
 using NextTurn.Application.Organisation.Commands.RegisterOrganisation;
+using NextTurn.Application.Organisation.Queries.ResolveMemberLogin;
 using NextTurn.Application.Organisation.Queries.ResolveOrganisationLogin;
 using NextTurn.Application.Organisation.Queries.ResolveOrganisationTenant;
 
@@ -89,6 +90,22 @@ public sealed class OrganisationsController : ControllerBase
         var query = new ResolveOrganisationLoginQuery(request.AdminEmail);
         var result = await _sender.Send(query, cancellationToken);
 
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Resolve workspace login options for a member email (staff/admin).
+    /// </summary>
+    [HttpPost("resolve-member-login")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(IReadOnlyList<MemberWorkspaceOption>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ResolveMemberLogin(
+        [FromBody] ResolveMemberLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        var query = new ResolveMemberLoginQuery(request.Email);
+        var result = await _sender.Send(query, cancellationToken);
         return Ok(result);
     }
 

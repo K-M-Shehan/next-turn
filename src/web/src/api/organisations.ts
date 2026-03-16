@@ -35,6 +35,14 @@ export interface ResolveOrganisationTenantResult {
   slug: string
 }
 
+export interface MemberWorkspaceOption {
+  organisationId: string
+  organisationName: string
+  slug: string
+  loginPath: string
+  role: string
+}
+
 /**
  * POST /api/organisations
  * Registers a new organisation and creates the initial OrgAdmin account.
@@ -100,6 +108,25 @@ export async function resolveOrganisationTenant(
       {
         params: { slug },
       }
+    )
+    return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * POST /api/organisations/resolve-member-login
+ * Returns workspace login candidates for staff/admin emails.
+ */
+export async function resolveMemberLogin(
+  email: string,
+): Promise<MemberWorkspaceOption[]> {
+  try {
+    const { data } = await apiClient.post<MemberWorkspaceOption[]>(
+      '/organisations/resolve-member-login',
+      { email },
     )
     return data
   } catch (err) {

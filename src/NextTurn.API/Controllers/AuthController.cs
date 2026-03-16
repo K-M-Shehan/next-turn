@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using NextTurn.API.Models.Auth;
 using NextTurn.Application.Auth;
 using NextTurn.Application.Auth.Commands.CreateStaffUser;
+using NextTurn.Application.Auth.Commands.InviteStaffUser;
+using NextTurn.Application.Auth.Commands.AcceptStaffInvite;
 using NextTurn.Application.Auth.Commands.DeactivateStaffUser;
 using NextTurn.Application.Auth.Commands.LoginGlobalUser;
 using NextTurn.Application.Auth.Commands.LoginUser;
@@ -207,6 +209,42 @@ public sealed class AuthController : ControllerBase
         await _sender.Send(command, cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created);
+    }
+
+    /// <summary>
+    /// Invite a staff user to set up their own password via secure invite link.
+    /// </summary>
+    [HttpPost("staff/invite")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> InviteStaffUser(
+        [FromBody] InviteStaffUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new InviteStaffUserCommand(request.Name, request.Email, request.Phone);
+        var result = await _sender.Send(command, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    /// <summary>
+    /// Accept a staff invite and set the initial password.
+    /// </summary>
+    [HttpPost("staff/invite/accept")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> AcceptStaffInvite(
+        [FromBody] AcceptStaffInviteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var command = new AcceptStaffInviteCommand(request.Token, request.Password);
+        await _sender.Send(command, cancellationToken);
+        return NoContent();
     }
 
     /// <summary>

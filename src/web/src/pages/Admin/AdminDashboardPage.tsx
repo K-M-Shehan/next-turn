@@ -21,10 +21,11 @@ import {
   type QueueStaffAssignment,
 } from '../../api/queues'
 import {
-  createStaffUser,
   deactivateStaffUser,
+  inviteStaffUser,
   listStaffUsers,
   reactivateStaffUser,
+  type InviteStaffUserResult,
   type StaffUserSummary,
 } from '../../api/auth'
 import {
@@ -50,7 +51,6 @@ interface CreateStaffForm {
   name: string
   email: string
   phone: string
-  password: string
 }
 
 const defaultForm: CreateForm = {
@@ -63,7 +63,6 @@ const defaultStaffForm: CreateStaffForm = {
   name: '',
   email: '',
   phone: '',
-  password: '',
 }
 
 const dayLabels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -118,6 +117,7 @@ export function AdminDashboardPage() {
   const [staffCreating, setStaffCreating] = useState(false)
   const [staffError, setStaffError] = useState<string | null>(null)
   const [staffSuccess, setStaffSuccess] = useState<string | null>(null)
+  const [latestInvite, setLatestInvite] = useState<InviteStaffUserResult | null>(null)
   const [staffAccounts, setStaffAccounts] = useState<StaffUserSummary[]>([])
   const [staffAccountsLoading, setStaffAccountsLoading] = useState(false)
   const [staffActionUserId, setStaffActionUserId] = useState<string | null>(null)
@@ -324,15 +324,15 @@ export function AdminDashboardPage() {
     setStaffSuccess(null)
 
     try {
-      await createStaffUser(tenantId, {
+      const invite = await inviteStaffUser(tenantId, {
         name: staffForm.name.trim(),
         email: staffForm.email.trim(),
         phone: staffForm.phone.trim() || undefined,
-        password: staffForm.password,
       })
 
       setStaffForm(defaultStaffForm)
-      setStaffSuccess('Staff account created successfully.')
+      setLatestInvite(invite)
+      setStaffSuccess('Staff invite created successfully.')
       await loadStaffAccounts(tenantId)
     } catch (err) {
       const apiErr = err as ApiError
@@ -969,17 +969,6 @@ export function AdminDashboardPage() {
                   />
                 </div>
 
-                <div className={styles.formGroup}>
-                  <label className={styles.label} htmlFor="staff-password">Temporary Password</label>
-                  <input
-                    id="staff-password"
-                    className={styles.input}
-                    type="password"
-                    placeholder="At least 8 chars, uppercase, number, symbol"
-                    value={staffForm.password}
-                    onChange={e => setStaffForm(prev => ({ ...prev, password: e.target.value }))}
-                  />
-                </div>
               </div>
 
               <button
@@ -988,13 +977,26 @@ export function AdminDashboardPage() {
                 disabled={
                   staffCreating ||
                   !staffForm.name.trim() ||
-                  !staffForm.email.trim() ||
-                  !staffForm.password
+                  !staffForm.email.trim()
                 }
               >
-                {staffCreating ? 'Creating…' : 'Create Staff User'}
+                {staffCreating ? 'Creating…' : 'Send Staff Invite'}
               </button>
             </form>
+
+            {latestInvite && (
+              <div className={styles.successBanner} role="status">
+                <span>Invite link:</span>
+                <strong className={styles.linkText}>{window.location.origin}{latestInvite.invitePath}</strong>
+                <button
+                  className={styles.copyBtn}
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(`${window.location.origin}${latestInvite.invitePath}`)}
+                >
+                  Copy Invite Link
+                </button>
+              </div>
+            )}
 
             <div className={styles.staffListBlock}>
               <h3 className={styles.sectionSubTitle}>Existing Staff Accounts</h3>

@@ -6,6 +6,7 @@ using NextTurn.Domain.Auth.ValueObjects;
 public interface IUserRepository {
   Task<User?> GetByEmailAsync(EmailAddress email, CancellationToken cancellationToken);     // finds users by email during login (tenant-scoped)
   Task<User?> GetByEmailGlobalAsync(EmailAddress email, CancellationToken cancellationToken); // finds users by email across ALL tenants (for consumer login)
+  Task<User?> GetByStaffInviteTokenHashAsync(string tokenHash, CancellationToken cancellationToken); // finds staff user by invite token hash across tenants
   Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken);                // finds a tenant-scoped user by id
   Task<bool> ExistsAsync(EmailAddress email, CancellationToken cancellationToken);          // check if email is taken before registration (tenant-scoped)
   Task<bool> ExistsGlobalAsync(EmailAddress email, CancellationToken cancellationToken);    // check if email is taken across ALL tenants (for consumer registration)
