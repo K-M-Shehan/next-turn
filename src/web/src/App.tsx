@@ -31,6 +31,7 @@ import { QueuePage }            from './pages/Queue'
 import { AppointmentPage }      from './pages/Appointment'
 import { AdminDashboardPage }   from './pages/Admin'
 import { StaffDashboardPage }   from './pages/Staff'
+import { OrgLoginLookupPage }   from './pages/OrgLoginLookup'
 import { TermsPage, PrivacyPage } from './pages/Legal'
 
 // ── Role-restricted stub pages ────────────────────────────────────────────────
@@ -137,6 +138,7 @@ function App() {
 
       {/* Public — no tenant context required; org doesn't exist yet */}
       <Route path="/register-org" element={<OrgRegistrationPage />} />
+      <Route path="/find-org-login" element={<OrgLoginLookupPage />} />
 
       {/* Legal */}
       <Route path="/terms"   element={<TermsPage />} />

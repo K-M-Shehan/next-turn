@@ -6,9 +6,26 @@ import { apiClient, parseApiError } from './client'
 import type { RegisterRequest } from '../schemas/registerSchema'
 import type { LoginRequest } from '../schemas/loginSchema'
 import type { ApiError } from '../types/api'
+import { getToken } from '../utils/authToken'
 
 export interface RegisterResult {
   ok: true
+}
+
+export interface CreateStaffUserRequest {
+  name: string
+  email: string
+  phone?: string
+  password: string
+}
+
+export interface StaffUserSummary {
+  userId: string
+  name: string
+  email: string
+  phone?: string
+  isActive: boolean
+  createdAt: string
 }
 
 /**
@@ -95,6 +112,86 @@ export async function loginGlobalUser(
   try {
     const { data } = await apiClient.post<LoginResult>('/auth/login-global', body)
     return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * POST /api/auth/staff
+ * Creates a staff account for the authenticated org admin's tenant.
+ */
+export async function createStaffUser(
+  tenantId: string,
+  body: CreateStaffUserRequest,
+): Promise<RegisterResult> {
+  try {
+    const token = getToken()
+    await apiClient.post('/auth/staff', body, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': tenantId,
+      },
+    })
+
+    return { ok: true }
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * GET /api/auth/staff
+ * Lists staff users in the current organisation.
+ */
+export async function listStaffUsers(tenantId: string): Promise<StaffUserSummary[]> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<StaffUserSummary[]>('/auth/staff', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': tenantId,
+      },
+    })
+    return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * POST /api/auth/staff/{userId}/deactivate
+ */
+export async function deactivateStaffUser(tenantId: string, userId: string): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.post(`/auth/staff/${userId}/deactivate`, null, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': tenantId,
+      },
+    })
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * POST /api/auth/staff/{userId}/reactivate
+ */
+export async function reactivateStaffUser(tenantId: string, userId: string): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.post(`/auth/staff/${userId}/reactivate`, null, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': tenantId,
+      },
+    })
   } catch (err) {
     const parsed: ApiError = parseApiError(err)
     throw parsed

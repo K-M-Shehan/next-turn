@@ -13,6 +13,13 @@ import { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { createQueue, getOrgQueues, type OrgQueueSummary } from '../../api/queues'
 import {
+  createStaffUser,
+  deactivateStaffUser,
+  listStaffUsers,
+  reactivateStaffUser,
+  type StaffUserSummary,
+} from '../../api/auth'
+import {
   getAppointmentSchedule,
   configureAppointmentSchedule,
   listAppointmentProfiles,
@@ -31,10 +38,24 @@ interface CreateForm {
   averageServiceTimeSeconds: string
 }
 
+interface CreateStaffForm {
+  name: string
+  email: string
+  phone: string
+  password: string
+}
+
 const defaultForm: CreateForm = {
   name: '',
   maxCapacity: '50',
   averageServiceTimeSeconds: '300',
+}
+
+const defaultStaffForm: CreateStaffForm = {
+  name: '',
+  email: '',
+  phone: '',
+  password: '',
 }
 
 const dayLabels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -83,7 +104,15 @@ export function AdminDashboardPage() {
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null)
   const [copiedAppointmentLink, setCopiedAppointmentLink] = useState(false)
-  const [activeTab, setActiveTab] = useState<'queues' | 'appointments'>('queues')
+  const [activeTab, setActiveTab] = useState<'queues' | 'appointments' | 'staff'>('queues')
+
+  const [staffForm, setStaffForm] = useState<CreateStaffForm>(defaultStaffForm)
+  const [staffCreating, setStaffCreating] = useState(false)
+  const [staffError, setStaffError] = useState<string | null>(null)
+  const [staffSuccess, setStaffSuccess] = useState<string | null>(null)
+  const [staffAccounts, setStaffAccounts] = useState<StaffUserSummary[]>([])
+  const [staffAccountsLoading, setStaffAccountsLoading] = useState(false)
+  const [staffActionUserId, setStaffActionUserId] = useState<string | null>(null)
 
   const appointmentSummary = useMemo(() => {
     const enabledDays = appointmentRules.filter(r => r.isEnabled).length
@@ -272,6 +301,82 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function handleCreateStaff(e: React.FormEvent) {
+    e.preventDefault()
+    if (!tenantId) return
+
+    setStaffCreating(true)
+    setStaffError(null)
+    setStaffSuccess(null)
+
+    try {
+      await createStaffUser(tenantId, {
+        name: staffForm.name.trim(),
+        email: staffForm.email.trim(),
+        phone: staffForm.phone.trim() || undefined,
+        password: staffForm.password,
+      })
+
+      setStaffForm(defaultStaffForm)
+      setStaffSuccess('Staff account created successfully.')
+      await loadStaffAccounts(tenantId)
+    } catch (err) {
+      const apiErr = err as ApiError
+      if (apiErr.status === 422) {
+        const firstError = apiErr.errors ? Object.values(apiErr.errors)[0]?.[0] : undefined
+        setStaffError(firstError ?? 'Please check the staff details and try again.')
+      } else {
+        setStaffError(apiErr.detail ?? 'Could not create staff account.')
+      }
+    } finally {
+      setStaffCreating(false)
+    }
+  }
+
+  async function loadStaffAccounts(currentTenantId: string) {
+    setStaffAccountsLoading(true)
+    try {
+      const users = await listStaffUsers(currentTenantId)
+      setStaffAccounts(users)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setStaffError(apiErr.detail ?? 'Could not load staff accounts.')
+    } finally {
+      setStaffAccountsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== 'staff' || !tenantId) return
+
+    void loadStaffAccounts(tenantId)
+  }, [activeTab, tenantId])
+
+  async function handleStaffStatusToggle(user: StaffUserSummary) {
+    if (!tenantId) return
+
+    setStaffError(null)
+    setStaffSuccess(null)
+    setStaffActionUserId(user.userId)
+
+    try {
+      if (user.isActive) {
+        await deactivateStaffUser(tenantId, user.userId)
+        setStaffSuccess('Staff account deactivated.')
+      } else {
+        await reactivateStaffUser(tenantId, user.userId)
+        setStaffSuccess('Staff account reactivated.')
+      }
+
+      await loadStaffAccounts(tenantId)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setStaffError(apiErr.detail ?? 'Could not update staff account status.')
+    } finally {
+      setStaffActionUserId(null)
+    }
+  }
+
   return (
     <div className={styles.page}>
       <nav className={styles.topNav}>
@@ -305,6 +410,15 @@ export function AdminDashboardPage() {
               aria-selected={activeTab === 'appointments'}
             >
               Appointment Settings
+            </button>
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'staff' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('staff')}
+              role="tab"
+              aria-selected={activeTab === 'staff'}
+            >
+              Staff Accounts
             </button>
           </div>
         </section>
@@ -629,6 +743,133 @@ export function AdminDashboardPage() {
               </button>
             </section>
           </>
+        )}
+
+        {activeTab === 'staff' && (
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>Create Staff Account</h2>
+            <p className={styles.sectionHint}>
+              Staff users are restricted to queue-operations for this organisation.
+            </p>
+
+            {staffError && (
+              <div className={styles.errorBanner} role="alert">{staffError}</div>
+            )}
+
+            {staffSuccess && (
+              <div className={styles.successBanner} role="status">{staffSuccess}</div>
+            )}
+
+            <form className={styles.createForm} onSubmit={handleCreateStaff} noValidate>
+              <div className={styles.formGrid}>
+                <div className={styles.formGroup}>
+                  <label className={styles.label} htmlFor="staff-name">Full Name</label>
+                  <input
+                    id="staff-name"
+                    className={styles.input}
+                    type="text"
+                    placeholder="e.g. Jane Operator"
+                    value={staffForm.name}
+                    onChange={e => setStaffForm(prev => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.label} htmlFor="staff-email">Email</label>
+                  <input
+                    id="staff-email"
+                    className={styles.input}
+                    type="email"
+                    placeholder="staff@yourorg.com"
+                    value={staffForm.email}
+                    onChange={e => setStaffForm(prev => ({ ...prev, email: e.target.value }))}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.label} htmlFor="staff-phone">Phone (optional)</label>
+                  <input
+                    id="staff-phone"
+                    className={styles.input}
+                    type="tel"
+                    placeholder="+44..."
+                    value={staffForm.phone}
+                    onChange={e => setStaffForm(prev => ({ ...prev, phone: e.target.value }))}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.label} htmlFor="staff-password">Temporary Password</label>
+                  <input
+                    id="staff-password"
+                    className={styles.input}
+                    type="password"
+                    placeholder="At least 8 chars, uppercase, number, symbol"
+                    value={staffForm.password}
+                    onChange={e => setStaffForm(prev => ({ ...prev, password: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <button
+                className={styles.createBtn}
+                type="submit"
+                disabled={
+                  staffCreating ||
+                  !staffForm.name.trim() ||
+                  !staffForm.email.trim() ||
+                  !staffForm.password
+                }
+              >
+                {staffCreating ? 'Creating…' : 'Create Staff User'}
+              </button>
+            </form>
+
+            <div className={styles.staffListBlock}>
+              <h3 className={styles.sectionSubTitle}>Existing Staff Accounts</h3>
+
+              {staffAccountsLoading && (
+                <p className={styles.emptyNote}>Loading staff accounts...</p>
+              )}
+
+              {!staffAccountsLoading && staffAccounts.length === 0 && (
+                <p className={styles.emptyNote}>No staff accounts yet.</p>
+              )}
+
+              {!staffAccountsLoading && staffAccounts.length > 0 && (
+                <ul className={styles.staffList}>
+                  {staffAccounts.map(user => (
+                    <li key={user.userId} className={styles.staffCard}>
+                      <div className={styles.staffCardInfo}>
+                        <strong className={styles.staffName}>{user.name}</strong>
+                        <span className={styles.staffMeta}>{user.email}</span>
+                        {user.phone && <span className={styles.staffMeta}>{user.phone}</span>}
+                        <span className={styles.staffMeta}>
+                          Created {new Date(user.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      <div className={styles.staffActions}>
+                        <span className={user.isActive ? styles.statusActive : styles.statusInactive}>
+                          {user.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        <button
+                          type="button"
+                          className={styles.copyBtn}
+                          disabled={staffActionUserId === user.userId}
+                          onClick={() => handleStaffStatusToggle(user)}
+                        >
+                          {staffActionUserId === user.userId
+                            ? 'Updating...'
+                            : (user.isActive ? 'Deactivate' : 'Reactivate')}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
         )}
       </main>
     </div>

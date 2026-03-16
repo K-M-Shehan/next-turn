@@ -307,10 +307,15 @@ function ForOrgsSection() {
           </p>
         </div>
         <div className={styles.forOrgsCta}>
-          <Link to="/register-org" className={styles.forOrgsLink}>
-            Register your organisation
-            <ArrowRightIcon />
-          </Link>
+          <div className={styles.forOrgsCtaStack}>
+            <Link to="/register-org" className={styles.forOrgsLink}>
+              Register your organisation
+              <ArrowRightIcon />
+            </Link>
+            <Link to="/find-org-login" className={styles.forOrgsLinkMuted}>
+              Already an admin? Find login link
+            </Link>
+          </div>
         </div>
       </div>
     </section>

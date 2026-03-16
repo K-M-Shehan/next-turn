@@ -16,6 +16,12 @@ public interface IOrganisationRepository
     Task<OrganisationEntity?> GetByNameAsync(string name, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Returns the organisation whose admin email matches the provided email,
+    /// or null when none exists.
+    /// </summary>
+    Task<OrganisationEntity?> GetByAdminEmailAsync(string adminEmail, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Persists a newly created organisation.
     /// The caller is responsible for committing the unit of work.
     /// </summary>

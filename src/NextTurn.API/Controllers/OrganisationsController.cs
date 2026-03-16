@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NextTurn.API.Models.Organisations;
 using NextTurn.Application.Organisation.Commands.RegisterOrganisation;
+using NextTurn.Application.Organisation.Queries.ResolveOrganisationLogin;
 
 namespace NextTurn.API.Controllers;
 
@@ -70,5 +71,23 @@ public sealed class OrganisationsController : ControllerBase
         return Created(
             $"/api/organisations/{result.OrganisationId}",
             new { result.OrganisationId, result.AdminUserId });
+    }
+
+    /// <summary>
+    /// Resolve an organisation admin login path from an admin email address.
+    /// </summary>
+    [HttpPost("resolve-login")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ResolveOrganisationLoginResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ResolveLogin(
+        [FromBody] ResolveOrganisationLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        var query = new ResolveOrganisationLoginQuery(request.AdminEmail);
+        var result = await _sender.Send(query, cancellationToken);
+
+        return Ok(result);
     }
 }

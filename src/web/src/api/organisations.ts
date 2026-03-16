@@ -22,6 +22,12 @@ export interface OrgRegistrationResult {
   adminUserId: string
 }
 
+export interface ResolveOrganisationLoginResult {
+  organisationId: string
+  organisationName: string
+  loginPath: string
+}
+
 /**
  * POST /api/organisations
  * Registers a new organisation and creates the initial OrgAdmin account.
@@ -52,5 +58,24 @@ export function toOrgRegistrationPayload(
     orgType:      values.orgType,
     adminName:    values.adminName,
     adminEmail:   values.adminEmail,
+  }
+}
+
+/**
+ * POST /api/organisations/resolve-login
+ * Resolves the tenant-scoped login path for an organisation admin email.
+ */
+export async function resolveOrganisationLogin(
+  adminEmail: string,
+): Promise<ResolveOrganisationLoginResult> {
+  try {
+    const { data } = await apiClient.post<ResolveOrganisationLoginResult>(
+      '/organisations/resolve-login',
+      { adminEmail },
+    )
+    return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
   }
 }
