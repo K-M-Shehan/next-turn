@@ -63,13 +63,13 @@ function Navbar() {
 
         <div className={styles.navActions}>
           {loggedIn && dashHref ? (
-            <Link to={dashHref} className={styles.btnPrimary}>
+            <Link to={dashHref} className={styles.forOrgsLink}>
               My Dashboard
             </Link>
           ) : (
-            <a href="#hero" className={styles.forOrgsLink}>
-              Get Started
-            </a>
+            <Link to="/login" className={styles.forOrgsLink}>
+              Sign In
+            </Link>
           )}
         </div>
       </div>
