@@ -111,4 +111,17 @@ public interface IQueueRepository
     /// Used by the staff dashboard to show who is next.
     /// </summary>
     Task<IReadOnlyList<QueueEntry>> GetWaitingEntriesAsync(Guid queueId, CancellationToken cancellationToken);
+
+    Task<bool> IsStaffAssignedToQueueAsync(Guid queueId, Guid staffUserId, CancellationToken cancellationToken);
+
+    Task<bool> IsStaffAlreadyAssignedAsync(Guid queueId, Guid staffUserId, CancellationToken cancellationToken);
+
+    Task AddStaffAssignmentAsync(Guid organisationId, Guid queueId, Guid staffUserId, CancellationToken cancellationToken);
+
+    Task<bool> RemoveStaffAssignmentAsync(Guid queueId, Guid staffUserId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<(Guid StaffUserId, string Name, string Email, bool IsActive)>>
+        GetStaffAssignmentsAsync(Guid queueId, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<QueueEntity>> GetQueuesAssignedToStaffAsync(Guid staffUserId, CancellationToken cancellationToken);
 }

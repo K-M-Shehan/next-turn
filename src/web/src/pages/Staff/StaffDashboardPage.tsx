@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   callNext,
-  getAvailableQueues,
+  getStaffQueues,
   getQueueDashboard,
   markNoShow,
   markServed,
@@ -63,7 +63,7 @@ export function StaffDashboardPage() {
     setLoadingQueues(true)
     setError(null)
 
-    getAvailableQueues(tenantId)
+    getStaffQueues(tenantId)
       .then((result) => {
         setQueues(result)
 
@@ -81,7 +81,7 @@ export function StaffDashboardPage() {
         })
       })
       .catch((err: ApiError) => {
-        setError(err.detail ?? 'Failed to load queues.')
+        setError(err.detail ?? 'Failed to load assigned queues.')
       })
       .finally(() => {
         setLoadingQueues(false)

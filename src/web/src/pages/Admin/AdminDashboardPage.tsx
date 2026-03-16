@@ -11,7 +11,15 @@
  */
 import { useMemo, useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { createQueue, getOrgQueues, type OrgQueueSummary } from '../../api/queues'
+import {
+  assignStaffToQueue,
+  createQueue,
+  getOrgQueues,
+  listQueueStaffAssignments,
+  unassignStaffFromQueue,
+  type OrgQueueSummary,
+  type QueueStaffAssignment,
+} from '../../api/queues'
 import {
   createStaffUser,
   deactivateStaffUser,
@@ -113,6 +121,12 @@ export function AdminDashboardPage() {
   const [staffAccounts, setStaffAccounts] = useState<StaffUserSummary[]>([])
   const [staffAccountsLoading, setStaffAccountsLoading] = useState(false)
   const [staffActionUserId, setStaffActionUserId] = useState<string | null>(null)
+  const [queueAssignments, setQueueAssignments] = useState<Record<string, QueueStaffAssignment[]>>({})
+  const [queueAssignmentSelection, setQueueAssignmentSelection] = useState<Record<string, string>>({})
+  const [queueAssignmentLoading, setQueueAssignmentLoading] = useState(false)
+  const [queueAssignmentBusyKey, setQueueAssignmentBusyKey] = useState<string | null>(null)
+  const [queueAssignmentError, setQueueAssignmentError] = useState<string | null>(null)
+  const [queueAssignmentSuccess, setQueueAssignmentSuccess] = useState<string | null>(null)
 
   const appointmentSummary = useMemo(() => {
     const enabledDays = appointmentRules.filter(r => r.isEnabled).length
@@ -346,11 +360,47 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function loadQueueAssignments(currentTenantId: string, currentQueues: OrgQueueSummary[]) {
+    if (currentQueues.length === 0) {
+      setQueueAssignments({})
+      return
+    }
+
+    setQueueAssignmentLoading(true)
+    setQueueAssignmentError(null)
+
+    try {
+      const pairs = await Promise.all(
+        currentQueues.map(async queue => {
+          const assigned = await listQueueStaffAssignments(queue.queueId, currentTenantId)
+          return [queue.queueId, assigned] as const
+        })
+      )
+
+      setQueueAssignments(Object.fromEntries(pairs))
+    } catch (err) {
+      const apiErr = err as ApiError
+      setQueueAssignmentError(apiErr.detail ?? 'Could not load queue staff assignments.')
+    } finally {
+      setQueueAssignmentLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab !== 'staff' || !tenantId) return
 
     void loadStaffAccounts(tenantId)
   }, [activeTab, tenantId])
+
+  useEffect(() => {
+    if (activeTab !== 'queues' || !tenantId) return
+
+    if (staffAccounts.length === 0) {
+      void loadStaffAccounts(tenantId)
+    }
+
+    void loadQueueAssignments(tenantId, queues)
+  }, [activeTab, tenantId, queues])
 
   async function handleStaffStatusToggle(user: StaffUserSummary) {
     if (!tenantId) return
@@ -374,6 +424,48 @@ export function AdminDashboardPage() {
       setStaffError(apiErr.detail ?? 'Could not update staff account status.')
     } finally {
       setStaffActionUserId(null)
+    }
+  }
+
+  async function handleAssignStaff(queueId: string) {
+    if (!tenantId) return
+
+    const selectedStaffUserId = queueAssignmentSelection[queueId]
+    if (!selectedStaffUserId) return
+
+    setQueueAssignmentBusyKey(`${queueId}:${selectedStaffUserId}:assign`)
+    setQueueAssignmentError(null)
+    setQueueAssignmentSuccess(null)
+
+    try {
+      await assignStaffToQueue(queueId, selectedStaffUserId, tenantId)
+      setQueueAssignmentSelection(prev => ({ ...prev, [queueId]: '' }))
+      setQueueAssignmentSuccess('Staff assignment updated.')
+      await loadQueueAssignments(tenantId, queues)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setQueueAssignmentError(apiErr.detail ?? 'Could not assign staff to queue.')
+    } finally {
+      setQueueAssignmentBusyKey(null)
+    }
+  }
+
+  async function handleUnassignStaff(queueId: string, staffUserId: string) {
+    if (!tenantId) return
+
+    setQueueAssignmentBusyKey(`${queueId}:${staffUserId}:unassign`)
+    setQueueAssignmentError(null)
+    setQueueAssignmentSuccess(null)
+
+    try {
+      await unassignStaffFromQueue(queueId, staffUserId, tenantId)
+      setQueueAssignmentSuccess('Staff assignment removed.')
+      await loadQueueAssignments(tenantId, queues)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setQueueAssignmentError(apiErr.detail ?? 'Could not remove queue assignment.')
+    } finally {
+      setQueueAssignmentBusyKey(null)
     }
   }
 
@@ -505,10 +597,18 @@ export function AdminDashboardPage() {
 
             <section className={styles.section}>
               <h2 className={styles.sectionTitle}>Your Queues</h2>
-              <p className={styles.sectionHint}>Copy and share queue links with customers.</p>
+              <p className={styles.sectionHint}>Copy and share queue links, then assign staff who can operate each queue.</p>
 
               {loadError && (
                 <div className={styles.errorBanner} role="alert">{loadError}</div>
+              )}
+
+              {queueAssignmentError && (
+                <div className={styles.errorBanner} role="alert">{queueAssignmentError}</div>
+              )}
+
+              {queueAssignmentSuccess && (
+                <div className={styles.successBanner} role="status">{queueAssignmentSuccess}</div>
               )}
 
               {queues.length === 0 && !loadError && (
@@ -547,6 +647,77 @@ export function AdminDashboardPage() {
                       >
                         {copiedId === queue.queueId ? '✓ Copied!' : 'Copy Link'}
                       </button>
+
+                      <div className={styles.assignmentArea}>
+                        <h4 className={styles.assignmentTitle}>Assigned Staff</h4>
+                        <div className={styles.assignmentRow}>
+                          <select
+                            className={styles.input}
+                            value={queueAssignmentSelection[queue.queueId] ?? ''}
+                            onChange={e => setQueueAssignmentSelection(prev => ({
+                              ...prev,
+                              [queue.queueId]: e.target.value,
+                            }))}
+                            disabled={queueAssignmentLoading || staffAccountsLoading}
+                          >
+                            <option value="">Select staff account</option>
+                            {staffAccounts
+                              .filter(staff => staff.isActive)
+                              .map(staff => (
+                                <option key={staff.userId} value={staff.userId}>
+                                  {staff.name} ({staff.email})
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            className={styles.copyBtn}
+                            type="button"
+                            onClick={() => handleAssignStaff(queue.queueId)}
+                            disabled={
+                              !queueAssignmentSelection[queue.queueId] ||
+                              queueAssignmentBusyKey === `${queue.queueId}:${queueAssignmentSelection[queue.queueId]}:assign`
+                            }
+                          >
+                            {queueAssignmentBusyKey === `${queue.queueId}:${queueAssignmentSelection[queue.queueId]}:assign`
+                              ? 'Assigning...'
+                              : 'Assign'}
+                          </button>
+                        </div>
+
+                        {queueAssignmentLoading && (
+                          <p className={styles.emptyNote}>Loading assignments...</p>
+                        )}
+
+                        {!queueAssignmentLoading && (queueAssignments[queue.queueId]?.length ?? 0) === 0 && (
+                          <p className={styles.emptyNote}>No staff assigned yet.</p>
+                        )}
+
+                        {!queueAssignmentLoading && (queueAssignments[queue.queueId]?.length ?? 0) > 0 && (
+                          <ul className={styles.assignmentList}>
+                            {(queueAssignments[queue.queueId] ?? []).map(assignment => (
+                              <li key={assignment.staffUserId} className={styles.assignmentItem}>
+                                <div className={styles.assignmentInfo}>
+                                  <strong>{assignment.name}</strong>
+                                  <span className={styles.staffMeta}>{assignment.email}</span>
+                                  <span className={assignment.isActive ? styles.statusActive : styles.statusInactive}>
+                                    {assignment.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <button
+                                  className={styles.copyBtn}
+                                  type="button"
+                                  onClick={() => handleUnassignStaff(queue.queueId, assignment.staffUserId)}
+                                  disabled={queueAssignmentBusyKey === `${queue.queueId}:${assignment.staffUserId}:unassign`}
+                                >
+                                  {queueAssignmentBusyKey === `${queue.queueId}:${assignment.staffUserId}:unassign`
+                                    ? 'Removing...'
+                                    : 'Remove'}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>

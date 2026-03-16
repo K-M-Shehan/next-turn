@@ -8,6 +8,7 @@ using NextTurn.Infrastructure.Persistence.Configurations.Auth;
 using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
 using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
+using QueueStaffAssignment = NextTurn.Domain.Queue.Entities.QueueStaffAssignment;
 
 namespace NextTurn.Infrastructure.Persistence;
 
@@ -40,6 +41,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     // Queue module (NT-16) — EF Core entity configurations and migration added in NT-16-3.
     public DbSet<QueueEntity> Queues       => Set<QueueEntity>();
     public DbSet<QueueEntry>  QueueEntries => Set<QueueEntry>();
+    public DbSet<QueueStaffAssignment> QueueStaffAssignments => Set<QueueStaffAssignment>();
 
     // Appointment module (NT-19).
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
@@ -81,6 +83,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
                 Set<QueueEntity>().Any(q =>
                     q.Id == e.QueueId &&
                     q.OrganisationId == _tenantContext.TenantId));
+
+        modelBuilder.Entity<QueueStaffAssignment>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
         // Appointments: scoped by organisation (tenant).
         modelBuilder.Entity<AppointmentEntity>()
