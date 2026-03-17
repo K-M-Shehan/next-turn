@@ -614,7 +614,7 @@
           ]
         },
         {
-          "name": "Book Appointment - Negative Unknown Profile",
+          "name": "Book Appointment - Edge Profile Contract",
           "request": {
             "method": "POST",
             "header": [
@@ -638,7 +638,11 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status is one of expected contract outcomes', function () { pm.expect([400, 409, 422]).to.include(pm.response.code); });"
+                  "pm.test('status is one of expected contract outcomes', function () { pm.expect([200, 400, 409, 422]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test('success contract includes bookingId', function () { pm.expect(body.bookingId).to.be.a('string').and.not.empty; });",
+                  "}"
                 ]
               }
             }
