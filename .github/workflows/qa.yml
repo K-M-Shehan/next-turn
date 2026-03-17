@@ -134,7 +134,8 @@ jobs:
         run: |
           dotnet ef database update \
             --project src/NextTurn.Infrastructure \
-            --startup-project src/NextTurn.API
+            --startup-project src/NextTurn.API \
+            --connection "Server=localhost,1433;Database=NextTurnContractTests;User Id=sa;Password=NextTurn_Dev#2026;TrustServerCertificate=True"
 
       - name: Start API for contract tests
         if: hashFiles('tests/postman/*.json') != ''
