@@ -156,7 +156,7 @@ jobs:
           JwtSettings__Audience: "NextTurnClient"
           AllowedOrigins: "http://localhost:5173"
         run: |
-          nohup dotnet run --project src/NextTurn.API --configuration Release --no-build > /tmp/nextturn-api.log 2>&1 &
+          nohup dotnet run --project src/NextTurn.API --configuration Release --no-build --no-launch-profile --urls http://localhost:5001 > /tmp/nextturn-api.log 2>&1 &
           for i in {1..60}; do
             if curl -fsS http://localhost:5001/openapi/v1.json >/dev/null 2>&1; then
               echo "API is up"
