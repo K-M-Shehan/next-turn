@@ -10,6 +10,19 @@ jobs:
   test:
     name: Unit + Integration Tests
     runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: NextTurn_Dev#2026
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'NextTurn_Dev#2026' -Q 'SELECT 1' -C || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
 
     steps:
       - name: Checkout
@@ -111,28 +124,6 @@ jobs:
         if: hashFiles('tests/postman/*.json') != ''
         run: dotnet tool install --global dotnet-ef
 
-      - name: Start SQL Server for API contract tests
-        if: hashFiles('tests/postman/*.json') != ''
-        run: |
-          docker run -d --name nextturn-sql \
-            -e ACCEPT_EULA=Y \
-            -e SA_PASSWORD='NextTurn_Dev#2026' \
-            -p 1433:1433 \
-            mcr.microsoft.com/mssql/server:2022-latest
-
-          for i in {1..60}; do
-            if docker exec nextturn-sql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'NextTurn_Dev#2026' -Q "SELECT 1" -C >/dev/null 2>&1; then
-              echo "SQL Server is up"
-              break
-            fi
-            if [ "$i" -eq 60 ]; then
-              echo "SQL Server failed to start"
-              docker logs nextturn-sql || true
-              exit 1
-            fi
-            sleep 2
-          done
-
       - name: Apply EF migrations for contract-test database
         if: hashFiles('tests/postman/*.json') != ''
         env:
@@ -198,8 +189,3 @@ jobs:
         if: failure() && hashFiles('tests/postman/*.json') != ''
         run: tail -n 200 /tmp/nextturn-api.log || true
 
-      - name: Stop SQL container
-        if: always() && hashFiles('tests/postman/*.json') != ''
-        run: |
-          docker logs nextturn-sql || true
-          docker rm -f nextturn-sql || true
