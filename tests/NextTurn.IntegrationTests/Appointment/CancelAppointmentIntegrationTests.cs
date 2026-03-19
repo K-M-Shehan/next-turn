@@ -48,7 +48,7 @@ public sealed class CancelAppointmentIntegrationTests
         var ownerId = Guid.NewGuid();
         var ownerClient = AuthenticatedClient(UserRole.User, ownerId, _tenantId);
 
-        var date = NextBusinessDateUtc();
+        var date = NextBusinessDateUtc(daysAhead: 3);
         var (slotStart, slotEnd) = SlotAt(date, 10, 0);
 
         var booking = await ownerClient.PostAsJsonAsync("/api/appointments", new
@@ -121,9 +121,9 @@ public sealed class CancelAppointmentIntegrationTests
         return (slotStart, slotEnd);
     }
 
-    private static DateOnly NextBusinessDateUtc()
+    private static DateOnly NextBusinessDateUtc(int daysAhead)
     {
-        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(daysAhead));
 
         while (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
         {
