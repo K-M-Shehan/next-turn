@@ -290,6 +290,10 @@ export interface QueueEntryActionResult {
   status: 'Serving' | 'Served' | 'NoShow'
 }
 
+export interface SkipQueueEntryBody {
+  reason?: string
+}
+
 /**
  * GET /api/queues/{queueId}/dashboard
  */
@@ -376,6 +380,57 @@ export async function markNoShow(
     const { data } = await apiClient.post<QueueEntryActionResult>(
       `/queues/${queueId}/no-show`,
       null,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * POST /api/queues/{queueId}/serve-next
+ */
+export async function serveNext(
+  queueId: string,
+  tenantId: string,
+): Promise<QueueEntryActionResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.post<QueueEntryActionResult>(
+      `/queues/${queueId}/serve-next`,
+      null,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * POST /api/queues/{queueId}/skip
+ */
+export async function skipQueueEntry(
+  queueId: string,
+  tenantId: string,
+  body: SkipQueueEntryBody = {},
+): Promise<QueueEntryActionResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.post<QueueEntryActionResult>(
+      `/queues/${queueId}/skip`,
+      body,
       {
         headers: {
           Authorization: `Bearer ${token}`,

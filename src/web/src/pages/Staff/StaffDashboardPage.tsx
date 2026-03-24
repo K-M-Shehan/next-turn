@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  callNext,
   getStaffQueues,
   getQueueDashboard,
-  markNoShow,
-  markServed,
+  serveNext,
+  skipQueueEntry,
   type OrgQueueSummary,
   type QueueDashboardResult,
 } from '../../api/queues'
@@ -25,7 +24,7 @@ export function StaffDashboardPage() {
 
   const [loadingQueues, setLoadingQueues] = useState(true)
   const [loadingDashboard, setLoadingDashboard] = useState(false)
-  const [actionBusy, setActionBusy] = useState<'call-next' | 'served' | 'no-show' | null>(null)
+  const [actionBusy, setActionBusy] = useState<'serve-next' | 'skip' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
@@ -103,52 +102,40 @@ export function StaffDashboardPage() {
     return () => clearInterval(id)
   }, [selectedQueueId, loadDashboard])
 
-  async function handleCallNext() {
+  async function handleServeNext() {
     if (!tenantId || !selectedQueueId) return
 
-    setActionBusy('call-next')
+    setActionBusy('serve-next')
     setError(null)
 
     try {
-      await callNext(selectedQueueId, tenantId)
+      await serveNext(selectedQueueId, tenantId)
       await loadDashboard(selectedQueueId, false)
     } catch (err) {
       const apiErr = err as ApiError
-      setError(apiErr.detail ?? 'Could not call the next ticket.')
+      setError(apiErr.detail ?? 'Could not serve the next ticket.')
     } finally {
       setActionBusy(null)
     }
   }
 
-  async function handleMarkServed() {
+  async function handleSkipNext() {
     if (!tenantId || !selectedQueueId) return
 
-    setActionBusy('served')
-    setError(null)
-
-    try {
-      await markServed(selectedQueueId, tenantId)
-      await loadDashboard(selectedQueueId, false)
-    } catch (err) {
-      const apiErr = err as ApiError
-      setError(apiErr.detail ?? 'Could not mark ticket as served.')
-    } finally {
-      setActionBusy(null)
+    const rawReason = window.prompt('Optional skip reason (max 200 chars):', '')
+    if (rawReason === null) {
+      return
     }
-  }
 
-  async function handleMarkNoShow() {
-    if (!tenantId || !selectedQueueId) return
-
-    setActionBusy('no-show')
+    setActionBusy('skip')
     setError(null)
 
     try {
-      await markNoShow(selectedQueueId, tenantId)
+      await skipQueueEntry(selectedQueueId, tenantId, { reason: rawReason.trim() || undefined })
       await loadDashboard(selectedQueueId, false)
     } catch (err) {
       const apiErr = err as ApiError
-      setError(apiErr.detail ?? 'Could not mark ticket as no-show.')
+      setError(apiErr.detail ?? 'Could not skip the next ticket.')
     } finally {
       setActionBusy(null)
     }
@@ -160,7 +147,7 @@ export function StaffDashboardPage() {
   }
 
   const hasServingEntry = Boolean(dashboard?.currentlyServing)
-  const canCallNext = Boolean(dashboard && dashboard.waitingCount > 0 && !hasServingEntry)
+  const hasActionableEntry = Boolean(dashboard && (dashboard.waitingCount > 0 || hasServingEntry))
 
   return (
     <div className={styles.page}>
@@ -242,29 +229,20 @@ export function StaffDashboardPage() {
                   <button
                     type="button"
                     className={styles.primaryBtn}
-                    data-testid="call-next-btn"
-                    onClick={handleCallNext}
-                    disabled={!canCallNext || actionBusy !== null}
+                    data-testid="serve-next-btn"
+                    onClick={handleServeNext}
+                    disabled={!hasActionableEntry || actionBusy !== null}
                   >
-                    {actionBusy === 'call-next' ? 'Calling…' : 'Call Next'}
+                    {actionBusy === 'serve-next' ? 'Saving…' : 'Serve Next'}
                   </button>
                   <button
                     type="button"
                     className={styles.secondaryBtn}
-                    data-testid="mark-served-btn"
-                    onClick={handleMarkServed}
-                    disabled={!hasServingEntry || actionBusy !== null}
+                    data-testid="skip-next-btn"
+                    onClick={handleSkipNext}
+                    disabled={!hasActionableEntry || actionBusy !== null}
                   >
-                    {actionBusy === 'served' ? 'Saving…' : 'Mark Served'}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.ghostBtn}
-                    data-testid="mark-noshow-btn"
-                    onClick={handleMarkNoShow}
-                    disabled={!hasServingEntry || actionBusy !== null}
-                  >
-                    {actionBusy === 'no-show' ? 'Saving…' : 'Mark No-Show'}
+                    {actionBusy === 'skip' ? 'Saving…' : 'Skip Next'}
                   </button>
                 </div>
               </section>
