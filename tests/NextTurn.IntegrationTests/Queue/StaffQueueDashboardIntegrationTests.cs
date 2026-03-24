@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NextTurn.Domain.Auth.Entities;
 using NextTurn.Domain.Auth.ValueObjects;
 using NextTurn.Domain.Auth;
+using NextTurn.Domain.Queue.Entities;
 using NextTurn.Domain.Queue.Enums;
 using NextTurn.IntegrationTests;
 using NextTurn.Infrastructure.Persistence;
@@ -19,6 +21,8 @@ namespace NextTurn.IntegrationTests.Queue;
 /// - POST /api/queues/{queueId}/call-next
 /// - POST /api/queues/{queueId}/served
 /// - POST /api/queues/{queueId}/no-show
+/// - POST /api/queues/{queueId}/serve-next
+/// - POST /api/queues/{queueId}/skip
 /// </summary>
 [Collection("Integration")]
 public sealed class StaffQueueDashboardIntegrationTests
@@ -197,6 +201,91 @@ public sealed class StaffQueueDashboardIntegrationTests
         var response = await UserClient(UserBId).PostAsync($"/api/queues/{_queueId}/call-next", null);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task ServeNext_WithWaitingEntries_MarksQueueHeadServed_AndWritesAuditLog()
+    {
+        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(UserBId);
+
+        var serveResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/serve-next", null);
+        var serveBody = await ReadBodyAsync(serveResponse);
+
+        serveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        serveBody["status"].GetString().Should().Be("Served");
+        serveBody["ticketNumber"].GetInt32().Should().Be(1);
+
+        var dashboardResponse = await StaffClient().GetAsync($"/api/queues/{_queueId}/dashboard");
+        var dashboardBody = await ReadBodyAsync(dashboardResponse);
+        dashboardBody["waitingCount"].GetInt32().Should().Be(1);
+
+        var waiting = dashboardBody["waitingEntries"].EnumerateArray().ToList();
+        waiting.Should().HaveCount(1);
+        waiting[0].GetProperty("ticketNumber").GetInt32().Should().Be(2);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var servedEntry = await db.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+
+        servedEntry.Status.Should().Be(QueueEntryStatus.Served);
+
+        var audit = await db.QueueActionAuditLogs
+            .IgnoreQueryFilters()
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(a => a.QueueId == _queueId);
+
+        audit.Should().NotBeNull();
+        audit!.ActionType.Should().Be(QueueActionType.Serve);
+        audit.PerformedByUserId.Should().Be(_staffUserId);
+        audit.QueueEntryId.Should().Be(servedEntry.Id);
+        audit.Reason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Skip_WithReason_MarksQueueHeadNoShow_AndWritesAuditLog()
+    {
+        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(UserBId);
+
+        var content = new StringContent(
+            JsonSerializer.Serialize(new { reason = "Citizen did not arrive" }),
+            Encoding.UTF8,
+            "application/json");
+
+        var skipResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/skip", content);
+        var skipBody = await ReadBodyAsync(skipResponse);
+
+        skipResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        skipBody["status"].GetString().Should().Be("NoShow");
+        skipBody["ticketNumber"].GetInt32().Should().Be(1);
+
+        var dashboardResponse = await StaffClient().GetAsync($"/api/queues/{_queueId}/dashboard");
+        var dashboardBody = await ReadBodyAsync(dashboardResponse);
+        dashboardBody["waitingCount"].GetInt32().Should().Be(1);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var skippedEntry = await db.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+
+        skippedEntry.Status.Should().Be(QueueEntryStatus.NoShow);
+
+        var audit = await db.QueueActionAuditLogs
+            .IgnoreQueryFilters()
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(a => a.QueueId == _queueId);
+
+        audit.Should().NotBeNull();
+        audit!.ActionType.Should().Be(QueueActionType.Skip);
+        audit.PerformedByUserId.Should().Be(_staffUserId);
+        audit.QueueEntryId.Should().Be(skippedEntry.Id);
+        audit.Reason.Should().Be("Citizen did not arrive");
     }
 
     private Task<HttpResponseMessage> JoinQueueAsync(Guid userId)
