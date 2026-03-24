@@ -31,6 +31,7 @@ import { QueuePage }            from './pages/Queue'
 import { AppointmentPage }      from './pages/Appointment'
 import { AdminDashboardPage }   from './pages/Admin'
 import { StaffDashboardPage }   from './pages/Staff'
+import { OfficeManagementPage } from './pages/Offices'
 import { StaffInviteAcceptPage } from './pages/StaffInviteAccept'
 import { OrgLoginLookupPage }   from './pages/OrgLoginLookup'
 import { TermsPage, PrivacyPage } from './pages/Legal'
@@ -87,6 +88,15 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['OrgAdmin', 'SystemAdmin']}>
             <AdminDashboardPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/:tenantId/offices"
+        element={
+          <ProtectedRoute allowedRoles={['OrgAdmin', 'SystemAdmin']}>
+            <OfficeManagementPage />
           </ProtectedRoute>
         }
       />

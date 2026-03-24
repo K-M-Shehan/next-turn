@@ -5,12 +5,14 @@ using NextTurn.Application.Common.Interfaces;
 using NextTurn.Domain.Appointment.Repositories;
 using NextTurn.Domain.Auth.Repositories;
 using NextTurn.Domain.Organisation.Repositories;
+using NextTurn.Domain.Office.Repositories;
 using NextTurn.Domain.Queue.Repositories;
 using NextTurn.Infrastructure.Appointment;
 using NextTurn.Infrastructure.Auth;
 using NextTurn.Infrastructure.BusinessRegistry;
 using NextTurn.Infrastructure.Email;
 using NextTurn.Infrastructure.Organisation;
+using NextTurn.Infrastructure.Office;
 using NextTurn.Infrastructure.Persistence;
 using NextTurn.Infrastructure.Queue;
 
@@ -58,6 +60,7 @@ public static class DependencyInjection
         // Scoped lifetime matches DbContext — one instance per HTTP request.
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IOrganisationRepository, OrganisationRepository>();
+        services.AddScoped<IOfficeRepository, OfficeRepository>();
         services.AddScoped<IQueueRepository, QueueRepository>();
         services.AddScoped<IAppointmentRepository, AppointmentRepository>();
 
