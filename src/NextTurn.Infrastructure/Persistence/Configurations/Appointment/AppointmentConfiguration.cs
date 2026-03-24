@@ -19,6 +19,9 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
         builder.Property(a => a.OrganisationId)
             .IsRequired();
 
+        builder.Property(a => a.AppointmentProfileId)
+            .IsRequired();
+
         builder.Property(a => a.UserId)
             .IsRequired();
 
@@ -38,12 +41,12 @@ public sealed class AppointmentConfiguration : IEntityTypeConfiguration<Appointm
             .IsRequired()
             .HasDefaultValue(false);
 
-        builder.HasIndex(a => new { a.OrganisationId, a.SlotStart })
-            .HasDatabaseName("IX_Appointments_OrganisationId_SlotStart");
+        builder.HasIndex(a => new { a.OrganisationId, a.AppointmentProfileId, a.SlotStart })
+            .HasDatabaseName("IX_Appointments_OrganisationId_ProfileId_SlotStart");
 
-        builder.HasIndex(a => new { a.OrganisationId, a.SlotStart, a.SlotEnd })
-            .HasDatabaseName("UX_Appointments_OrganisationId_SlotStart_SlotEnd_Active")
+        builder.HasIndex(a => new { a.OrganisationId, a.AppointmentProfileId, a.SlotStart, a.SlotEnd })
+            .HasDatabaseName("UX_Appointments_OrganisationId_ProfileId_SlotStart_SlotEnd_Active")
             .IsUnique()
-            .HasFilter("[Status] NOT IN ('Cancelled', 'Rescheduled')");
+            .HasFilter("[Status] <> 'Cancelled' AND [Status] <> 'Rescheduled'");
     }
 }

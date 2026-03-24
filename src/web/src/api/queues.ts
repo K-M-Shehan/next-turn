@@ -35,6 +35,13 @@ export interface OrgQueueSummary {
   shareableLink: string
 }
 
+export interface QueueStaffAssignment {
+  staffUserId: string
+  name: string
+  email: string
+  isActive: boolean
+}
+
 export interface CreateQueueBody {
   name: string
   maxCapacity: number
@@ -283,6 +290,10 @@ export interface QueueEntryActionResult {
   status: 'Serving' | 'Served' | 'NoShow'
 }
 
+export interface SkipQueueEntryBody {
+  reason?: string
+}
+
 /**
  * GET /api/queues/{queueId}/dashboard
  */
@@ -377,6 +388,149 @@ export async function markNoShow(
       }
     )
     return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * POST /api/queues/{queueId}/serve-next
+ */
+export async function serveNext(
+  queueId: string,
+  tenantId: string,
+): Promise<QueueEntryActionResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.post<QueueEntryActionResult>(
+      `/queues/${queueId}/serve-next`,
+      null,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * POST /api/queues/{queueId}/skip
+ */
+export async function skipQueueEntry(
+  queueId: string,
+  tenantId: string,
+  body: SkipQueueEntryBody = {},
+): Promise<QueueEntryActionResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.post<QueueEntryActionResult>(
+      `/queues/${queueId}/skip`,
+      body,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/staff-assigned
+ * Returns queues staff can operate (or all org queues for admin roles).
+ */
+export async function getStaffQueues(tenantId: string): Promise<OrgQueueSummary[]> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<OrgQueueSummary[]>(`/queues/staff-assigned`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': tenantId,
+      },
+    })
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/{queueId}/staff-assignments
+ */
+export async function listQueueStaffAssignments(
+  queueId: string,
+  tenantId: string,
+): Promise<QueueStaffAssignment[]> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<QueueStaffAssignment[]>(
+      `/queues/${queueId}/staff-assignments`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * POST /api/queues/{queueId}/staff-assignments/{staffUserId}
+ */
+export async function assignStaffToQueue(
+  queueId: string,
+  staffUserId: string,
+  tenantId: string,
+): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.post(
+      `/queues/${queueId}/staff-assignments/${staffUserId}`,
+      null,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * DELETE /api/queues/{queueId}/staff-assignments/{staffUserId}
+ */
+export async function unassignStaffFromQueue(
+  queueId: string,
+  staffUserId: string,
+  tenantId: string,
+): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.delete(
+      `/queues/${queueId}/staff-assignments/${staffUserId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      }
+    )
   } catch (err) {
     throw parseApiError(err)
   }

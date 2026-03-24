@@ -1,9 +1,17 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using NextTurn.Domain.Auth.Entities;
+using NextTurn.Domain.Auth.ValueObjects;
 using NextTurn.Domain.Auth;
+using NextTurn.Domain.Queue.Entities;
+using NextTurn.Domain.Queue.Enums;
 using NextTurn.IntegrationTests;
+using NextTurn.Infrastructure.Persistence;
 
 namespace NextTurn.IntegrationTests.Queue;
 
@@ -13,6 +21,8 @@ namespace NextTurn.IntegrationTests.Queue;
 /// - POST /api/queues/{queueId}/call-next
 /// - POST /api/queues/{queueId}/served
 /// - POST /api/queues/{queueId}/no-show
+/// - POST /api/queues/{queueId}/serve-next
+/// - POST /api/queues/{queueId}/skip
 /// </summary>
 [Collection("Integration")]
 public sealed class StaffQueueDashboardIntegrationTests
@@ -22,6 +32,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
     private Guid _tenantId;
     private Guid _queueId;
+    private Guid _staffUserId;
 
     private static readonly Guid UserAId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid UserBId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
@@ -35,6 +46,28 @@ public sealed class StaffQueueDashboardIntegrationTests
     {
         await _factory.ResetDatabaseAsync();
         (_tenantId, _queueId) = await _factory.SeedQueueAsync();
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var staffUser = User.Create(
+            tenantId: _tenantId,
+            name: "Queue Staff",
+            email: new EmailAddress("staff.integration@nextturn.dev"),
+            phone: null,
+            passwordHash: "integration-password-hash",
+            role: UserRole.Staff);
+
+        staffUser.Activate();
+
+        db.Users.Add(staffUser);
+        db.QueueStaffAssignments.Add(NextTurn.Domain.Queue.Entities.QueueStaffAssignment.Create(
+            _tenantId,
+            _queueId,
+            staffUser.Id));
+
+        await db.SaveChangesAsync();
+        _staffUserId = staffUser.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -95,6 +128,50 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         dashboardBody["currentlyServing"].ValueKind.Should().Be(JsonValueKind.Null);
         dashboardBody["waitingCount"].GetInt32().Should().Be(0);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var servedEntry = await db.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+
+        servedEntry.Should().NotBeNull();
+        servedEntry!.Status.Should().Be(QueueEntryStatus.Served);
+    }
+
+    [Fact]
+    public async Task CallNext_ThenMarkServed_PersistsServingToServedTransitionInDatabase()
+    {
+        await JoinQueueAsync(UserAId);
+
+        var callResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/call-next", null);
+        callResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using (var servingScope = _factory.Services.CreateAsyncScope())
+        {
+            var db = servingScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var servingEntry = await db.QueueEntries
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+
+            servingEntry.Should().NotBeNull();
+            servingEntry!.Status.Should().Be(QueueEntryStatus.Serving);
+        }
+
+        var servedResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/served", null);
+        servedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var servedScope = _factory.Services.CreateAsyncScope();
+        var servedDb = servedScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var servedEntryAfterTransition = await servedDb.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+
+        servedEntryAfterTransition.Should().NotBeNull();
+        servedEntryAfterTransition!.Status.Should().Be(QueueEntryStatus.Served);
     }
 
     [Fact]
@@ -126,6 +203,91 @@ public sealed class StaffQueueDashboardIntegrationTests
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [Fact]
+    public async Task ServeNext_WithWaitingEntries_MarksQueueHeadServed_AndWritesAuditLog()
+    {
+        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(UserBId);
+
+        var serveResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/serve-next", null);
+        var serveBody = await ReadBodyAsync(serveResponse);
+
+        serveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        serveBody["status"].GetString().Should().Be("Served");
+        serveBody["ticketNumber"].GetInt32().Should().Be(1);
+
+        var dashboardResponse = await StaffClient().GetAsync($"/api/queues/{_queueId}/dashboard");
+        var dashboardBody = await ReadBodyAsync(dashboardResponse);
+        dashboardBody["waitingCount"].GetInt32().Should().Be(1);
+
+        var waiting = dashboardBody["waitingEntries"].EnumerateArray().ToList();
+        waiting.Should().HaveCount(1);
+        waiting[0].GetProperty("ticketNumber").GetInt32().Should().Be(2);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var servedEntry = await db.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+
+        servedEntry.Status.Should().Be(QueueEntryStatus.Served);
+
+        var audit = await db.QueueActionAuditLogs
+            .IgnoreQueryFilters()
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(a => a.QueueId == _queueId);
+
+        audit.Should().NotBeNull();
+        audit!.ActionType.Should().Be(QueueActionType.Serve);
+        audit.PerformedByUserId.Should().Be(_staffUserId);
+        audit.QueueEntryId.Should().Be(servedEntry.Id);
+        audit.Reason.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Skip_WithReason_MarksQueueHeadNoShow_AndWritesAuditLog()
+    {
+        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(UserBId);
+
+        var content = new StringContent(
+            JsonSerializer.Serialize(new { reason = "Citizen did not arrive" }),
+            Encoding.UTF8,
+            "application/json");
+
+        var skipResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/skip", content);
+        var skipBody = await ReadBodyAsync(skipResponse);
+
+        skipResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        skipBody["status"].GetString().Should().Be("NoShow");
+        skipBody["ticketNumber"].GetInt32().Should().Be(1);
+
+        var dashboardResponse = await StaffClient().GetAsync($"/api/queues/{_queueId}/dashboard");
+        var dashboardBody = await ReadBodyAsync(dashboardResponse);
+        dashboardBody["waitingCount"].GetInt32().Should().Be(1);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var skippedEntry = await db.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+
+        skippedEntry.Status.Should().Be(QueueEntryStatus.NoShow);
+
+        var audit = await db.QueueActionAuditLogs
+            .IgnoreQueryFilters()
+            .OrderByDescending(a => a.CreatedAt)
+            .FirstOrDefaultAsync(a => a.QueueId == _queueId);
+
+        audit.Should().NotBeNull();
+        audit!.ActionType.Should().Be(QueueActionType.Skip);
+        audit.PerformedByUserId.Should().Be(_staffUserId);
+        audit.QueueEntryId.Should().Be(skippedEntry.Id);
+        audit.Reason.Should().Be("Citizen did not arrive");
+    }
+
     private Task<HttpResponseMessage> JoinQueueAsync(Guid userId)
     {
         return UserClient(userId).PostAsync($"/api/queues/{_queueId}/join", null);
@@ -133,7 +295,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
     private HttpClient StaffClient()
     {
-        var token = _factory.CreateTokenForRole(UserRole.Staff, userId: Guid.NewGuid(), tenantId: _tenantId);
+        var token = _factory.CreateTokenForRole(UserRole.Staff, userId: _staffUserId, tenantId: _tenantId);
         return AuthenticatedClient(token);
     }
 

@@ -20,6 +20,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
 
     private static readonly Guid AppointmentId = Guid.NewGuid();
     private static readonly Guid OrganisationId = Guid.NewGuid();
+    private static readonly Guid AppointmentProfileId = Guid.NewGuid();
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly DateTimeOffset CurrentStart = DateTimeOffset.UtcNow.AddHours(2);
     private static readonly DateTimeOffset CurrentEnd = CurrentStart.AddMinutes(30);
@@ -28,7 +29,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
 
     public RescheduleAppointmentCommandHandlerTests()
     {
-        var current = AppointmentEntity.Create(OrganisationId, UserId, CurrentStart, CurrentEnd);
+        var current = AppointmentEntity.Create(OrganisationId, AppointmentProfileId, UserId, CurrentStart, CurrentEnd);
 
         _appointmentRepositoryMock
             .Setup(r => r.GetByIdAsync(AppointmentId, It.IsAny<CancellationToken>()))
@@ -37,6 +38,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
         _appointmentRepositoryMock
             .Setup(r => r.HasOverlapExcludingAsync(
                 OrganisationId,
+                AppointmentProfileId,
                 NewStart,
                 NewEnd,
                 It.IsAny<Guid>(),
@@ -50,6 +52,15 @@ public sealed class RescheduleAppointmentCommandHandlerTests
         _appointmentRepositoryMock
             .Setup(r => r.AddAsync(It.IsAny<AppointmentEntity>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
+
+        _appointmentRepositoryMock
+            .Setup(r => r.HasActiveAppointmentForUserOnDateAsync(
+                OrganisationId,
+                UserId,
+                DateOnly.FromDateTime(NewStart.UtcDateTime),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
 
         _contextMock
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
@@ -84,6 +95,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
             r => r.AddAsync(
                 It.Is<AppointmentEntity>(a =>
                     a.OrganisationId == OrganisationId &&
+                    a.AppointmentProfileId == AppointmentProfileId &&
                     a.UserId == UserId &&
                     a.SlotStart == NewStart &&
                     a.SlotEnd == NewEnd),
@@ -99,6 +111,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
     {
         var pastAppointment = AppointmentEntity.Create(
             OrganisationId,
+            AppointmentProfileId,
             UserId,
             DateTimeOffset.UtcNow.AddHours(-2),
             DateTimeOffset.UtcNow.AddHours(-1));
@@ -132,6 +145,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
 
         _appointmentRepositoryMock.Verify(r => r.HasOverlapExcludingAsync(
             It.IsAny<Guid>(),
+            It.IsAny<Guid>(),
             It.IsAny<DateTimeOffset>(),
             It.IsAny<DateTimeOffset>(),
             It.IsAny<Guid>(),
@@ -144,6 +158,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
         _appointmentRepositoryMock
             .Setup(r => r.HasOverlapExcludingAsync(
                 OrganisationId,
+                AppointmentProfileId,
                 NewStart,
                 NewEnd,
                 It.IsAny<Guid>(),
@@ -164,7 +179,7 @@ public sealed class RescheduleAppointmentCommandHandlerTests
     {
         var dbUpdateException = new DbUpdateException(
             "Write failed",
-            new Exception("Violation of unique index UX_Appointments_OrganisationId_SlotStart_SlotEnd_Active"));
+            new Exception("Violation of unique index UX_Appointments_OrganisationId_ProfileId_SlotStart_SlotEnd_Active"));
 
         _contextMock
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
@@ -174,6 +189,27 @@ public sealed class RescheduleAppointmentCommandHandlerTests
 
         await act.Should().ThrowAsync<ConflictDomainException>()
             .WithMessage("This time slot is already booked.");
+    }
+
+    [Fact]
+    public async Task Handle_WhenUserAlreadyHasAnotherAppointmentThatDay_ThrowsConflictDomainException()
+    {
+        _appointmentRepositoryMock
+            .Setup(r => r.HasActiveAppointmentForUserOnDateAsync(
+                OrganisationId,
+                UserId,
+                DateOnly.FromDateTime(NewStart.UtcDateTime),
+                It.IsAny<Guid?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var act = async () => await _handler.Handle(ValidCommand(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ConflictDomainException>()
+            .WithMessage("You can only keep one appointment per day.");
+
+        _appointmentRepositoryMock.Verify(r => r.AddAsync(It.IsAny<AppointmentEntity>(), It.IsAny<CancellationToken>()), Times.Never);
+        _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static RescheduleAppointmentCommand ValidCommand() =>

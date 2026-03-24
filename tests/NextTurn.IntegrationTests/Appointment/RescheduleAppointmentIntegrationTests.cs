@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using NextTurn.Domain.Appointment.Entities;
 using NextTurn.Domain.Auth;
+using NextTurn.Infrastructure.Persistence;
 
 namespace NextTurn.IntegrationTests.Appointment;
 
@@ -13,6 +16,7 @@ public sealed class RescheduleAppointmentIntegrationTests
     private readonly NextTurnWebApplicationFactory _factory;
 
     private Guid _tenantId;
+    private Guid _appointmentProfileId;
 
     public RescheduleAppointmentIntegrationTests(NextTurnWebApplicationFactory factory)
     {
@@ -23,6 +27,15 @@ public sealed class RescheduleAppointmentIntegrationTests
     {
         await _factory.ResetDatabaseAsync();
         (_tenantId, _) = await _factory.SeedQueueAsync();
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = AppointmentProfile.Create(_tenantId, "Reschedule Flow Profile");
+        db.AppointmentProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        _appointmentProfileId = profile.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -40,6 +53,7 @@ public sealed class RescheduleAppointmentIntegrationTests
         var booking = await ownerClient.PostAsJsonAsync("/api/appointments", new
         {
             organisationId = _tenantId,
+            appointmentProfileId = _appointmentProfileId,
             slotStart = oldStart,
             slotEnd = oldEnd,
         });
@@ -64,21 +78,23 @@ public sealed class RescheduleAppointmentIntegrationTests
         rescheduled.SlotEnd.Should().Be(newEnd);
 
         var dateText = date.ToString("yyyy-MM-dd");
-        var slotListResponse = await ownerClient.GetAsync($"/api/appointments/slots?organisationId={_tenantId}&date={dateText}");
+        var slotListResponse = await ownerClient.GetAsync(
+            $"/api/appointments/slots?organisationId={_tenantId}&appointmentProfileId={_appointmentProfileId}&date={dateText}");
         slotListResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var slots = await slotListResponse.Content.ReadFromJsonAsync<List<SlotDto>>();
         slots.Should().NotBeNull();
 
-        slots!.Should().Contain(s => s.SlotStart == oldStart && s.SlotEnd == oldEnd,
+        slots!.Should().Contain(s => s.SlotStart == oldStart && s.SlotEnd == oldEnd && !s.IsBooked,
             "old slot should become available after successful reschedule");
-        slots.Should().NotContain(s => s.SlotStart == newStart && s.SlotEnd == newEnd,
+        slots.Should().Contain(s => s.SlotStart == newStart && s.SlotEnd == newEnd && s.IsBooked,
             "new slot should remain occupied by the replacement appointment");
 
         var otherUserClient = AuthenticatedClient(UserRole.User, Guid.NewGuid(), _tenantId);
         var oldSlotRebook = await otherUserClient.PostAsJsonAsync("/api/appointments", new
         {
             organisationId = _tenantId,
+            appointmentProfileId = _appointmentProfileId,
             slotStart = oldStart,
             slotEnd = oldEnd,
         });
@@ -107,5 +123,5 @@ public sealed class RescheduleAppointmentIntegrationTests
 
     private sealed record RescheduleAppointmentApiResult(Guid AppointmentId, DateTimeOffset SlotStart, DateTimeOffset SlotEnd);
 
-    private sealed record SlotDto(DateTimeOffset SlotStart, DateTimeOffset SlotEnd);
+    private sealed record SlotDto(DateTimeOffset SlotStart, DateTimeOffset SlotEnd, bool IsBooked);
 }

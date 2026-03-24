@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using NextTurn.Domain.Appointment.Entities;
 using NextTurn.Domain.Appointment.Enums;
 using NextTurn.Domain.Auth;
 using NextTurn.Infrastructure.Persistence;
@@ -17,6 +18,7 @@ public sealed class CancelAppointmentIntegrationTests
     private readonly NextTurnWebApplicationFactory _factory;
 
     private Guid _tenantId;
+    private Guid _appointmentProfileId;
 
     public CancelAppointmentIntegrationTests(NextTurnWebApplicationFactory factory)
     {
@@ -27,6 +29,15 @@ public sealed class CancelAppointmentIntegrationTests
     {
         await _factory.ResetDatabaseAsync();
         (_tenantId, _) = await _factory.SeedQueueAsync();
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var profile = AppointmentProfile.Create(_tenantId, "Cancel Flow Profile");
+        db.AppointmentProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        _appointmentProfileId = profile.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -37,12 +48,13 @@ public sealed class CancelAppointmentIntegrationTests
         var ownerId = Guid.NewGuid();
         var ownerClient = AuthenticatedClient(UserRole.User, ownerId, _tenantId);
 
-        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2));
+        var date = NextBusinessDateUtc(daysAhead: 3);
         var (slotStart, slotEnd) = SlotAt(date, 10, 0);
 
         var booking = await ownerClient.PostAsJsonAsync("/api/appointments", new
         {
             organisationId = _tenantId,
+            appointmentProfileId = _appointmentProfileId,
             slotStart,
             slotEnd,
         });
@@ -68,9 +80,11 @@ public sealed class CancelAppointmentIntegrationTests
 
         persisted.Status.Should().Be(AppointmentStatus.Cancelled);
         persisted.LateCancellation.Should().BeFalse();
+        persisted.AppointmentProfileId.Should().Be(_appointmentProfileId);
 
         var dateText = date.ToString("yyyy-MM-dd");
-        var slotsResponse = await ownerClient.GetAsync($"/api/appointments/slots?organisationId={_tenantId}&date={dateText}");
+        var slotsResponse = await ownerClient.GetAsync(
+            $"/api/appointments/slots?organisationId={_tenantId}&appointmentProfileId={_appointmentProfileId}&date={dateText}");
         slotsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var slots = await slotsResponse.Content.ReadFromJsonAsync<List<SlotDto>>();
@@ -82,6 +96,7 @@ public sealed class CancelAppointmentIntegrationTests
         var rebook = await anotherUser.PostAsJsonAsync("/api/appointments", new
         {
             organisationId = _tenantId,
+            appointmentProfileId = _appointmentProfileId,
             slotStart,
             slotEnd,
         });
@@ -104,6 +119,18 @@ public sealed class CancelAppointmentIntegrationTests
         var slotStart = new DateTimeOffset(date.ToDateTime(new TimeOnly(hour, minute)), TimeSpan.Zero);
         var slotEnd = slotStart.AddMinutes(30);
         return (slotStart, slotEnd);
+    }
+
+    private static DateOnly NextBusinessDateUtc(int daysAhead)
+    {
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(daysAhead));
+
+        while (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            date = date.AddDays(1);
+        }
+
+        return date;
     }
 
     private sealed record BookAppointmentApiResult(Guid AppointmentId);

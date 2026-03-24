@@ -42,6 +42,7 @@ public sealed class RescheduleAppointmentCommandHandler
 
         bool hasOverlap = await _appointmentRepository.HasOverlapExcludingAsync(
             appointment.OrganisationId,
+            appointment.AppointmentProfileId,
             request.NewSlotStart,
             request.NewSlotEnd,
             appointment.Id,
@@ -49,6 +50,17 @@ public sealed class RescheduleAppointmentCommandHandler
 
         if (hasOverlap)
             throw new ConflictDomainException("This time slot is already booked.");
+
+        var newSlotDate = DateOnly.FromDateTime(request.NewSlotStart.UtcDateTime);
+        bool hasExistingAppointmentOnDate = await _appointmentRepository.HasActiveAppointmentForUserOnDateAsync(
+            appointment.OrganisationId,
+            appointment.UserId,
+            newSlotDate,
+            appointment.Id,
+            cancellationToken);
+
+        if (hasExistingAppointmentOnDate)
+            throw new ConflictDomainException("You can only keep one appointment per day.");
 
         var oldSlotStart = appointment.SlotStart;
         var oldSlotEnd = appointment.SlotEnd;
@@ -89,8 +101,15 @@ public sealed class RescheduleAppointmentCommandHandler
 
     private static bool IsSlotConflict(DbUpdateException ex)
     {
-        return ex.InnerException?.Message.Contains(
+        var message = ex.InnerException?.Message;
+        if (string.IsNullOrWhiteSpace(message))
+            return false;
+
+        return message.Contains(
+                   "UX_Appointments_OrganisationId_ProfileId_SlotStart_SlotEnd_Active",
+                   StringComparison.OrdinalIgnoreCase)
+               || message.Contains(
                    "UX_Appointments_OrganisationId_SlotStart_SlotEnd_Active",
-                   StringComparison.OrdinalIgnoreCase) == true;
+                   StringComparison.OrdinalIgnoreCase);
     }
 }
