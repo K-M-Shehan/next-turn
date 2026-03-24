@@ -10,6 +10,7 @@ using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 using QueueStaffAssignment = NextTurn.Domain.Queue.Entities.QueueStaffAssignment;
 using QueueActionAuditLog = NextTurn.Domain.Queue.Entities.QueueActionAuditLog;
+using OfficeEntity = NextTurn.Domain.Office.Entities.Office;
 
 namespace NextTurn.Infrastructure.Persistence;
 
@@ -38,6 +39,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     public DbSet<User>             Users        => Set<User>();
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+    public DbSet<OfficeEntity> Offices => Set<OfficeEntity>();
 
     // Queue module (NT-16) — EF Core entity configurations and migration added in NT-16-3.
     public DbSet<QueueEntity> Queues       => Set<QueueEntity>();
@@ -91,6 +93,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         modelBuilder.Entity<QueueActionAuditLog>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<OfficeEntity>()
+            .HasQueryFilter(o => o.OrganisationId == _tenantContext.TenantId);
 
         // Appointments: scoped by organisation (tenant).
         modelBuilder.Entity<AppointmentEntity>()
