@@ -11,6 +11,8 @@ using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 using QueueStaffAssignment = NextTurn.Domain.Queue.Entities.QueueStaffAssignment;
 using QueueActionAuditLog = NextTurn.Domain.Queue.Entities.QueueActionAuditLog;
 using OfficeEntity = NextTurn.Domain.Office.Entities.Office;
+using ServiceEntity = NextTurn.Domain.Service.Entities.Service;
+using ServiceOfficeAssignment = NextTurn.Domain.Service.Entities.ServiceOfficeAssignment;
 
 namespace NextTurn.Infrastructure.Persistence;
 
@@ -51,6 +53,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
     public DbSet<AppointmentProfile> AppointmentProfiles => Set<AppointmentProfile>();
     public DbSet<AppointmentScheduleRule> AppointmentScheduleRules => Set<AppointmentScheduleRule>();
+    public DbSet<ServiceEntity> Services => Set<ServiceEntity>();
+    public DbSet<ServiceOfficeAssignment> ServiceOfficeAssignments => Set<ServiceOfficeAssignment>();
 
     // ── Model configuration ───────────────────────────────────────────────────
 
@@ -106,6 +110,12 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         modelBuilder.Entity<AppointmentScheduleRule>()
             .HasQueryFilter(r => r.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<ServiceEntity>()
+            .HasQueryFilter(s => s.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<ServiceOfficeAssignment>()
+            .HasQueryFilter(s => s.OrganisationId == _tenantContext.TenantId);
     }
 
     // ── SaveChanges override ──────────────────────────────────────────────────
