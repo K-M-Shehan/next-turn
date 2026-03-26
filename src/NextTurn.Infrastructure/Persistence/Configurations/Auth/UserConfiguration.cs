@@ -61,6 +61,13 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Phone)
             .HasMaxLength(20);
 
+        builder.Property(u => u.CounterName)
+            .HasMaxLength(80);
+
+        builder.Property(u => u.ShiftStart);
+
+        builder.Property(u => u.ShiftEnd);
+
         builder.Property(u => u.PasswordHash)
             .IsRequired()
             .HasMaxLength(255);

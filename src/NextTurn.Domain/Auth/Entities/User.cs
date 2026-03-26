@@ -18,6 +18,9 @@ public class User {
   public DateTimeOffset CreatedAt { get; }
   public string PasswordHash { get; private set; }
   public bool IsActive { get; private set; }
+  public string? CounterName { get; private set; }
+  public TimeSpan? ShiftStart { get; private set; }
+  public TimeSpan? ShiftEnd { get; private set; }
 
   // ── Role & security ──────────────────────────────────────────────────────
   public UserRole Role { get; private set; }
@@ -88,6 +91,44 @@ public class User {
   }
 
   public void Deactivate() {
+    IsActive = false;
+  }
+
+  public void UpdateStaffProfile(
+    string name,
+    string? phone,
+    string? counterName,
+    TimeSpan? shiftStart,
+    TimeSpan? shiftEnd)
+  {
+    if (Role != UserRole.Staff)
+      throw new DomainException("Only staff accounts can update staff profile data.");
+
+    if (string.IsNullOrWhiteSpace(name))
+      throw new DomainException("Name is required.");
+
+    if (counterName is not null && counterName.Trim().Length > 80)
+      throw new DomainException("Counter name must not exceed 80 characters.");
+
+    if (shiftStart.HasValue != shiftEnd.HasValue)
+      throw new DomainException("Shift start and shift end must both be provided.");
+
+    if (shiftStart.HasValue && shiftEnd.HasValue && shiftStart.Value >= shiftEnd.Value)
+      throw new DomainException("Shift end must be after shift start.");
+
+    Name = name.Trim();
+    Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
+    CounterName = string.IsNullOrWhiteSpace(counterName) ? null : counterName.Trim();
+    ShiftStart = shiftStart;
+    ShiftEnd = shiftEnd;
+  }
+
+  public void DeactivateStaffAccess()
+  {
+    if (Role != UserRole.Staff)
+      throw new DomainException("Only staff accounts can be deactivated from this endpoint.");
+
+    Role = UserRole.User;
     IsActive = false;
   }
 
