@@ -492,6 +492,13 @@ export function AdminDashboardPage() {
             >
               Manage Offices
             </button>
+            <button
+              type="button"
+              className={styles.tabBtn}
+              onClick={() => navigate(`/admin/${tenantId}/services`)}
+            >
+              Manage Services
+            </button>
           </div>
           <div className={styles.tabs} role="tablist" aria-label="Admin sections">
             <button

@@ -1,0 +1,176 @@
+.page {
+  min-height: 100vh;
+  background: linear-gradient(160deg, #f4f7ff 0%, #effaf4 100%);
+  padding: 2rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.8rem;
+}
+
+.backBtn,
+.primaryBtn,
+.secondaryBtn,
+.dangerBtn {
+  border-radius: 10px;
+  border: 1px solid #d0d7de;
+  padding: 0.6rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.backBtn,
+.secondaryBtn {
+  background: #fff;
+  color: #1f2937;
+}
+
+.primaryBtn {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
+
+.dangerBtn {
+  background: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.filters,
+.formCard,
+.listCard,
+.assignmentsCard {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #dbe4ec;
+  border-radius: 16px;
+  padding: 1rem;
+}
+
+.form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.7rem 0.8rem;
+  font-size: 0.95rem;
+}
+
+.textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.checkboxRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.error,
+.success {
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.success {
+  background: #dcfce7;
+  color: #14532d;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.item {
+  border: 1px solid #dbe4ec;
+  border-radius: 12px;
+  padding: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.item h3 {
+  margin: 0 0 0.2rem;
+}
+
+.item p {
+  margin: 0.2rem 0;
+}
+
+.meta {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.itemActions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.officeGrid {
+  margin: 1rem 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+.officeCard {
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  padding: 0.7rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  background: #fff;
+}
+
+@media (max-width: 768px) {
+  .page {
+    padding: 1rem;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.7rem;
+  }
+
+  .item {
+    flex-direction: column;
+  }
+}
