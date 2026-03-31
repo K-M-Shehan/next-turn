@@ -24,6 +24,9 @@ namespace NextTurn.IntegrationTests.Queue;
 ///   8.  Two users join; second user's ETA = 2 × avgServiceTimeSecs
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class GetQueueStatusIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

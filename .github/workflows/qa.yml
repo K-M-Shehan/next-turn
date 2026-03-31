@@ -1,28 +1,124 @@
-name: QA E2E Tests
+name: Regression Suite
 
 on:
   push:
-    branches: [qa, main]
+    branches: [qa]
   pull_request:
-    branches: [qa, main]
+    branches: [qa]
+  workflow_call:
 
 jobs:
-  e2e:
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: "10.0.x"
 
-      - run: dotnet build ./tests/e2e-playwright
+      - name: Restore
+        run: dotnet restore tests/NextTurn.UnitTests/NextTurn.UnitTests.csproj
 
-      - run: pwsh ./tests/e2e-playwright/bin/Debug/net10.0/playwright.ps1 install-deps
+      - name: Run unit tests
+        run: |
+          dotnet test tests/NextTurn.UnitTests/NextTurn.UnitTests.csproj \
+            --configuration Release \
+            --no-restore \
+            --results-directory ./TestResults/unit \
+            --logger "trx;LogFileName=unit-tests.trx"
 
-      - run: pwsh ./tests/e2e-playwright/bin/Debug/net10.0/playwright.ps1 install
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: ./TestResults/unit
 
-      - run: dotnet test ./tests/e2e-playwright --logger trx --settings ./tests/e2e-playwright/playwright.runsettings
+      - name: Unit summary
+        if: always()
+        run: |
+          echo "### Unit Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: unit-test-results" >> $GITHUB_STEP_SUMMARY
+
+  critical-integration-tests:
+    name: Critical Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore tests/NextTurn.IntegrationTests/NextTurn.IntegrationTests.csproj
+
+      - name: Run critical integration regression tests
+        run: |
+          dotnet test tests/NextTurn.IntegrationTests/NextTurn.IntegrationTests.csproj \
+            --configuration Release \
+            --no-restore \
+            --filter "Suite=Regression&Layer=Integration" \
+            --results-directory ./TestResults/integration \
+            --logger "trx;LogFileName=critical-integration-tests.trx"
+
+      - name: Upload critical integration results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: critical-integration-test-results
+          path: ./TestResults/integration
+
+      - name: Integration summary
+        if: always()
+        run: |
+          echo "### Critical Integration Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Filter: Suite=Regression & Layer=Integration" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: critical-integration-test-results" >> $GITHUB_STEP_SUMMARY
+
+  playwright-smoke:
+    name: Playwright Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Playwright tests
+        run: dotnet build ./tests/e2e-playwright --configuration Release
+
+      - name: Install Playwright dependencies
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install-deps
+
+      - name: Install Playwright browsers
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install
+
+      - name: Run smoke journeys (login + book + serve)
+        timeout-minutes: 5
+        run: |
+          dotnet test ./tests/e2e-playwright/e2e-playwright.csproj \
+            --configuration Release \
+            --no-build \
+            --settings ./tests/e2e-playwright/playwright.runsettings \
+            -- NUnit.Where="cat == Smoke" \
+            --results-directory ./tests/e2e-playwright/test-results/smoke \
+            --logger "trx;LogFileName=playwright-smoke.trx"
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
@@ -33,11 +129,206 @@ jobs:
           TEST_CITIZEN_EMAIL: ${{ secrets.TEST_CITIZEN_EMAIL }}
           TEST_CITIZEN_PASSWORD: ${{ secrets.TEST_CITIZEN_PASSWORD }}
 
-      - uses: actions/upload-artifact@v4
-        if: failure()
+      - name: Generate smoke HTML report
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import html
+          import os
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob('tests/e2e-playwright/test-results/smoke/**/*.trx', recursive=True)
+          total = passed = failed = skipped = 0
+          rows = []
+
+          for path in files:
+              tree = ET.parse(path)
+              root = tree.getroot()
+              ns = {'trx': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+
+              counters = root.find('.//trx:ResultSummary/trx:Counters', ns)
+              if counters is not None:
+                  total += int(counters.attrib.get('total', 0))
+                  passed += int(counters.attrib.get('passed', 0))
+                  failed += int(counters.attrib.get('failed', 0))
+                  skipped += int(counters.attrib.get('notExecuted', 0))
+
+              for result in root.findall('.//trx:UnitTestResult', ns):
+                  rows.append((
+                      result.attrib.get('testName', 'unknown'),
+                      result.attrib.get('outcome', 'Unknown'),
+                      result.attrib.get('duration', ''),
+                  ))
+
+          os.makedirs('tests/e2e-playwright/test-results/smoke/playwright-report', exist_ok=True)
+          report_path = 'tests/e2e-playwright/test-results/smoke/playwright-report/index.html'
+
+          with open(report_path, 'w', encoding='utf-8') as f:
+              f.write('<!doctype html><html><head><meta charset="utf-8"><title>Playwright Smoke Report</title>')
+              f.write('<style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background:#f4f4f4}.pass{color:#1f7a1f}.fail{color:#b00020}</style>')
+              f.write('</head><body>')
+              f.write('<h1>Playwright Smoke Report</h1>')
+              f.write(f'<p>Total: <strong>{total}</strong> | Passed: <span class="pass"><strong>{passed}</strong></span> | Failed: <span class="fail"><strong>{failed}</strong></span> | Skipped: <strong>{skipped}</strong></p>')
+              f.write('<table><thead><tr><th>Test</th><th>Outcome</th><th>Duration</th></tr></thead><tbody>')
+              for test_name, outcome, duration in rows:
+                  css = 'pass' if outcome.lower() == 'passed' else ('fail' if outcome.lower() == 'failed' else '')
+                  f.write(f'<tr><td>{html.escape(test_name)}</td><td class="{css}">{html.escape(outcome)}</td><td>{html.escape(duration)}</td></tr>')
+              f.write('</tbody></table></body></html>')
+          PY
+
+      - name: Upload Playwright smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: playwright-artifacts
+          name: playwright-smoke-artifacts
           path: |
-            tests/e2e-playwright/test-results/screenshots/
-            tests/e2e-playwright/test-results/traces/
+            tests/e2e-playwright/test-results/smoke
+            tests/e2e-playwright/test-results/screenshots
+            tests/e2e-playwright/test-results/traces
+
+      - name: Smoke summary
+        if: always()
+        run: |
+          echo "### Playwright Smoke" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Filter: NUnit.Where cat == Smoke (login + book + serve)" >> $GITHUB_STEP_SUMMARY
+          echo "- Timeout gate: 5 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: playwright-smoke-artifacts (includes TRX + HTML + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
+
+  playwright-full-regression:
+    name: Playwright Full Regression
+    runs-on: ubuntu-latest
+    needs: [playwright-smoke]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Playwright tests
+        run: dotnet build ./tests/e2e-playwright --configuration Release
+
+      - name: Install Playwright dependencies
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install-deps
+
+      - name: Install Playwright browsers
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install
+
+      - name: Run full Playwright regression journeys
+        run: |
+          dotnet test ./tests/e2e-playwright/e2e-playwright.csproj \
+            --configuration Release \
+            --no-build \
+            --settings ./tests/e2e-playwright/playwright.runsettings \
+            -- NUnit.Where="cat == Regression" \
+            --results-directory ./tests/e2e-playwright/test-results/regression \
+            --logger "trx;LogFileName=playwright-regression.trx"
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
+          TEST_STAFF_PASSWORD: ${{ secrets.TEST_STAFF_PASSWORD }}
+          TEST_CITIZEN_EMAIL: ${{ secrets.TEST_CITIZEN_EMAIL }}
+          TEST_CITIZEN_PASSWORD: ${{ secrets.TEST_CITIZEN_PASSWORD }}
+
+      - name: Generate full regression HTML report
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import html
+          import os
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob('tests/e2e-playwright/test-results/regression/**/*.trx', recursive=True)
+          total = passed = failed = skipped = 0
+          rows = []
+
+          for path in files:
+              tree = ET.parse(path)
+              root = tree.getroot()
+              ns = {'trx': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+
+              counters = root.find('.//trx:ResultSummary/trx:Counters', ns)
+              if counters is not None:
+                  total += int(counters.attrib.get('total', 0))
+                  passed += int(counters.attrib.get('passed', 0))
+                  failed += int(counters.attrib.get('failed', 0))
+                  skipped += int(counters.attrib.get('notExecuted', 0))
+
+              for result in root.findall('.//trx:UnitTestResult', ns):
+                  rows.append((
+                      result.attrib.get('testName', 'unknown'),
+                      result.attrib.get('outcome', 'Unknown'),
+                      result.attrib.get('duration', ''),
+                  ))
+
+          os.makedirs('tests/e2e-playwright/test-results/regression/playwright-report', exist_ok=True)
+          report_path = 'tests/e2e-playwright/test-results/regression/playwright-report/index.html'
+
+          with open(report_path, 'w', encoding='utf-8') as f:
+              f.write('<!doctype html><html><head><meta charset="utf-8"><title>Playwright Full Regression Report</title>')
+              f.write('<style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background:#f4f4f4}.pass{color:#1f7a1f}.fail{color:#b00020}</style>')
+              f.write('</head><body>')
+              f.write('<h1>Playwright Full Regression Report</h1>')
+              f.write(f'<p>Total: <strong>{total}</strong> | Passed: <span class="pass"><strong>{passed}</strong></span> | Failed: <span class="fail"><strong>{failed}</strong></span> | Skipped: <strong>{skipped}</strong></p>')
+              f.write('<table><thead><tr><th>Test</th><th>Outcome</th><th>Duration</th></tr></thead><tbody>')
+              for test_name, outcome, duration in rows:
+                  css = 'pass' if outcome.lower() == 'passed' else ('fail' if outcome.lower() == 'failed' else '')
+                  f.write(f'<tr><td>{html.escape(test_name)}</td><td class="{css}">{html.escape(outcome)}</td><td>{html.escape(duration)}</td></tr>')
+              f.write('</tbody></table></body></html>')
+          PY
+
+      - name: Upload Playwright full regression artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-regression-artifacts
+          path: |
+            tests/e2e-playwright/test-results/regression
+            tests/e2e-playwright/test-results/screenshots
+            tests/e2e-playwright/test-results/traces
+
+      - name: Full regression summary
+        if: always()
+        run: |
+          echo "### Playwright Full Regression" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Filter: NUnit.Where cat == Regression (all journeys)" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: playwright-regression-artifacts (includes TRX + HTML + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
+
+  regression-summary:
+    name: Regression Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - unit-tests
+      - critical-integration-tests
+      - playwright-smoke
+      - playwright-full-regression
+
+    steps:
+      - name: Publish pipeline summary
+        run: |
+          echo "## Regression Suite Overview" >> $GITHUB_STEP_SUMMARY
+          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical Integration Tests: ${{ needs.critical-integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Playwright Smoke: ${{ needs.playwright-smoke.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Playwright Full Regression: ${{ needs.playwright-full-regression.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts page: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail when any suite failed
+        if: |
+          needs.unit-tests.result != 'success' ||
+          needs.critical-integration-tests.result != 'success' ||
+          needs.playwright-smoke.result != 'success' ||
+          needs.playwright-full-regression.result != 'success'
+        run: exit 1
 

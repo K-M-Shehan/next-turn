@@ -7,12 +7,14 @@ using static Microsoft.Playwright.Assertions;
 namespace NextTurn.E2E.Playwright.Journeys;
 
 [TestFixture]
+[Category("Regression")]
 public sealed class Journey4StaffTest : BaseE2ETest
 {
     /// <summary>
     /// Validates that staff can serve the next citizen and skip a citizen, changing queue count and moving the skipped citizen to queue end.
     /// </summary>
     [Test]
+    [Category("Smoke")]
     [Retry(GlobalSetup.Retries)]
     public async Task StaffCanServeAndSkipCitizensAsync()
     {

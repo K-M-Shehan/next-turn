@@ -25,6 +25,9 @@ namespace NextTurn.IntegrationTests.Queue;
 /// - POST /api/queues/{queueId}/skip
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class StaffQueueDashboardIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

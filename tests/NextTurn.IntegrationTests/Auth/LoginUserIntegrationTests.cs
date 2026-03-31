@@ -26,6 +26,9 @@ namespace NextTurn.IntegrationTests.Auth;
 /// bucket fresh and the intent clear.
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class LoginUserIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

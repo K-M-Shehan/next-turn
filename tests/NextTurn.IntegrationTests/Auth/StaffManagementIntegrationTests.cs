@@ -7,6 +7,9 @@ using NextTurn.Domain.Auth;
 namespace NextTurn.IntegrationTests.Auth;
 
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class StaffManagementIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {
