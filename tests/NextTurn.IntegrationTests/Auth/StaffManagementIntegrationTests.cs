@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using NextTurn.Domain.Auth;
+using NextTurn.Infrastructure.Persistence;
 
 namespace NextTurn.IntegrationTests.Auth;
 
@@ -86,8 +89,17 @@ public sealed class StaffManagementIntegrationTests
         var listed = await adminClient.GetFromJsonAsync<ListStaffResult>("/api/staff?pageNumber=1&pageSize=20");
         listed.Should().NotBeNull();
 
-        var deactivated = listed!.Items.Single(x => x.StaffUserId == created.StaffUserId);
-        deactivated.IsActive.Should().BeFalse();
+        listed!.Items.Should().NotContain(x => x.StaffUserId == created.StaffUserId,
+            "deactivation revokes staff role, so this user is no longer listed in staff results");
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var persistedUser = await db.Users
+            .IgnoreQueryFilters()
+            .SingleAsync(x => x.Id == created.StaffUserId);
+
+        persistedUser.IsActive.Should().BeFalse();
+        persistedUser.Role.Should().Be(UserRole.User);
     }
 
     [Fact]
