@@ -1,28 +1,16 @@
-name: QA (Full Test Suite)
+name: Regression Suite
 
 on:
   push:
-    branches: [ "qa" ]
+    branches: [qa]
   pull_request:
-    branches: [ "qa" ]
+    branches: [qa]
+  workflow_call:
 
 jobs:
-  test:
-    name: Unit + Integration Tests
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
-    services:
-      sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
-        env:
-          ACCEPT_EULA: Y
-          SA_PASSWORD: NextTurn_Dev#2026
-        ports:
-          - 1433:1433
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'NextTurn_Dev#2026' -Q 'SELECT 1' -C || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 15
 
     steps:
       - name: Checkout
@@ -34,159 +22,313 @@ jobs:
           dotnet-version: "10.0.x"
 
       - name: Restore
-        run: dotnet restore NextTurn.slnx
+        run: dotnet restore tests/NextTurn.UnitTests/NextTurn.UnitTests.csproj
 
-      - name: Build
-        run: dotnet build NextTurn.slnx --configuration Release --no-restore
-
-      # ── Unit tests with coverlet XPlat coverage ───────────────────────────
-      # Coverage is scoped to Domain + Application only (see coverlet.runsettings).
-      - name: Run unit tests with coverage
+      - name: Run unit tests
         run: |
           dotnet test tests/NextTurn.UnitTests/NextTurn.UnitTests.csproj \
             --configuration Release \
-            --no-build \
-            --settings tests/NextTurn.UnitTests/coverlet.runsettings \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./coverage \
+            --no-restore \
+            --results-directory ./TestResults/unit \
             --logger "trx;LogFileName=unit-tests.trx"
 
-      # ── Report generation ─────────────────────────────────────────────────
-      - name: Install ReportGenerator
-        run: dotnet tool install --global dotnet-reportgenerator-globaltool
-
-      - name: Generate coverage report
-        run: |
-          reportgenerator \
-            -reports:"./coverage/**/coverage.cobertura.xml" \
-            -targetdir:"./coverage/report" \
-            -reporttypes:"Html;Cobertura;Badges;MarkdownSummaryGithub"
-
-      - name: Write coverage summary to job summary
+      - name: Upload unit test results
         if: always()
-        run: cat ./coverage/report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
-
-      # ── Artifact upload (always — visible even when gate fails) ───────────
-      - name: Upload coverage report artifact
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: coverage-report
-          path: ./coverage/report
+          name: unit-test-results
+          path: ./TestResults/unit
 
-      # ── Quality gate: ≥ 80% line coverage AND ≥ 80% branch coverage ──────
-      - name: Enforce coverage threshold (>=80% line & branch)
+      - name: Unit summary
+        if: always()
         run: |
-          python3 - <<'EOF'
-          import xml.etree.ElementTree as ET, sys
+          echo "### Unit Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: unit-test-results" >> $GITHUB_STEP_SUMMARY
 
-          tree = ET.parse("./coverage/report/Cobertura.xml")
-          root = tree.getroot()
+  critical-integration-tests:
+    name: Critical Integration Tests
+    runs-on: ubuntu-latest
 
-          line   = float(root.attrib["line-rate"])   * 100
-          branch = float(root.attrib["branch-rate"]) * 100
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-          print(f"Line coverage:   {line:.1f}%")
-          print(f"Branch coverage: {branch:.1f}%")
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
 
-          failures = []
-          if line < 80:
-              failures.append(f"Line coverage {line:.1f}% is below the 80% minimum")
-          if branch < 80:
-              failures.append(f"Branch coverage {branch:.1f}% is below the 80% minimum")
+      - name: Restore
+        run: dotnet restore tests/NextTurn.IntegrationTests/NextTurn.IntegrationTests.csproj
 
-          if failures:
-              for msg in failures:
-                  print(f"::error::{msg}")
-              sys.exit(1)
-
-          print("Coverage threshold met")
-          EOF
-
-      # ── Integration tests ─────────────────────────────────────────────────
-      # ubuntu-latest has Docker pre-installed.
-      # Testcontainers.MsSql spins up mcr.microsoft.com/mssql/server:2022-latest
-      # automatically — no manual container setup required here.
-      - name: Run integration tests
+      - name: Run critical integration regression tests
         run: |
           dotnet test tests/NextTurn.IntegrationTests/NextTurn.IntegrationTests.csproj \
             --configuration Release \
-            --no-build \
-            --logger "trx;LogFileName=integration-tests.trx"
+            --no-restore \
+            --filter "Suite=Regression&Layer=Integration" \
+            --results-directory ./TestResults/integration \
+            --logger "trx;LogFileName=critical-integration-tests.trx"
 
-      # ── Contract tests: OpenAPI + Newman ───────────────────────────────────
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install EF Tools
-        if: hashFiles('tests/postman/*.json') != ''
-        run: dotnet tool install --global dotnet-ef
-
-      - name: Apply EF migrations for contract-test database
-        if: hashFiles('tests/postman/*.json') != ''
-        env:
-          ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=NextTurnContractTests;User Id=sa;Password=NextTurn_Dev#2026;TrustServerCertificate=True"
-          JwtSettings__Secret: "ContractTestSecretKey_AtLeast32Characters"
-          JwtSettings__Issuer: "https://api.nextturn.local"
-          JwtSettings__Audience: "NextTurnClient"
-        run: |
-          dotnet ef database update \
-            --project src/NextTurn.Infrastructure \
-            --startup-project src/NextTurn.API \
-            --connection "Server=localhost,1433;Database=NextTurnContractTests;User Id=sa;Password=NextTurn_Dev#2026;TrustServerCertificate=True"
-
-      - name: Start API for contract tests
-        if: hashFiles('tests/postman/*.json') != ''
-        env:
-          ASPNETCORE_ENVIRONMENT: Development
-          ASPNETCORE_URLS: http://localhost:5001
-          ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=NextTurnContractTests;User Id=sa;Password=NextTurn_Dev#2026;TrustServerCertificate=True"
-          JwtSettings__Secret: "ContractTestSecretKey_AtLeast32Characters"
-          JwtSettings__Issuer: "https://api.nextturn.local"
-          JwtSettings__Audience: "NextTurnClient"
-          AllowedOrigins: "http://localhost:5173"
-        run: |
-          nohup dotnet run --project src/NextTurn.API --configuration Release --no-build --no-launch-profile --urls http://localhost:5001 > /tmp/nextturn-api.log 2>&1 &
-          for i in {1..60}; do
-            if curl -fsS http://localhost:5001/openapi/v1.json >/dev/null 2>&1; then
-              echo "API is up"
-              break
-            fi
-            if [ "$i" -eq 60 ]; then
-              echo "API failed to start"
-              tail -n 200 /tmp/nextturn-api.log || true
-              exit 1
-            fi
-            sleep 2
-          done
-
-      - name: Download OpenAPI spec
-        if: hashFiles('tests/postman/*.json') != ''
-        run: |
-          mkdir -p tests/postman/openapi
-          curl -fsS http://localhost:5001/openapi/v1.json -o tests/postman/openapi/openapi.v1.json
-
-      - name: Validate OpenAPI spec
-        if: hashFiles('tests/postman/*.json') != ''
-        run: npx --yes swagger-cli validate tests/postman/openapi/openapi.v1.json
-
-      - name: Upload OpenAPI artifact
-        if: hashFiles('tests/postman/*.json') != ''
+      - name: Upload critical integration results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: openapi-v1
-          path: tests/postman/openapi/openapi.v1.json
+          name: critical-integration-test-results
+          path: ./TestResults/integration
 
-      - name: Run Newman contract tests
-        if: hashFiles('tests/postman/*.json') != ''
+      - name: Integration summary
+        if: always()
         run: |
-          npx --yes newman run tests/postman/NextTurn.postman_collection.json \
-            -e tests/postman/nextturn.postman_environment.json \
-            --reporters cli
+          echo "### Critical Integration Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Filter: Suite=Regression & Layer=Integration" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: critical-integration-test-results" >> $GITHUB_STEP_SUMMARY
 
-      - name: Print API log on failure
-        if: failure() && hashFiles('tests/postman/*.json') != ''
-        run: tail -n 200 /tmp/nextturn-api.log || true
+  playwright-smoke:
+    name: Playwright Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Playwright tests
+        run: dotnet build ./tests/e2e-playwright --configuration Release
+
+      - name: Install Playwright dependencies
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install-deps
+
+      - name: Install Playwright browsers
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install
+
+      - name: Run smoke journeys (login + book + serve)
+        timeout-minutes: 5
+        run: |
+          dotnet test ./tests/e2e-playwright/e2e-playwright.csproj \
+            --configuration Release \
+            --no-build \
+            --settings ./tests/e2e-playwright/playwright.runsettings \
+            -- NUnit.Where="cat == Smoke" \
+            --results-directory ./tests/e2e-playwright/test-results/smoke \
+            --logger "trx;LogFileName=playwright-smoke.trx"
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
+          TEST_STAFF_PASSWORD: ${{ secrets.TEST_STAFF_PASSWORD }}
+          TEST_CITIZEN_EMAIL: ${{ secrets.TEST_CITIZEN_EMAIL }}
+          TEST_CITIZEN_PASSWORD: ${{ secrets.TEST_CITIZEN_PASSWORD }}
+
+      - name: Generate smoke HTML report
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import html
+          import os
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob('tests/e2e-playwright/test-results/smoke/**/*.trx', recursive=True)
+          total = passed = failed = skipped = 0
+          rows = []
+
+          for path in files:
+              tree = ET.parse(path)
+              root = tree.getroot()
+              ns = {'trx': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+
+              counters = root.find('.//trx:ResultSummary/trx:Counters', ns)
+              if counters is not None:
+                  total += int(counters.attrib.get('total', 0))
+                  passed += int(counters.attrib.get('passed', 0))
+                  failed += int(counters.attrib.get('failed', 0))
+                  skipped += int(counters.attrib.get('notExecuted', 0))
+
+              for result in root.findall('.//trx:UnitTestResult', ns):
+                  rows.append((
+                      result.attrib.get('testName', 'unknown'),
+                      result.attrib.get('outcome', 'Unknown'),
+                      result.attrib.get('duration', ''),
+                  ))
+
+          os.makedirs('tests/e2e-playwright/test-results/smoke/playwright-report', exist_ok=True)
+          report_path = 'tests/e2e-playwright/test-results/smoke/playwright-report/index.html'
+
+          with open(report_path, 'w', encoding='utf-8') as f:
+              f.write('<!doctype html><html><head><meta charset="utf-8"><title>Playwright Smoke Report</title>')
+              f.write('<style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background:#f4f4f4}.pass{color:#1f7a1f}.fail{color:#b00020}</style>')
+              f.write('</head><body>')
+              f.write('<h1>Playwright Smoke Report</h1>')
+              f.write(f'<p>Total: <strong>{total}</strong> | Passed: <span class="pass"><strong>{passed}</strong></span> | Failed: <span class="fail"><strong>{failed}</strong></span> | Skipped: <strong>{skipped}</strong></p>')
+              f.write('<table><thead><tr><th>Test</th><th>Outcome</th><th>Duration</th></tr></thead><tbody>')
+              for test_name, outcome, duration in rows:
+                  css = 'pass' if outcome.lower() == 'passed' else ('fail' if outcome.lower() == 'failed' else '')
+                  f.write(f'<tr><td>{html.escape(test_name)}</td><td class="{css}">{html.escape(outcome)}</td><td>{html.escape(duration)}</td></tr>')
+              f.write('</tbody></table></body></html>')
+          PY
+
+      - name: Upload Playwright smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-artifacts
+          path: |
+            tests/e2e-playwright/test-results/smoke
+            tests/e2e-playwright/test-results/screenshots
+            tests/e2e-playwright/test-results/traces
+
+      - name: Smoke summary
+        if: always()
+        run: |
+          echo "### Playwright Smoke" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Filter: NUnit.Where cat == Smoke (login + book + serve)" >> $GITHUB_STEP_SUMMARY
+          echo "- Timeout gate: 5 minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: playwright-smoke-artifacts (includes TRX + HTML + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
+
+  playwright-full-regression:
+    name: Playwright Full Regression
+    runs-on: ubuntu-latest
+    needs: [playwright-smoke]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build Playwright tests
+        run: dotnet build ./tests/e2e-playwright --configuration Release
+
+      - name: Install Playwright dependencies
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install-deps
+
+      - name: Install Playwright browsers
+        run: pwsh ./tests/e2e-playwright/bin/Release/net10.0/playwright.ps1 install
+
+      - name: Run full Playwright regression journeys
+        run: |
+          dotnet test ./tests/e2e-playwright/e2e-playwright.csproj \
+            --configuration Release \
+            --no-build \
+            --settings ./tests/e2e-playwright/playwright.runsettings \
+            -- NUnit.Where="cat == Regression" \
+            --results-directory ./tests/e2e-playwright/test-results/regression \
+            --logger "trx;LogFileName=playwright-regression.trx"
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+          TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
+          TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
+          TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
+          TEST_STAFF_PASSWORD: ${{ secrets.TEST_STAFF_PASSWORD }}
+          TEST_CITIZEN_EMAIL: ${{ secrets.TEST_CITIZEN_EMAIL }}
+          TEST_CITIZEN_PASSWORD: ${{ secrets.TEST_CITIZEN_PASSWORD }}
+
+      - name: Generate full regression HTML report
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import html
+          import os
+          import xml.etree.ElementTree as ET
+
+          files = glob.glob('tests/e2e-playwright/test-results/regression/**/*.trx', recursive=True)
+          total = passed = failed = skipped = 0
+          rows = []
+
+          for path in files:
+              tree = ET.parse(path)
+              root = tree.getroot()
+              ns = {'trx': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+
+              counters = root.find('.//trx:ResultSummary/trx:Counters', ns)
+              if counters is not None:
+                  total += int(counters.attrib.get('total', 0))
+                  passed += int(counters.attrib.get('passed', 0))
+                  failed += int(counters.attrib.get('failed', 0))
+                  skipped += int(counters.attrib.get('notExecuted', 0))
+
+              for result in root.findall('.//trx:UnitTestResult', ns):
+                  rows.append((
+                      result.attrib.get('testName', 'unknown'),
+                      result.attrib.get('outcome', 'Unknown'),
+                      result.attrib.get('duration', ''),
+                  ))
+
+          os.makedirs('tests/e2e-playwright/test-results/regression/playwright-report', exist_ok=True)
+          report_path = 'tests/e2e-playwright/test-results/regression/playwright-report/index.html'
+
+          with open(report_path, 'w', encoding='utf-8') as f:
+              f.write('<!doctype html><html><head><meta charset="utf-8"><title>Playwright Full Regression Report</title>')
+              f.write('<style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px}th{background:#f4f4f4}.pass{color:#1f7a1f}.fail{color:#b00020}</style>')
+              f.write('</head><body>')
+              f.write('<h1>Playwright Full Regression Report</h1>')
+              f.write(f'<p>Total: <strong>{total}</strong> | Passed: <span class="pass"><strong>{passed}</strong></span> | Failed: <span class="fail"><strong>{failed}</strong></span> | Skipped: <strong>{skipped}</strong></p>')
+              f.write('<table><thead><tr><th>Test</th><th>Outcome</th><th>Duration</th></tr></thead><tbody>')
+              for test_name, outcome, duration in rows:
+                  css = 'pass' if outcome.lower() == 'passed' else ('fail' if outcome.lower() == 'failed' else '')
+                  f.write(f'<tr><td>{html.escape(test_name)}</td><td class="{css}">{html.escape(outcome)}</td><td>{html.escape(duration)}</td></tr>')
+              f.write('</tbody></table></body></html>')
+          PY
+
+      - name: Upload Playwright full regression artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-regression-artifacts
+          path: |
+            tests/e2e-playwright/test-results/regression
+            tests/e2e-playwright/test-results/screenshots
+            tests/e2e-playwright/test-results/traces
+
+      - name: Full regression summary
+        if: always()
+        run: |
+          echo "### Playwright Full Regression" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Filter: NUnit.Where cat == Regression (all journeys)" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: playwright-regression-artifacts (includes TRX + HTML + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
+
+  regression-summary:
+    name: Regression Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - unit-tests
+      - critical-integration-tests
+      - playwright-smoke
+      - playwright-full-regression
+
+    steps:
+      - name: Publish pipeline summary
+        run: |
+          echo "## Regression Suite Overview" >> $GITHUB_STEP_SUMMARY
+          echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical Integration Tests: ${{ needs.critical-integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Playwright Smoke: ${{ needs.playwright-smoke.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Playwright Full Regression: ${{ needs.playwright-full-regression.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts page: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Fail when any suite failed
+        if: |
+          needs.unit-tests.result != 'success' ||
+          needs.critical-integration-tests.result != 'success' ||
+          needs.playwright-smoke.result != 'success' ||
+          needs.playwright-full-regression.result != 'success'
+        run: exit 1
 

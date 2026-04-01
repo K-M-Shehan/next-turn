@@ -484,6 +484,29 @@ export function AdminDashboardPage() {
             <h1 className={styles.pageTitle}>Operations Control Center</h1>
             <p className={styles.pageSubtitle}>Manage queues and appointment capacity from one place.</p>
           </div>
+          <div className={styles.tabs}>
+            <button
+              type="button"
+              className={styles.tabBtn}
+              onClick={() => navigate(`/admin/${tenantId}/offices`)}
+            >
+              Manage Offices
+            </button>
+            <button
+              type="button"
+              className={styles.tabBtn}
+              onClick={() => navigate(`/admin/${tenantId}/services`)}
+            >
+              Manage Services
+            </button>
+            <button
+              type="button"
+              className={styles.tabBtn}
+              onClick={() => navigate(`/admin/${tenantId}/staff-management`)}
+            >
+              Staff Management
+            </button>
+          </div>
           <div className={styles.tabs} role="tablist" aria-label="Admin sections">
             <button
               type="button"

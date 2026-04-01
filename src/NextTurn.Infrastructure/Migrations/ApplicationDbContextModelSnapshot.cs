@@ -137,10 +137,38 @@ namespace NextTurn.Infrastructure.Migrations
                     b.ToTable("AppointmentScheduleRules", (string)null);
                 });
 
+            modelBuilder.Entity("NextTurn.Domain.Auth.Entities.StaffOfficeAssignment", b =>
+                {
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("StaffUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("OfficeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("OrganisationId", "StaffUserId", "OfficeId");
+
+                    b.HasIndex("OrganisationId", "OfficeId");
+
+                    b.HasIndex("OrganisationId", "StaffUserId")
+                        .HasDatabaseName("IX_StaffOfficeAssignments_Org_Staff");
+
+                    b.ToTable("StaffOfficeAssignments", (string)null);
+                });
+
             modelBuilder.Entity("NextTurn.Domain.Auth.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CounterName")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -184,6 +212,12 @@ namespace NextTurn.Infrastructure.Migrations
                         .HasColumnType("nvarchar(20)")
                         .HasDefaultValue("User");
 
+                    b.Property<TimeSpan?>("ShiftEnd")
+                        .HasColumnType("time");
+
+                    b.Property<TimeSpan?>("ShiftStart")
+                        .HasColumnType("time");
+
                     b.Property<DateTimeOffset?>("StaffInviteExpiresAt")
                         .HasColumnType("datetimeoffset");
 
@@ -192,7 +226,6 @@ namespace NextTurn.Infrastructure.Migrations
                         .HasColumnType("nvarchar(128)");
 
                     b.Property<Guid>("TenantId")
-                        .ValueGeneratedOnUpdateSometimes()
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("TenantId");
 
@@ -202,6 +235,62 @@ namespace NextTurn.Infrastructure.Migrations
                         .HasDatabaseName("IX_Users_StaffInviteTokenHash");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Office.Entities.Office", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("DeactivatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<decimal?>("Latitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<decimal?>("Longitude")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("OpeningHours")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganisationId", "IsActive")
+                        .HasDatabaseName("IX_Offices_OrganisationId_IsActive");
+
+                    b.HasIndex("OrganisationId", "Name")
+                        .HasDatabaseName("IX_Offices_OrganisationId_Name");
+
+                    b.ToTable("Offices", (string)null);
                 });
 
             modelBuilder.Entity("NextTurn.Domain.Organisation.Entities.Organisation", b =>
@@ -284,6 +373,47 @@ namespace NextTurn.Infrastructure.Migrations
                     b.ToTable("Queues", (string)null);
                 });
 
+            modelBuilder.Entity("NextTurn.Domain.Queue.Entities.QueueActionAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PerformedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("QueueEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("QueueId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PerformedByUserId");
+
+                    b.HasIndex("QueueEntryId");
+
+                    b.HasIndex("QueueId", "CreatedAt")
+                        .HasDatabaseName("IX_QueueActionAuditLogs_QueueId_CreatedAt");
+
+                    b.ToTable("QueueActionAuditLogs", (string)null);
+                });
+
             modelBuilder.Entity("NextTurn.Domain.Queue.Entities.QueueEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -351,6 +481,91 @@ namespace NextTurn.Infrastructure.Migrations
                         .HasDatabaseName("UX_QueueStaffAssignments_QueueId_StaffUserId");
 
                     b.ToTable("QueueStaffAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Service.Entities.Service", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("DeactivatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("EstimatedDurationMinutes")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganisationId", "Code")
+                        .IsUnique();
+
+                    b.ToTable("Services", (string)null);
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Service.Entities.ServiceOfficeAssignment", b =>
+                {
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ServiceId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("OfficeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("OrganisationId", "ServiceId", "OfficeId");
+
+                    b.HasIndex("OrganisationId", "OfficeId");
+
+                    b.ToTable("ServiceOfficeAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Auth.Entities.StaffOfficeAssignment", b =>
+                {
+                    b.HasOne("NextTurn.Domain.Office.Entities.Office", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId", "OfficeId")
+                        .HasPrincipalKey("OrganisationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Domain.Auth.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId", "StaffUserId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("NextTurn.Domain.Auth.Entities.User", b =>
@@ -452,11 +667,49 @@ namespace NextTurn.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("NextTurn.Domain.Queue.Entities.QueueActionAuditLog", b =>
+                {
+                    b.HasOne("NextTurn.Domain.Auth.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("PerformedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Domain.Queue.Entities.QueueEntry", null)
+                        .WithMany()
+                        .HasForeignKey("QueueEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Domain.Queue.Entities.Queue", null)
+                        .WithMany()
+                        .HasForeignKey("QueueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("NextTurn.Domain.Queue.Entities.QueueEntry", b =>
                 {
                     b.HasOne("NextTurn.Domain.Queue.Entities.Queue", null)
                         .WithMany()
                         .HasForeignKey("QueueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Service.Entities.ServiceOfficeAssignment", b =>
+                {
+                    b.HasOne("NextTurn.Domain.Office.Entities.Office", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId", "OfficeId")
+                        .HasPrincipalKey("OrganisationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Domain.Service.Entities.Service", null)
+                        .WithMany()
+                        .HasForeignKey("OrganisationId", "ServiceId")
+                        .HasPrincipalKey("OrganisationId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -11,6 +11,10 @@ public interface IUserRepository {
   Task<bool> ExistsAsync(EmailAddress email, CancellationToken cancellationToken);          // check if email is taken before registration (tenant-scoped)
   Task<bool> ExistsGlobalAsync(EmailAddress email, CancellationToken cancellationToken);    // check if email is taken across ALL tenants (for consumer registration)
   Task<IReadOnlyList<User>> ListStaffAsync(CancellationToken cancellationToken);            // lists staff users in current tenant
+  Task<(IReadOnlyList<User> Items, int TotalCount)> ListStaffPagedAsync(int pageNumber, int pageSize, CancellationToken cancellationToken);
+  Task<bool> OfficesExistAsync(IReadOnlyCollection<Guid> officeIds, CancellationToken cancellationToken);
+  Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetAssignedOfficeIdsByStaffUserIdsAsync(IReadOnlyCollection<Guid> staffUserIds, CancellationToken cancellationToken);
+  Task ReplaceStaffOfficeAssignmentsAsync(Guid staffUserId, IReadOnlyCollection<Guid> officeIds, CancellationToken cancellationToken);
   Task AddAsync(User user, CancellationToken cancellationToken);                            // saving the registered user
   Task UpdateAsync(User user, CancellationToken cancellationToken);                         // persists lockout state and failed attempt count after login attempts
 }

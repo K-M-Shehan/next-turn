@@ -85,6 +85,94 @@ public sealed class UserRepository : IUserRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<(IReadOnlyList<User> Items, int TotalCount)> ListStaffPagedAsync(
+        int pageNumber,
+        int pageSize,
+        CancellationToken cancellationToken = default)
+    {
+        var query = _context.Users
+            .Where(u => u.Role == UserRole.Staff)
+            .OrderBy(u => u.Name)
+            .ThenBy(u => u.CreatedAt);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, totalCount);
+    }
+
+    public async Task<bool> OfficesExistAsync(
+        IReadOnlyCollection<Guid> officeIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (officeIds.Count == 0)
+            return true;
+
+        var distinctIds = officeIds.Distinct().ToList();
+        var foundCount = await _context.Offices
+            .CountAsync(o => distinctIds.Contains(o.Id), cancellationToken);
+
+        return foundCount == distinctIds.Count;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetAssignedOfficeIdsByStaffUserIdsAsync(
+        IReadOnlyCollection<Guid> staffUserIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (staffUserIds.Count == 0)
+            return new Dictionary<Guid, IReadOnlyList<Guid>>();
+
+        var assignments = await _context.StaffOfficeAssignments
+            .AsNoTracking()
+            .Where(x => staffUserIds.Contains(x.StaffUserId))
+            .ToListAsync(cancellationToken);
+
+        return assignments
+            .GroupBy(x => x.StaffUserId)
+            .ToDictionary(
+                x => x.Key,
+                x => (IReadOnlyList<Guid>)x.Select(a => a.OfficeId).ToList());
+    }
+
+    public async Task ReplaceStaffOfficeAssignmentsAsync(
+        Guid staffUserId,
+        IReadOnlyCollection<Guid> officeIds,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id == staffUserId, cancellationToken);
+
+        if (user is null)
+            return;
+
+        var organisationId = user.TenantId;
+
+        var existing = await _context.StaffOfficeAssignments
+            .Where(x => x.OrganisationId == organisationId && x.StaffUserId == staffUserId)
+            .ToListAsync(cancellationToken);
+
+        var nextOfficeIds = officeIds.Distinct().ToHashSet();
+
+        var toRemove = existing
+            .Where(x => !nextOfficeIds.Contains(x.OfficeId))
+            .ToList();
+
+        if (toRemove.Count > 0)
+            _context.StaffOfficeAssignments.RemoveRange(toRemove);
+
+        var existingOfficeIds = existing.Select(x => x.OfficeId).ToHashSet();
+        var toAdd = nextOfficeIds
+            .Where(id => !existingOfficeIds.Contains(id))
+            .Select(id => StaffOfficeAssignment.Create(organisationId, staffUserId, id));
+
+        await _context.StaffOfficeAssignments.AddRangeAsync(toAdd, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
     /// <inheritdoc/>
     public async Task<User?> GetByEmailGlobalAsync(
         EmailAddress email,

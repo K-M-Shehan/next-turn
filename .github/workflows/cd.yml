@@ -8,8 +8,14 @@ permissions:
   contents: read
 
 jobs:
+  regression-gate:
+    name: Regression Gate (pre-main deploy)
+    uses: ./.github/workflows/qa.yml
+    secrets: inherit
+
   deploy-backend:
     name: Backend → Azure App Service
+    needs: regression-gate
     runs-on: ubuntu-latest
 
     steps:
@@ -62,6 +68,7 @@ jobs:
 
   deploy-frontend:
     name: Frontend → Vercel
+    needs: regression-gate
     runs-on: ubuntu-latest
 
     steps:

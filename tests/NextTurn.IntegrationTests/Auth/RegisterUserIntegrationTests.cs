@@ -21,6 +21,9 @@ namespace NextTurn.IntegrationTests.Auth;
 ///   6. Malformed body / empty required fields → 422
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class RegisterUserIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {
