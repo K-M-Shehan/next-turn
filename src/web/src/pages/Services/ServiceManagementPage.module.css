@@ -17,6 +17,16 @@
   font-size: 1.8rem;
 }
 
+.title {
+  margin: 0;
+  font-size: clamp(1.2rem, 2.3vw, 1.8rem);
+}
+
+.subtitle {
+  margin: 0.3rem 0 0;
+  color: #475569;
+}
+
 .backBtn,
 .primaryBtn,
 .secondaryBtn,
@@ -49,11 +59,18 @@
 .filters,
 .formCard,
 .listCard,
-.assignmentsCard {
+.assignmentsCard,
+.roadmapCard {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid #dbe4ec;
   border-radius: 16px;
   padding: 1rem;
+}
+
+.helperText {
+  margin: 0.5rem 0 0;
+  color: #475569;
+  font-size: 0.9rem;
 }
 
 .form {
@@ -136,6 +153,26 @@
   font-size: 0.9rem;
 }
 
+.activeBadge,
+.inactiveBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.activeBadge {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.inactiveBadge {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .itemActions {
   display: flex;
   gap: 0.5rem;
@@ -157,6 +194,44 @@
   gap: 0.5rem;
   align-items: center;
   background: #fff;
+}
+
+.roadmapGrid {
+  margin-top: 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 0.8rem;
+}
+
+.roadmapItem {
+  border: 1px solid #dbe4ec;
+  border-radius: 12px;
+  padding: 0.85rem;
+  background: linear-gradient(160deg, #f8fcff, #ffffff);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.roadmapItem h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.roadmapItem p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.92rem;
+}
+
+.roadmapBadge {
+  justify-self: start;
+  border: 1px solid #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+  border-radius: 999px;
+  padding: 0.18rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 @media (max-width: 768px) {

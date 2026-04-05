@@ -219,7 +219,10 @@ export function ServiceManagementPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1>Service Configuration</h1>
+        <div>
+          <h1 className={styles.title}>Service Catalog</h1>
+          <p className={styles.subtitle}>Define what your organisation delivers, then choose where each service is available.</p>
+        </div>
         <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
           Back to Admin
         </button>
@@ -237,10 +240,13 @@ export function ServiceManagementPage() {
           />
           Show active services only
         </label>
+        <p className={styles.helperText}>
+          A service is the <strong>what</strong> (e.g., ID Renewal). Queues and appointments are the <strong>how</strong> and <strong>when</strong>.
+        </p>
       </section>
 
       <section className={styles.formCard}>
-        <h2>{mode === 'create' ? 'Create Service' : 'Update Service'}</h2>
+        <h2>{mode === 'create' ? 'Create Service Definition' : 'Update Service Definition'}</h2>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input
             className={styles.input}
@@ -299,7 +305,7 @@ export function ServiceManagementPage() {
       </section>
 
       <section className={styles.listCard}>
-        <h2>Services</h2>
+        <h2>Service Definitions</h2>
         {loading ? (
           <p>Loading services...</p>
         ) : services.length === 0 ? (
@@ -310,9 +316,13 @@ export function ServiceManagementPage() {
               <li key={service.serviceId} className={styles.item}>
                 <div>
                   <h3>{service.name}</h3>
-                  <p className={styles.meta}>Code: {service.code} · {service.estimatedDurationMinutes} mins</p>
+                  <p className={styles.meta}>Code: {service.code} · {service.estimatedDurationMinutes} mins · Offices: {service.assignedOfficeIds.length}</p>
                   <p>{service.description}</p>
-                  <p className={styles.meta}>{service.isActive ? 'Active' : 'Inactive'}</p>
+                  <p className={styles.meta}>
+                    <span className={service.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                      {service.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </p>
                 </div>
                 <div className={styles.itemActions}>
                   <button
@@ -339,7 +349,8 @@ export function ServiceManagementPage() {
       </section>
 
       <section className={styles.assignmentsCard}>
-        <h2>Assign Services to Offices</h2>
+        <h2>Office Availability (Now)</h2>
+        <p className={styles.helperText}>Choose which active offices can deliver each service.</p>
         {services.length === 0 ? (
           <p>Create a service first.</p>
         ) : (
@@ -379,6 +390,33 @@ export function ServiceManagementPage() {
             </button>
           </>
         )}
+      </section>
+
+      <section className={styles.roadmapCard}>
+        <h2>Service Operations Roadmap (Later)</h2>
+        <p className={styles.helperText}>
+          These links are intentionally not auto-created to avoid noisy configuration.
+        </p>
+
+        <div className={styles.roadmapGrid}>
+          <article className={styles.roadmapItem}>
+            <h3>Service → Queue Templates</h3>
+            <p>
+              Allow each service to define queue defaults (capacity, average service time, routing rules),
+              then create queues from that template when needed.
+            </p>
+            <span className={styles.roadmapBadge}>Planned</span>
+          </article>
+
+          <article className={styles.roadmapItem}>
+            <h3>Service → Appointment Profile Defaults</h3>
+            <p>
+              Allow each service to define booking defaults (slot duration, schedule preset, lead time),
+              then apply those defaults when creating appointment profiles.
+            </p>
+            <span className={styles.roadmapBadge}>Planned</span>
+          </article>
+        </div>
       </section>
     </div>
   )
