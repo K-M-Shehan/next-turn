@@ -12,11 +12,6 @@
   align-items: center;
 }
 
-.header h1 {
-  margin: 0;
-  font-size: 1.8rem;
-}
-
 .title {
   margin: 0;
   font-size: clamp(1.2rem, 2.3vw, 1.8rem);
@@ -59,8 +54,7 @@
 .filters,
 .formCard,
 .listCard,
-.assignmentsCard,
-.roadmapCard {
+.assignmentsCard {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid #dbe4ec;
   border-radius: 16px;
@@ -196,42 +190,32 @@
   background: #fff;
 }
 
-.roadmapGrid {
-  margin-top: 0.8rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 0.8rem;
+.opsDivider {
+  margin: 0.5rem 0;
+  border-top: 1px dashed #dbe4ec;
 }
 
-.roadmapItem {
-  border: 1px solid #dbe4ec;
-  border-radius: 12px;
-  padding: 0.85rem;
-  background: linear-gradient(160deg, #f8fcff, #ffffff);
-  display: grid;
-  gap: 0.5rem;
-}
-
-.roadmapItem h3 {
+.opsTitle {
   margin: 0;
   font-size: 1rem;
 }
 
-.roadmapItem p {
-  margin: 0;
-  color: #475569;
-  font-size: 0.92rem;
+.opsActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
-.roadmapBadge {
-  justify-self: start;
-  border: 1px solid #f59e0b;
-  background: #fffbeb;
-  color: #92400e;
-  border-radius: 999px;
-  padding: 0.18rem 0.6rem;
-  font-size: 0.78rem;
-  font-weight: 700;
+.generatedLinks {
+  border: 1px solid #dbe4ec;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 0.75rem;
+}
+
+.generatedLinks p {
+  margin: 0.2rem 0;
+  color: #475569;
 }
 
 @media (max-width: 768px) {

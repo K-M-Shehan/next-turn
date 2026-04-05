@@ -10,6 +10,12 @@ import {
   type ServiceDto,
 } from '../../api/services'
 import { listOffices, type OfficeDto } from '../../api/offices'
+import { createQueue } from '../../api/queues'
+import {
+  configureAppointmentSchedule,
+  createAppointmentProfile,
+  getAppointmentSchedule,
+} from '../../api/appointments'
 import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import styles from './ServiceManagementPage.module.css'
@@ -51,6 +57,9 @@ export function ServiceManagementPage() {
   const [assignmentServiceId, setAssignmentServiceId] = useState<string>('')
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([])
   const [savingAssignments, setSavingAssignments] = useState(false)
+  const [creatingFromService, setCreatingFromService] = useState<'queue' | 'appointment' | null>(null)
+  const [latestQueueLink, setLatestQueueLink] = useState<string | null>(null)
+  const [latestAppointmentLink, setLatestAppointmentLink] = useState<string | null>(null)
 
   const selectedService = useMemo(
     () => services.find(s => s.serviceId === assignmentServiceId) ?? null,
@@ -213,6 +222,68 @@ export function ServiceManagementPage() {
       setError(apiErr.detail ?? 'Could not update assignments.')
     } finally {
       setSavingAssignments(false)
+    }
+  }
+
+  async function handleCreateQueueFromService() {
+    if (!tenantId || !selectedService) return
+
+    setCreatingFromService('queue')
+    setError(null)
+    setSuccess(null)
+    setLatestQueueLink(null)
+
+    try {
+      const result = await createQueue(tenantId, {
+        name: `${selectedService.name} Queue`,
+        maxCapacity: 50,
+        averageServiceTimeSeconds: Math.max(60, selectedService.estimatedDurationMinutes * 60),
+      })
+
+      setLatestQueueLink(result.shareableLink)
+      setSuccess(`Queue created from service "${selectedService.name}".`)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setError(apiErr.detail ?? 'Could not create queue from this service.')
+    } finally {
+      setCreatingFromService(null)
+    }
+  }
+
+  async function handleCreateAppointmentProfileFromService() {
+    if (!tenantId || !selectedService) return
+
+    setCreatingFromService('appointment')
+    setError(null)
+    setSuccess(null)
+    setLatestAppointmentLink(null)
+
+    try {
+      const profile = await createAppointmentProfile(
+        tenantId,
+        `${selectedService.name} Appointments`,
+      )
+
+      // Apply service duration as default slot duration while preserving existing day open/close windows.
+      const config = await getAppointmentSchedule(tenantId, profile.appointmentProfileId)
+      const slotDurationMinutes = Math.min(240, Math.max(5, selectedService.estimatedDurationMinutes))
+
+      await configureAppointmentSchedule(
+        tenantId,
+        profile.appointmentProfileId,
+        config.dayRules.map(rule => ({
+          ...rule,
+          slotDurationMinutes,
+        })),
+      )
+
+      setLatestAppointmentLink(profile.shareableLink)
+      setSuccess(`Appointment profile created from service "${selectedService.name}" with ${slotDurationMinutes}-minute slots.`)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setError(apiErr.detail ?? 'Could not create appointment profile from this service.')
+    } finally {
+      setCreatingFromService(null)
     }
   }
 
@@ -388,35 +459,49 @@ export function ServiceManagementPage() {
             >
               {savingAssignments ? 'Saving assignments...' : 'Save Assignments'}
             </button>
+
+            <div className={styles.opsDivider} />
+
+            <h3 className={styles.opsTitle}>Create Operational Flows from Service</h3>
+            <p className={styles.helperText}>
+              Generate a queue or appointment profile using this service definition as defaults.
+            </p>
+
+            <div className={styles.opsActions}>
+              <button
+                type="button"
+                className={styles.secondaryBtn}
+                onClick={handleCreateQueueFromService}
+                disabled={!selectedService || creatingFromService !== null}
+              >
+                {creatingFromService === 'queue' ? 'Creating queue...' : 'Create Queue from Service'}
+              </button>
+              <button
+                type="button"
+                className={styles.secondaryBtn}
+                onClick={handleCreateAppointmentProfileFromService}
+                disabled={!selectedService || creatingFromService !== null}
+              >
+                {creatingFromService === 'appointment' ? 'Creating profile...' : 'Create Appointment Profile from Service'}
+              </button>
+            </div>
+
+            {(latestQueueLink || latestAppointmentLink) && (
+              <div className={styles.generatedLinks} role="status">
+                {latestQueueLink && (
+                  <p>
+                    Queue link: <strong>{window.location.origin}{latestQueueLink}</strong>
+                  </p>
+                )}
+                {latestAppointmentLink && (
+                  <p>
+                    Appointment link: <strong>{window.location.origin}{latestAppointmentLink}</strong>
+                  </p>
+                )}
+              </div>
+            )}
           </>
         )}
-      </section>
-
-      <section className={styles.roadmapCard}>
-        <h2>Service Operations Roadmap (Later)</h2>
-        <p className={styles.helperText}>
-          These links are intentionally not auto-created to avoid noisy configuration.
-        </p>
-
-        <div className={styles.roadmapGrid}>
-          <article className={styles.roadmapItem}>
-            <h3>Service → Queue Templates</h3>
-            <p>
-              Allow each service to define queue defaults (capacity, average service time, routing rules),
-              then create queues from that template when needed.
-            </p>
-            <span className={styles.roadmapBadge}>Planned</span>
-          </article>
-
-          <article className={styles.roadmapItem}>
-            <h3>Service → Appointment Profile Defaults</h3>
-            <p>
-              Allow each service to define booking defaults (slot duration, schedule preset, lead time),
-              then apply those defaults when creating appointment profiles.
-            </p>
-            <span className={styles.roadmapBadge}>Planned</span>
-          </article>
-        </div>
       </section>
     </div>
   )
