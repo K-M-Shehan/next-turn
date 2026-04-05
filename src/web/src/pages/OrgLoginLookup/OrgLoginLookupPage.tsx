@@ -47,7 +47,7 @@ export function OrgLoginLookupPage() {
 
       <main className={styles.main}>
         <section className={styles.card}>
-          <h1 className={styles.title}>Find Organisation Login</h1>
+          <h1 className={styles.title}>Find Workspace Login</h1>
           <p className={styles.subtitle}>
             Enter your work email to get your staff/admin workspace login link.
           </p>
