@@ -108,6 +108,26 @@ function slotsForRule(rule: AppointmentDayRule): number {
   return Math.floor(windowMinutes / rule.slotDurationMinutes)
 }
 
+function normalizeShiftInput(value: string | null | undefined): string {
+  if (!value) return ''
+  return value.length >= 5 ? value.slice(0, 5) : value
+}
+
+function getFirstValidationMessage(apiError: ApiError): string | undefined {
+  if (!apiError.errors) return undefined
+
+  for (const value of Object.values(apiError.errors)) {
+    if (Array.isArray(value) && value.length > 0) {
+      const first = value[0]
+      if (typeof first === 'string' && first.trim().length > 0) {
+        return first
+      }
+    }
+  }
+
+  return undefined
+}
+
 export function AdminDashboardPage() {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
@@ -372,7 +392,7 @@ export function AdminDashboardPage() {
     } catch (err) {
       const apiErr = err as ApiError
       if (apiErr.status === 422) {
-        const firstError = apiErr.errors ? Object.values(apiErr.errors)[0]?.[0] : undefined
+        const firstError = getFirstValidationMessage(apiErr)
         setStaffError(firstError ?? 'Please check the staff details and try again.')
       } else {
         setStaffError(apiErr.detail ?? 'Could not create staff account.')
@@ -401,7 +421,7 @@ export function AdminDashboardPage() {
     try {
       const [staffResult, officeResult] = await Promise.all([
         listStaff(currentTenantId, 1, 100),
-        listOffices(currentTenantId, { isActive: true, pageNumber: 1, pageSize: 200 }),
+        listOffices(currentTenantId, { isActive: true, pageNumber: 1, pageSize: 100 }),
       ])
 
       setStaffProfiles(staffResult.items)
@@ -425,8 +445,8 @@ export function AdminDashboardPage() {
       name: profile.name,
       phone: profile.phone ?? '',
       counterName: profile.counterName ?? '',
-      shiftStart: profile.shiftStart ?? '',
-      shiftEnd: profile.shiftEnd ?? '',
+      shiftStart: normalizeShiftInput(profile.shiftStart),
+      shiftEnd: normalizeShiftInput(profile.shiftEnd),
       officeIds: profile.officeIds,
     })
     setStaffError(null)
@@ -450,6 +470,21 @@ export function AdminDashboardPage() {
   async function saveStaffProfile() {
     if (!tenantId || !selectedStaffProfileId) return
 
+    const shiftStart = staffProfileForm.shiftStart.trim()
+    const shiftEnd = staffProfileForm.shiftEnd.trim()
+    const hasShiftStart = shiftStart.length > 0
+    const hasShiftEnd = shiftEnd.length > 0
+
+    if (hasShiftStart !== hasShiftEnd) {
+      setStaffError('Shift start and shift end must both be provided.')
+      return
+    }
+
+    if (hasShiftStart && hasShiftEnd && toMinutes(shiftStart) >= toMinutes(shiftEnd)) {
+      setStaffError('Shift end must be after shift start.')
+      return
+    }
+
     setStaffProfileSaving(true)
     setStaffError(null)
     setStaffSuccess(null)
@@ -460,8 +495,8 @@ export function AdminDashboardPage() {
         phone: staffProfileForm.phone.trim() || null,
         officeIds: staffProfileForm.officeIds,
         counterName: staffProfileForm.counterName.trim() || null,
-        shiftStart: staffProfileForm.shiftStart || null,
-        shiftEnd: staffProfileForm.shiftEnd || null,
+        shiftStart: shiftStart || null,
+        shiftEnd: shiftEnd || null,
       })
 
       setStaffSuccess('Staff profile updated successfully.')
@@ -472,7 +507,12 @@ export function AdminDashboardPage() {
       resetStaffProfileEditor()
     } catch (err) {
       const apiErr = err as ApiError
-      setStaffError(apiErr.detail ?? 'Could not update staff profile.')
+      if (apiErr.status === 422) {
+        const firstError = getFirstValidationMessage(apiErr)
+        setStaffError(firstError ?? apiErr.detail ?? 'Could not update staff profile.')
+      } else {
+        setStaffError(apiErr.detail ?? 'Could not update staff profile.')
+      }
     } finally {
       setStaffProfileSaving(false)
     }
@@ -1254,8 +1294,7 @@ export function AdminDashboardPage() {
                       <input
                         id="staff-edit-shift-start"
                         className={styles.input}
-                        type="text"
-                        placeholder="09:00"
+                        type="time"
                         value={staffProfileForm.shiftStart}
                         onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftStart: e.target.value }))}
                       />
@@ -1266,8 +1305,7 @@ export function AdminDashboardPage() {
                       <input
                         id="staff-edit-shift-end"
                         className={styles.input}
-                        type="text"
-                        placeholder="17:00"
+                        type="time"
                         value={staffProfileForm.shiftEnd}
                         onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftEnd: e.target.value }))}
                       />
