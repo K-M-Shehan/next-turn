@@ -27,6 +27,9 @@ namespace NextTurn.IntegrationTests.Queue;
 ///   7. Leave same queue twice → 400 on second attempt (user no longer in queue)
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class LeaveQueueIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

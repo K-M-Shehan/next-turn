@@ -7,12 +7,14 @@ using static Microsoft.Playwright.Assertions;
 namespace NextTurn.E2E.Playwright.Journeys;
 
 [TestFixture]
+[Category("Regression")]
 public sealed class Journey2AppointmentTest : BaseE2ETest
 {
     /// <summary>
     /// Validates that an authenticated citizen can book an appointment, see booking confirmation with reference, and cancel it successfully.
     /// </summary>
     [Test]
+    [Category("Smoke")]
     [Retry(GlobalSetup.Retries)]
     public async Task CitizenCanBookAndCancelAppointmentAsync()
     {

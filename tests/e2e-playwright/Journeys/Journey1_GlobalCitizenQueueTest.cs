@@ -6,15 +6,27 @@ using static Microsoft.Playwright.Assertions;
 namespace NextTurn.E2E.Playwright.Journeys;
 
 [TestFixture]
+[Category("Regression")]
 public sealed class Journey1GlobalCitizenQueueTest : BaseE2ETest
 {
     /// <summary>
     /// Validates that a global citizen can register, log in, join a queue, see a numeric position, and leave the queue.
     /// </summary>
     [Test]
+    [Category("Smoke")]
     [Retry(GlobalSetup.Retries)]
     public async Task GlobalCitizenCanRegisterLoginJoinAndLeaveQueueAsync()
     {
+        if (!GlobalSetup.IsBaseUrlReachable)
+        {
+            var reason = string.IsNullOrWhiteSpace(GlobalSetup.BaseUrlProbeError)
+                ? "Base URL probe failed."
+                : GlobalSetup.BaseUrlProbeError;
+
+            throw new InconclusiveException(
+                $"Playwright base URL '{GlobalSetup.BaseUrl}' is not reachable. {reason}");
+        }
+
         var email = $"testuser_{Guid.NewGuid():N}@nextturn.com";
         var password = Environment.GetEnvironmentVariable("TEST_CITIZEN_PASSWORD")
             ?? $"Nt_{Guid.NewGuid():N}!A1";

@@ -7,6 +7,7 @@ using static Microsoft.Playwright.Assertions;
 namespace NextTurn.E2E.Playwright.Journeys;
 
 [TestFixture]
+[Category("Regression")]
 public sealed class Journey5QueuePositionUpdateTest : BaseE2ETest
 {
     /// <summary>

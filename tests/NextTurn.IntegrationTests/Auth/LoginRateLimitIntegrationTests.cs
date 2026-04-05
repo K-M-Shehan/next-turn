@@ -35,6 +35,9 @@ namespace NextTurn.IntegrationTests.Auth;
 ///   1. Eleven rapid POST /api/auth/login calls → 11th returns 429.
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class LoginRateLimitIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

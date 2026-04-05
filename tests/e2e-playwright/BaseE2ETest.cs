@@ -18,6 +18,16 @@ public abstract class BaseE2ETest
     [SetUp]
     public async Task BeforeEachAsync()
     {
+        if (!GlobalSetup.IsBaseUrlReachable)
+        {
+            var reason = string.IsNullOrWhiteSpace(GlobalSetup.BaseUrlProbeError)
+                ? "Base URL probe failed."
+                : GlobalSetup.BaseUrlProbeError;
+
+            throw new InconclusiveException(
+                $"Playwright base URL '{GlobalSetup.BaseUrl}' is not reachable. {reason}");
+        }
+
         _playwright = await Microsoft.Playwright.Playwright.CreateAsync();
         Browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
         {
@@ -47,6 +57,11 @@ public abstract class BaseE2ETest
     {
         try
         {
+            if (Browser is null || Context is null || Page is null)
+            {
+                return;
+            }
+
             var result = TestContext.CurrentContext.Result.Outcome.Status;
             var isFailed = result is TestStatus.Failed or TestStatus.Inconclusive;
 
