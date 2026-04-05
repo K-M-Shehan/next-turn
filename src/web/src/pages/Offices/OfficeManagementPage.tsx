@@ -45,6 +45,9 @@ export function OfficeManagementPage() {
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
 
+  const activeCount = useMemo(() => offices.filter(x => x.isActive).length, [offices])
+  const inactiveCount = useMemo(() => offices.filter(x => !x.isActive).length, [offices])
+
   const derivedIsActive = useMemo(() => {
     if (isActiveFilter === 'all') return undefined
     return isActiveFilter === 'active'
@@ -142,6 +145,10 @@ export function OfficeManagementPage() {
   async function handleDeactivate(officeId: string) {
     if (!tenantId) return
 
+    if (!window.confirm('Deactivate this office? It will be hidden from public selection.')) {
+      return
+    }
+
     setError(null)
     setSuccess(null)
 
@@ -158,7 +165,10 @@ export function OfficeManagementPage() {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
-        <h1>Office Management</h1>
+        <div>
+          <h1 className={styles.title}>Office Management</h1>
+          <p className={styles.subtitle}>Create and manage organisation branches and locations.</p>
+        </div>
         <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
           Back to Admin
         </button>
@@ -168,22 +178,38 @@ export function OfficeManagementPage() {
       {success && <div className={styles.success}>{success}</div>}
 
       <section className={styles.filters}>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or address"
-          className={styles.input}
-        />
-        <select
-          value={isActiveFilter}
-          onChange={(e) => setIsActiveFilter(e.target.value as 'all' | 'active' | 'inactive')}
-          className={styles.select}
-        >
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="all">All</option>
-        </select>
+        <div className={styles.filterGrid}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by office name or address"
+            className={styles.input}
+          />
+          <select
+            value={isActiveFilter}
+            onChange={(e) => setIsActiveFilter(e.target.value as 'all' | 'active' | 'inactive')}
+            className={styles.select}
+            aria-label="Office status filter"
+          >
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+            <option value="all">All offices</option>
+          </select>
+          <button
+            type="button"
+            className={styles.secondaryBtn}
+            onClick={() => {
+              setSearch('')
+              setIsActiveFilter('active')
+            }}
+          >
+            Reset Filters
+          </button>
+        </div>
+        <p className={styles.metaSummary}>
+          Showing {offices.length} offices · {activeCount} active · {inactiveCount} inactive
+        </p>
       </section>
 
       <section className={styles.formCard}>
@@ -252,9 +278,15 @@ export function OfficeManagementPage() {
                   <h3>{office.name}</h3>
                   <p>{office.address}</p>
                   <p className={styles.meta}>
-                    {office.isActive ? 'Active' : 'Inactive'}
+                    <span className={office.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                      {office.isActive ? 'Active' : 'Inactive'}
+                    </span>
                     {office.deactivatedAt ? ` · Deactivated ${new Date(office.deactivatedAt).toLocaleString()}` : ''}
                   </p>
+                  {office.latitude !== null && office.longitude !== null && (
+                    <p className={styles.meta}>Coordinates: {office.latitude}, {office.longitude}</p>
+                  )}
+                  <p className={styles.meta}>Hours: {office.openingHours}</p>
                 </div>
 
                 <div className={styles.itemActions}>
