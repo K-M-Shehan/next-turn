@@ -21,13 +21,19 @@ import {
   type QueueStaffAssignment,
 } from '../../api/queues'
 import {
-  deactivateStaffUser,
   inviteStaffUser,
   listStaffUsers,
   reactivateStaffUser,
   type InviteStaffUserResult,
   type StaffUserSummary,
 } from '../../api/auth'
+import {
+  listStaff,
+  updateStaff,
+  deactivateStaff,
+  type StaffDto,
+} from '../../api/staff'
+import { listOffices, type OfficeDto } from '../../api/offices'
 import {
   getAppointmentSchedule,
   configureAppointmentSchedule,
@@ -53,6 +59,15 @@ interface CreateStaffForm {
   phone: string
 }
 
+interface StaffProfileForm {
+  name: string
+  phone: string
+  counterName: string
+  shiftStart: string
+  shiftEnd: string
+  officeIds: string[]
+}
+
 const defaultForm: CreateForm = {
   name: '',
   maxCapacity: '50',
@@ -63,6 +78,15 @@ const defaultStaffForm: CreateStaffForm = {
   name: '',
   email: '',
   phone: '',
+}
+
+const defaultStaffProfileForm: StaffProfileForm = {
+  name: '',
+  phone: '',
+  counterName: '',
+  shiftStart: '',
+  shiftEnd: '',
+  officeIds: [],
 }
 
 const dayLabels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -121,6 +145,12 @@ export function AdminDashboardPage() {
   const [staffAccounts, setStaffAccounts] = useState<StaffUserSummary[]>([])
   const [staffAccountsLoading, setStaffAccountsLoading] = useState(false)
   const [staffActionUserId, setStaffActionUserId] = useState<string | null>(null)
+  const [staffProfiles, setStaffProfiles] = useState<StaffDto[]>([])
+  const [staffProfilesLoading, setStaffProfilesLoading] = useState(false)
+  const [officeOptions, setOfficeOptions] = useState<OfficeDto[]>([])
+  const [selectedStaffProfileId, setSelectedStaffProfileId] = useState<string | null>(null)
+  const [staffProfileForm, setStaffProfileForm] = useState<StaffProfileForm>(defaultStaffProfileForm)
+  const [staffProfileSaving, setStaffProfileSaving] = useState(false)
   const [queueAssignments, setQueueAssignments] = useState<Record<string, QueueStaffAssignment[]>>({})
   const [queueAssignmentSelection, setQueueAssignmentSelection] = useState<Record<string, string>>({})
   const [queueAssignmentLoading, setQueueAssignmentLoading] = useState(false)
@@ -133,6 +163,11 @@ export function AdminDashboardPage() {
     const totalWeeklySlots = appointmentRules.reduce((sum, rule) => sum + slotsForRule(rule), 0)
     return { enabledDays, totalWeeklySlots }
   }, [appointmentRules])
+
+  const staffProfileByEmail = useMemo(
+    () => new Map(staffProfiles.map(profile => [profile.email.toLowerCase(), profile])),
+    [staffProfiles],
+  )
 
   if (!payload) {
     clearToken()
@@ -360,6 +395,89 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function loadStaffManagementData(currentTenantId: string) {
+    setStaffProfilesLoading(true)
+
+    try {
+      const [staffResult, officeResult] = await Promise.all([
+        listStaff(currentTenantId, 1, 100),
+        listOffices(currentTenantId, { isActive: true, pageNumber: 1, pageSize: 200 }),
+      ])
+
+      setStaffProfiles(staffResult.items)
+      setOfficeOptions(officeResult.items)
+
+      setSelectedStaffProfileId(prev => {
+        if (prev && staffResult.items.some(x => x.staffUserId === prev)) return prev
+        return null
+      })
+    } catch (err) {
+      const apiErr = err as ApiError
+      setStaffError(apiErr.detail ?? 'Could not load staff profile management data.')
+    } finally {
+      setStaffProfilesLoading(false)
+    }
+  }
+
+  function beginEditStaffProfile(profile: StaffDto) {
+    setSelectedStaffProfileId(profile.staffUserId)
+    setStaffProfileForm({
+      name: profile.name,
+      phone: profile.phone ?? '',
+      counterName: profile.counterName ?? '',
+      shiftStart: profile.shiftStart ?? '',
+      shiftEnd: profile.shiftEnd ?? '',
+      officeIds: profile.officeIds,
+    })
+    setStaffError(null)
+    setStaffSuccess(null)
+  }
+
+  function resetStaffProfileEditor() {
+    setSelectedStaffProfileId(null)
+    setStaffProfileForm(defaultStaffProfileForm)
+  }
+
+  function toggleStaffOfficeSelection(officeId: string) {
+    setStaffProfileForm(prev => ({
+      ...prev,
+      officeIds: prev.officeIds.includes(officeId)
+        ? prev.officeIds.filter(id => id !== officeId)
+        : [...prev.officeIds, officeId],
+    }))
+  }
+
+  async function saveStaffProfile() {
+    if (!tenantId || !selectedStaffProfileId) return
+
+    setStaffProfileSaving(true)
+    setStaffError(null)
+    setStaffSuccess(null)
+
+    try {
+      await updateStaff(tenantId, selectedStaffProfileId, {
+        name: staffProfileForm.name.trim(),
+        phone: staffProfileForm.phone.trim() || null,
+        officeIds: staffProfileForm.officeIds,
+        counterName: staffProfileForm.counterName.trim() || null,
+        shiftStart: staffProfileForm.shiftStart || null,
+        shiftEnd: staffProfileForm.shiftEnd || null,
+      })
+
+      setStaffSuccess('Staff profile updated successfully.')
+      await Promise.all([
+        loadStaffAccounts(tenantId),
+        loadStaffManagementData(tenantId),
+      ])
+      resetStaffProfileEditor()
+    } catch (err) {
+      const apiErr = err as ApiError
+      setStaffError(apiErr.detail ?? 'Could not update staff profile.')
+    } finally {
+      setStaffProfileSaving(false)
+    }
+  }
+
   async function loadQueueAssignments(currentTenantId: string, currentQueues: OrgQueueSummary[]) {
     if (currentQueues.length === 0) {
       setQueueAssignments({})
@@ -389,7 +507,10 @@ export function AdminDashboardPage() {
   useEffect(() => {
     if (activeTab !== 'staff' || !tenantId) return
 
-    void loadStaffAccounts(tenantId)
+    void Promise.all([
+      loadStaffAccounts(tenantId),
+      loadStaffManagementData(tenantId),
+    ])
   }, [activeTab, tenantId])
 
   useEffect(() => {
@@ -411,14 +532,17 @@ export function AdminDashboardPage() {
 
     try {
       if (user.isActive) {
-        await deactivateStaffUser(tenantId, user.userId)
+        await deactivateStaff(tenantId, user.userId)
         setStaffSuccess('Staff account deactivated.')
       } else {
         await reactivateStaffUser(tenantId, user.userId)
         setStaffSuccess('Staff account reactivated.')
       }
 
-      await loadStaffAccounts(tenantId)
+      await Promise.all([
+        loadStaffAccounts(tenantId),
+        loadStaffManagementData(tenantId),
+      ])
     } catch (err) {
       const apiErr = err as ApiError
       setStaffError(apiErr.detail ?? 'Could not update staff account status.')
@@ -498,13 +622,6 @@ export function AdminDashboardPage() {
               onClick={() => navigate(`/admin/${tenantId}/services`)}
             >
               Manage Services
-            </button>
-            <button
-              type="button"
-              className={styles.tabBtn}
-              onClick={() => navigate(`/admin/${tenantId}/staff-management`)}
-            >
-              Staff Management
             </button>
           </div>
           <div className={styles.tabs} role="tablist" aria-label="Admin sections">
@@ -1036,33 +1153,170 @@ export function AdminDashboardPage() {
                 <ul className={styles.staffList}>
                   {staffAccounts.map(user => (
                     <li key={user.userId} className={styles.staffCard}>
-                      <div className={styles.staffCardInfo}>
-                        <strong className={styles.staffName}>{user.name}</strong>
-                        <span className={styles.staffMeta}>{user.email}</span>
-                        {user.phone && <span className={styles.staffMeta}>{user.phone}</span>}
-                        <span className={styles.staffMeta}>
-                          Created {new Date(user.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
+                      {(() => {
+                        const profile = staffProfileByEmail.get(user.email.toLowerCase())
+                        return (
+                          <>
+                            <div className={styles.staffCardInfo}>
+                              <strong className={styles.staffName}>{user.name}</strong>
+                              <span className={styles.staffMeta}>{user.email}</span>
+                              {user.phone && <span className={styles.staffMeta}>{user.phone}</span>}
+                              {profile?.counterName && <span className={styles.staffMeta}>Counter: {profile.counterName}</span>}
+                              {profile?.shiftStart && profile?.shiftEnd && (
+                                <span className={styles.staffMeta}>Shift: {profile.shiftStart}-{profile.shiftEnd}</span>
+                              )}
+                              {profile && (
+                                <span className={styles.staffMeta}>Assigned offices: {profile.officeIds.length}</span>
+                              )}
+                              <span className={styles.staffMeta}>
+                                Created {new Date(user.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
 
-                      <div className={styles.staffActions}>
-                        <span className={user.isActive ? styles.statusActive : styles.statusInactive}>
-                          {user.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                        <button
-                          type="button"
-                          className={styles.copyBtn}
-                          disabled={staffActionUserId === user.userId}
-                          onClick={() => handleStaffStatusToggle(user)}
-                        >
-                          {staffActionUserId === user.userId
-                            ? 'Updating...'
-                            : (user.isActive ? 'Deactivate' : 'Reactivate')}
-                        </button>
-                      </div>
+                            <div className={styles.staffActions}>
+                              <span className={user.isActive ? styles.statusActive : styles.statusInactive}>
+                                {user.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                              <button
+                                type="button"
+                                className={styles.copyBtn}
+                                disabled={staffActionUserId === user.userId}
+                                onClick={() => handleStaffStatusToggle(user)}
+                              >
+                                {staffActionUserId === user.userId
+                                  ? 'Updating...'
+                                  : (user.isActive ? 'Deactivate' : 'Reactivate')}
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.copyBtn}
+                                onClick={() => profile && beginEditStaffProfile(profile)}
+                                disabled={!profile}
+                              >
+                                Edit Details
+                              </button>
+                            </div>
+                          </>
+                        )
+                      })()}
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+
+            <div className={styles.staffListBlock}>
+              <h3 className={styles.sectionSubTitle}>Staff Profile Management</h3>
+              <p className={styles.sectionHint}>Edit assigned offices, counter and shift details from Staff Accounts.</p>
+
+              {staffProfilesLoading && (
+                <p className={styles.emptyNote}>Loading staff profile data...</p>
+              )}
+
+              {!staffProfilesLoading && selectedStaffProfileId && (
+                <div className={styles.profileEditorCard}>
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-name">Name</label>
+                      <input
+                        id="staff-edit-name"
+                        className={styles.input}
+                        type="text"
+                        value={staffProfileForm.name}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-phone">Phone</label>
+                      <input
+                        id="staff-edit-phone"
+                        className={styles.input}
+                        type="tel"
+                        value={staffProfileForm.phone}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-counter">Counter Name</label>
+                      <input
+                        id="staff-edit-counter"
+                        className={styles.input}
+                        type="text"
+                        value={staffProfileForm.counterName}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, counterName: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-shift-start">Shift Start (HH:mm)</label>
+                      <input
+                        id="staff-edit-shift-start"
+                        className={styles.input}
+                        type="text"
+                        placeholder="09:00"
+                        value={staffProfileForm.shiftStart}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftStart: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-shift-end">Shift End (HH:mm)</label>
+                      <input
+                        id="staff-edit-shift-end"
+                        className={styles.input}
+                        type="text"
+                        placeholder="17:00"
+                        value={staffProfileForm.shiftEnd}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftEnd: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className={styles.sectionSubTitle}>Assigned Offices</p>
+                    {officeOptions.length === 0 ? (
+                      <p className={styles.emptyNote}>No active offices found.</p>
+                    ) : (
+                      <div className={styles.staffOfficeGrid}>
+                        {officeOptions.map(office => (
+                          <label key={office.officeId} className={styles.staffOfficeItem}>
+                            <input
+                              type="checkbox"
+                              checked={staffProfileForm.officeIds.includes(office.officeId)}
+                              onChange={() => toggleStaffOfficeSelection(office.officeId)}
+                            />
+                            <span>{office.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={styles.staffEditorActions}>
+                    <button
+                      type="button"
+                      className={styles.createBtn}
+                      onClick={saveStaffProfile}
+                      disabled={staffProfileSaving || !staffProfileForm.name.trim()}
+                    >
+                      {staffProfileSaving ? 'Saving...' : 'Save Staff Details'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.copyBtn}
+                      onClick={resetStaffProfileEditor}
+                      disabled={staffProfileSaving}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!staffProfilesLoading && !selectedStaffProfileId && (
+                <p className={styles.emptyNote}>Choose a staff account above and click Edit Details.</p>
               )}
             </div>
           </section>

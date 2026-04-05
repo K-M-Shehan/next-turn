@@ -364,6 +364,37 @@
   gap: 6px;
 }
 
+.profileEditorCard {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 14px;
+  background: linear-gradient(165deg, #f7fbf7, var(--color-white));
+  display: grid;
+  gap: 12px;
+}
+
+.staffOfficeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.staffOfficeItem {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--color-white);
+}
+
+.staffEditorActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .profileSelectGroup {
   margin-bottom: 10px;
 }
