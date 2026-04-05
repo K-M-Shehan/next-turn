@@ -29,7 +29,11 @@ const defaultForm: OfficeForm = {
   openingHours: '',
 }
 
-export function OfficeManagementPage() {
+interface OfficeManagementPageProps {
+  embedded?: boolean
+}
+
+export function OfficeManagementPage({ embedded = false }: OfficeManagementPageProps = {}) {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
   const payload = getTokenPayload()
@@ -163,15 +167,17 @@ export function OfficeManagementPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? styles.embeddedPage : styles.page}>
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>Office Management</h1>
           <p className={styles.subtitle}>Create and manage organisation branches and locations.</p>
         </div>
-        <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
-          Back to Admin
-        </button>
+        {!embedded && (
+          <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
+            Back to Admin
+          </button>
+        )}
       </header>
 
       {error && <div className={styles.error}>{error}</div>}

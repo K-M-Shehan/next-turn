@@ -42,6 +42,8 @@ import {
   type AppointmentProfileSummary,
   type AppointmentDayRule,
 } from '../../api/appointments'
+import { OfficeManagementPage } from '../Offices'
+import { ServiceManagementPage } from '../Services'
 import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import logoImg from '../../assets/nextTurn-logo.png'
@@ -155,7 +157,7 @@ export function AdminDashboardPage() {
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null)
   const [copiedAppointmentLink, setCopiedAppointmentLink] = useState(false)
-  const [activeTab, setActiveTab] = useState<'queues' | 'appointments' | 'staff'>('queues')
+  const [activeTab, setActiveTab] = useState<'offices' | 'services' | 'queues' | 'appointments' | 'staff'>('queues')
 
   const [staffForm, setStaffForm] = useState<CreateStaffForm>(defaultStaffForm)
   const [staffCreating, setStaffCreating] = useState(false)
@@ -648,23 +650,25 @@ export function AdminDashboardPage() {
             <h1 className={styles.pageTitle}>Operations Control Center</h1>
             <p className={styles.pageSubtitle}>Manage queues and appointment capacity from one place.</p>
           </div>
-          <div className={styles.tabs}>
-            <button
-              type="button"
-              className={styles.tabBtn}
-              onClick={() => navigate(`/admin/${tenantId}/offices`)}
-            >
-              Manage Offices
-            </button>
-            <button
-              type="button"
-              className={styles.tabBtn}
-              onClick={() => navigate(`/admin/${tenantId}/services`)}
-            >
-              Manage Services
-            </button>
-          </div>
           <div className={styles.tabs} role="tablist" aria-label="Admin sections">
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'offices' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('offices')}
+              role="tab"
+              aria-selected={activeTab === 'offices'}
+            >
+              Offices
+            </button>
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'services' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('services')}
+              role="tab"
+              aria-selected={activeTab === 'services'}
+            >
+              Services
+            </button>
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'queues' ? styles.tabBtnActive : ''}`}
@@ -694,6 +698,14 @@ export function AdminDashboardPage() {
             </button>
           </div>
         </section>
+
+        {activeTab === 'offices' && (
+          <OfficeManagementPage embedded />
+        )}
+
+        {activeTab === 'services' && (
+          <ServiceManagementPage embedded />
+        )}
 
         {activeTab === 'queues' && (
           <>

@@ -6,6 +6,11 @@
   gap: 1rem;
 }
 
+.embeddedPage {
+  display: grid;
+  gap: 1rem;
+}
+
 .header {
   display: flex;
   justify-content: space-between;
@@ -181,6 +186,10 @@
 @media (max-width: 768px) {
   .page {
     padding: 1rem;
+  }
+
+  .embeddedPage {
+    gap: 0.8rem;
   }
 
   .header {

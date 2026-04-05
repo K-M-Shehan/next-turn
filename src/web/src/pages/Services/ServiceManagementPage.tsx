@@ -38,7 +38,11 @@ const defaultForm: ServiceForm = {
   isActive: true,
 }
 
-export function ServiceManagementPage() {
+interface ServiceManagementPageProps {
+  embedded?: boolean
+}
+
+export function ServiceManagementPage({ embedded = false }: ServiceManagementPageProps = {}) {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
   const payload = getTokenPayload()
@@ -288,15 +292,17 @@ export function ServiceManagementPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? styles.embeddedPage : styles.page}>
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>Service Catalog</h1>
           <p className={styles.subtitle}>Define what your organisation delivers, then choose where each service is available.</p>
         </div>
-        <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
-          Back to Admin
-        </button>
+        {!embedded && (
+          <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
+            Back to Admin
+          </button>
+        )}
       </header>
 
       {error && <div className={styles.error}>{error}</div>}
