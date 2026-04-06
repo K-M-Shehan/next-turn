@@ -48,6 +48,7 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
   const [form, setForm] = useState<OfficeForm>(defaultForm)
   const [mode, setMode] = useState<Mode>('create')
   const [editOfficeId, setEditOfficeId] = useState<string | null>(null)
+  const [selectedOffice, setSelectedOffice] = useState<OfficeDto | null>(null)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
 
@@ -113,6 +114,14 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
     setForm(defaultForm)
     setMode('create')
     setEditOfficeId(null)
+  }
+
+  function openOfficeDetails(office: OfficeDto) {
+    setSelectedOffice(office)
+  }
+
+  function closeOfficeDetails() {
+    setSelectedOffice(null)
   }
 
   function selectForEdit(office: OfficeDto) {
@@ -318,7 +327,19 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
         ) : (
           <ul className={styles.list}>
             {offices.map((office) => (
-              <li key={office.officeId} className={styles.item}>
+              <li
+                key={office.officeId}
+                className={styles.item}
+                role="button"
+                tabIndex={0}
+                onClick={() => openOfficeDetails(office)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openOfficeDetails(office)
+                  }
+                }}
+              >
                 <div>
                   <h3>{office.name}</h3>
                   <p>{office.address}</p>
@@ -341,7 +362,10 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
                   <button
                     type="button"
                     className={styles.secondaryBtn}
-                    onClick={() => selectForEdit(office)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      selectForEdit(office)
+                    }}
                     disabled={!office.isActive}
                   >
                     Edit
@@ -349,7 +373,10 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
                   <button
                     type="button"
                     className={styles.dangerBtn}
-                    onClick={() => handleDeactivate(office.officeId)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleDeactivate(office.officeId)
+                    }}
                     disabled={!office.isActive}
                   >
                     Deactivate
@@ -360,6 +387,70 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
           </ul>
         )}
       </section>
+
+      {selectedOffice && (
+        <div className={styles.modalOverlay} onClick={closeOfficeDetails}>
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="office-detail-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <h3 id="office-detail-title" className={styles.modalTitle}>{selectedOffice.name}</h3>
+              <button type="button" className={styles.secondaryBtn} onClick={closeOfficeDetails}>
+                Close
+              </button>
+            </div>
+
+            <div className={styles.modalBody}>
+              <p><strong>Address:</strong> {selectedOffice.address}</p>
+              <p><strong>Status:</strong> {selectedOffice.isActive ? 'Active' : 'Inactive'}</p>
+              <p><strong>Opening hours:</strong> {selectedOffice.openingHours}</p>
+              {selectedOffice.latitude !== null && selectedOffice.longitude !== null && (
+                <p><strong>Coordinates:</strong> {selectedOffice.latitude}, {selectedOffice.longitude}</p>
+              )}
+              {selectedOffice.deactivatedAt && (
+                <p><strong>Deactivated at:</strong> {new Date(selectedOffice.deactivatedAt).toLocaleString()}</p>
+              )}
+
+              <div className={styles.staffPanel}>
+                <h4 className={styles.staffPanelTitle}>Assigned Staff</h4>
+                {(staffByOffice.get(selectedOffice.officeId)?.length ?? 0) === 0 ? (
+                  <p className={styles.meta}>No staff currently assigned to this office.</p>
+                ) : (
+                  <ul className={styles.staffList}>
+                    {(staffByOffice.get(selectedOffice.officeId) ?? []).map(staff => (
+                      <li key={staff.staffUserId} className={styles.staffItem}>
+                        <strong>{staff.name}</strong>
+                        <span className={styles.meta}>{staff.email}</span>
+                        <span className={staff.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                          {staff.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                onClick={() => {
+                  selectForEdit(selectedOffice)
+                  closeOfficeDetails()
+                }}
+                disabled={!selectedOffice.isActive}
+              >
+                Edit Office
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
