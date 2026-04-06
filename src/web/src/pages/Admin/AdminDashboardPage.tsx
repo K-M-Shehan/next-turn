@@ -64,7 +64,6 @@ interface CreateStaffForm {
 interface StaffProfileForm {
   name: string
   phone: string
-  counterName: string
   shiftStart: string
   shiftEnd: string
   officeId: string
@@ -85,7 +84,6 @@ const defaultStaffForm: CreateStaffForm = {
 const defaultStaffProfileForm: StaffProfileForm = {
   name: '',
   phone: '',
-  counterName: '',
   shiftStart: '',
   shiftEnd: '',
   officeId: '',
@@ -451,7 +449,6 @@ export function AdminDashboardPage() {
     setStaffProfileForm({
       name: profile.name,
       phone: profile.phone ?? '',
-      counterName: profile.counterName ?? '',
       shiftStart: normalizeShiftInput(profile.shiftStart),
       shiftEnd: normalizeShiftInput(profile.shiftEnd),
       officeId: profile.officeIds[0] ?? '',
@@ -497,7 +494,6 @@ export function AdminDashboardPage() {
         name: staffProfileForm.name.trim(),
         phone: staffProfileForm.phone.trim() || null,
         officeIds: [staffProfileForm.officeId],
-        counterName: staffProfileForm.counterName.trim() || null,
         shiftStart: shiftStart || null,
         shiftEnd: shiftEnd || null,
       })
@@ -1214,7 +1210,6 @@ export function AdminDashboardPage() {
                               <strong className={styles.staffName}>{user.name}</strong>
                               <span className={styles.staffMeta}>{user.email}</span>
                               {user.phone && <span className={styles.staffMeta}>{user.phone}</span>}
-                              {profile?.counterName && <span className={styles.staffMeta}>Counter: {profile.counterName}</span>}
                               {profile?.shiftStart && profile?.shiftEnd && (
                                 <span className={styles.staffMeta}>Shift: {profile.shiftStart}-{profile.shiftEnd}</span>
                               )}
@@ -1290,17 +1285,6 @@ export function AdminDashboardPage() {
                         type="tel"
                         value={staffProfileForm.phone}
                         onChange={e => setStaffProfileForm(prev => ({ ...prev, phone: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-counter">Counter Name</label>
-                      <input
-                        id="staff-edit-counter"
-                        className={styles.input}
-                        type="text"
-                        value={staffProfileForm.counterName}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, counterName: e.target.value }))}
                       />
                     </div>
 
