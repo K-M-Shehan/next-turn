@@ -421,6 +421,127 @@
   margin-bottom: 10px;
 }
 
+.appointmentProfileList {
+  list-style: none;
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.appointmentProfileCard {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  background: linear-gradient(165deg, #f8fcf8, var(--color-white));
+}
+
+.appointmentProfileCardInfo {
+  display: grid;
+  gap: 4px;
+}
+
+.appointmentProfileName {
+  font-size: 0.98rem;
+}
+
+.appointmentProfileMeta {
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+}
+
+.appointmentProfileCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.appointmentModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 18, 24, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 120;
+}
+
+.appointmentModal {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-white);
+  box-shadow: 0 18px 44px rgba(15, 22, 32, 0.2);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.appointmentModalHeader {
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.appointmentModalTitle {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.appointmentModalBody {
+  overflow: auto;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.appointmentModalActions {
+  border-top: 1px solid var(--color-border);
+  padding: 12px 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.staffAssignCard {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  background: linear-gradient(160deg, #f8fcf8, var(--color-white));
+}
+
+.staffAssignGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+}
+
+.staffAssignItem {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--color-white);
+}
+
+.staffAssignItem span {
+  display: grid;
+  gap: 2px;
+}
+
 .statsRow {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

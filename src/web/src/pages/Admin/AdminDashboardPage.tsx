@@ -36,10 +36,14 @@ import {
 } from '../../api/staff'
 import { listOffices, type OfficeDto } from '../../api/offices'
 import {
+  assignStaffToAppointmentProfile,
   getAppointmentSchedule,
+  listAppointmentProfileStaffAssignments,
   configureAppointmentSchedule,
   listAppointmentProfiles,
   createAppointmentProfile,
+  unassignStaffFromAppointmentProfile,
+  type AppointmentStaffAssignment,
   type AppointmentProfileSummary,
   type AppointmentDayRule,
 } from '../../api/appointments'
@@ -143,20 +147,23 @@ export function AdminDashboardPage() {
   const [newLink, setNewLink] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  const [appointmentRules, setAppointmentRules] = useState<AppointmentDayRule[]>([])
   const [appointmentProfiles, setAppointmentProfiles] = useState<AppointmentProfileSummary[]>([])
-  const [selectedAppointmentProfileId, setSelectedAppointmentProfileId] = useState<string>('')
   const [newAppointmentProfileName, setNewAppointmentProfileName] = useState('')
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [profileCreating, setProfileCreating] = useState(false)
-  const [appointmentShareLink, setAppointmentShareLink] = useState<string | null>(null)
-  const [scheduleLoading, setScheduleLoading] = useState(true)
+  const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null)
   const [copiedAppointmentLink, setCopiedAppointmentLink] = useState(false)
   const [activeTab, setActiveTab] = useState<'offices' | 'services' | 'queues' | 'appointments' | 'staff'>('queues')
+  const [appointmentEditorOpen, setAppointmentEditorOpen] = useState(false)
+  const [editingAppointmentProfile, setEditingAppointmentProfile] = useState<AppointmentProfileSummary | null>(null)
+  const [editorRules, setEditorRules] = useState<AppointmentDayRule[]>([])
+  const [editorShareLink, setEditorShareLink] = useState<string | null>(null)
+  const [appointmentStaffAssignments, setAppointmentStaffAssignments] = useState<Record<string, AppointmentStaffAssignment[]>>({})
+  const [editorAssignedStaffUserIds, setEditorAssignedStaffUserIds] = useState<string[]>([])
 
   const [staffForm, setStaffForm] = useState<CreateStaffForm>(defaultStaffForm)
   const [staffCreating, setStaffCreating] = useState(false)
@@ -181,10 +188,10 @@ export function AdminDashboardPage() {
   const [queueAssignmentSuccess, setQueueAssignmentSuccess] = useState<string | null>(null)
 
   const appointmentSummary = useMemo(() => {
-    const enabledDays = appointmentRules.filter(r => r.isEnabled).length
-    const totalWeeklySlots = appointmentRules.reduce((sum, rule) => sum + slotsForRule(rule), 0)
+    const enabledDays = editorRules.filter(r => r.isEnabled).length
+    const totalWeeklySlots = editorRules.reduce((sum, rule) => sum + slotsForRule(rule), 0)
     return { enabledDays, totalWeeklySlots }
-  }, [appointmentRules])
+  }, [editorRules])
 
   const staffProfileByEmail = useMemo(
     () => new Map(staffProfiles.map(profile => [profile.email.toLowerCase(), profile])),
@@ -195,6 +202,26 @@ export function AdminDashboardPage() {
     () => new Map(officeOptions.map(office => [office.officeId, office.name])),
     [officeOptions],
   )
+
+  async function loadAppointmentAssignments(
+    currentTenantId: string,
+    profiles: AppointmentProfileSummary[],
+  ): Promise<Record<string, AppointmentStaffAssignment[]>> {
+    if (profiles.length === 0) return {}
+
+    const pairs = await Promise.all(
+      profiles.map(async profile => {
+        const assigned = await listAppointmentProfileStaffAssignments(
+          currentTenantId,
+          profile.appointmentProfileId,
+        )
+
+        return [profile.appointmentProfileId, assigned] as const
+      }),
+    )
+
+    return Object.fromEntries(pairs)
+  }
 
   if (!payload) {
     clearToken()
@@ -211,9 +238,10 @@ export function AdminDashboardPage() {
       .catch(() => setLoadError('Could not load queues. Please refresh the page.'))
 
     listAppointmentProfiles(tenantId)
-      .then(profiles => {
+      .then(async profiles => {
         setAppointmentProfiles(profiles)
-        setSelectedAppointmentProfileId(prev => prev || profiles[0]?.appointmentProfileId || '')
+        const assignments = await loadAppointmentAssignments(tenantId, profiles)
+        setAppointmentStaffAssignments(assignments)
       })
       .catch((err: ApiError) => {
         if (err.status === 403) {
@@ -230,27 +258,6 @@ export function AdminDashboardPage() {
       })
       .finally(() => setProfileLoading(false))
   }, [tenantId])
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!tenantId || !selectedAppointmentProfileId) {
-      setAppointmentRules([])
-      setAppointmentShareLink(null)
-      setScheduleLoading(false)
-      return
-    }
-
-    setScheduleLoading(true)
-    setScheduleError(null)
-
-    getAppointmentSchedule(tenantId, selectedAppointmentProfileId)
-      .then(config => {
-        setAppointmentRules(config.dayRules)
-        setAppointmentShareLink(config.shareableLink)
-      })
-      .catch(() => setScheduleError('Could not load appointment schedule.'))
-      .finally(() => setScheduleLoading(false))
-  }, [tenantId, selectedAppointmentProfileId])
 
   function handleLogout() {
     clearToken()
@@ -319,22 +326,72 @@ export function AdminDashboardPage() {
   }
 
   async function copyAppointmentLink() {
-    if (!appointmentShareLink) return
-    await navigator.clipboard.writeText(`${window.location.origin}${appointmentShareLink}`)
+    if (!editorShareLink) return
+    await navigator.clipboard.writeText(`${window.location.origin}${editorShareLink}`)
     setCopiedAppointmentLink(true)
     setTimeout(() => setCopiedAppointmentLink(false), 2000)
   }
 
   function updateRule(dayOfWeek: number, changes: Partial<AppointmentDayRule>) {
-    setAppointmentRules(prev =>
+    setEditorRules(prev =>
       prev.map(rule => (rule.dayOfWeek === dayOfWeek ? { ...rule, ...changes } : rule)),
     )
     setScheduleSuccess(null)
     setScheduleError(null)
   }
 
+  function toggleEditorStaffAssignment(staffUserId: string) {
+    setEditorAssignedStaffUserIds(prev =>
+      prev.includes(staffUserId)
+        ? prev.filter(id => id !== staffUserId)
+        : [...prev, staffUserId],
+    )
+  }
+
+  async function openAppointmentEditor(profile: AppointmentProfileSummary) {
+    if (!tenantId) return
+
+    setEditingAppointmentProfile(profile)
+    setAppointmentEditorOpen(true)
+    setScheduleLoading(true)
+    setScheduleError(null)
+    setScheduleSuccess(null)
+
+    if (staffAccounts.length === 0) {
+      await loadStaffAccounts(tenantId)
+    }
+
+    try {
+      const config = await getAppointmentSchedule(tenantId, profile.appointmentProfileId)
+      const assignedStaff = await listAppointmentProfileStaffAssignments(tenantId, profile.appointmentProfileId)
+      setEditorRules(config.dayRules)
+      setEditorShareLink(config.shareableLink)
+      setEditorAssignedStaffUserIds(assignedStaff.map(a => a.staffUserId))
+      setAppointmentStaffAssignments(prev => ({
+        ...prev,
+        [profile.appointmentProfileId]: assignedStaff,
+      }))
+    } catch {
+      setScheduleError('Could not load appointment schedule.')
+      setEditorRules([])
+      setEditorShareLink(null)
+      setEditorAssignedStaffUserIds([])
+    } finally {
+      setScheduleLoading(false)
+    }
+  }
+
+  function closeAppointmentEditor() {
+    setAppointmentEditorOpen(false)
+    setEditingAppointmentProfile(null)
+    setEditorRules([])
+    setEditorShareLink(null)
+    setEditorAssignedStaffUserIds([])
+    setCopiedAppointmentLink(false)
+  }
+
   async function saveSchedule() {
-    if (!tenantId || !selectedAppointmentProfileId || appointmentRules.length !== 7) return
+    if (!tenantId || !editingAppointmentProfile || editorRules.length !== 7) return
 
     setScheduleSaving(true)
     setScheduleError(null)
@@ -343,10 +400,46 @@ export function AdminDashboardPage() {
     try {
       const result = await configureAppointmentSchedule(
         tenantId,
-        selectedAppointmentProfileId,
-        appointmentRules,
+        editingAppointmentProfile.appointmentProfileId,
+        editorRules,
       )
-      setAppointmentShareLink(result.shareableLink)
+
+      const currentAssigned = appointmentStaffAssignments[editingAppointmentProfile.appointmentProfileId] ?? []
+      const currentIds = new Set(currentAssigned.map(a => a.staffUserId))
+      const nextIds = new Set(editorAssignedStaffUserIds)
+
+      const toAssign = editorAssignedStaffUserIds.filter(id => !currentIds.has(id))
+      const toUnassign = currentAssigned
+        .map(a => a.staffUserId)
+        .filter(id => !nextIds.has(id))
+
+      for (const staffUserId of toAssign) {
+        await assignStaffToAppointmentProfile(
+          tenantId,
+          editingAppointmentProfile.appointmentProfileId,
+          staffUserId,
+        )
+      }
+
+      for (const staffUserId of toUnassign) {
+        await unassignStaffFromAppointmentProfile(
+          tenantId,
+          editingAppointmentProfile.appointmentProfileId,
+          staffUserId,
+        )
+      }
+
+      const refreshedAssigned = await listAppointmentProfileStaffAssignments(
+        tenantId,
+        editingAppointmentProfile.appointmentProfileId,
+      )
+
+      setAppointmentStaffAssignments(prev => ({
+        ...prev,
+        [editingAppointmentProfile.appointmentProfileId]: refreshedAssigned,
+      }))
+
+      setEditorShareLink(result.shareableLink)
       setScheduleSuccess('Appointment settings saved.')
     } catch (err) {
       const apiErr = err as ApiError
@@ -366,7 +459,10 @@ export function AdminDashboardPage() {
     try {
       const created = await createAppointmentProfile(tenantId, newAppointmentProfileName.trim())
       setAppointmentProfiles(prev => [created, ...prev])
-      setSelectedAppointmentProfileId(created.appointmentProfileId)
+      setAppointmentStaffAssignments(prev => ({
+        ...prev,
+        [created.appointmentProfileId]: [],
+      }))
       setNewAppointmentProfileName('')
       setScheduleSuccess('Appointment profile created.')
     } catch (err) {
@@ -996,9 +1092,9 @@ export function AdminDashboardPage() {
             </section>
 
             <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>View and Configure Appointment Profiles</h2>
+              <h2 className={styles.sectionTitle}>Your Appointments</h2>
               <p className={styles.sectionHint}>
-                Select a profile, copy its shareable link, and configure operating hours and slot duration.
+                View available appointment profiles, then edit a profile to configure schedule and assign staff.
               </p>
 
               {profileLoading && <p className={styles.emptyNote}>Loading appointment profiles...</p>}
@@ -1006,40 +1102,6 @@ export function AdminDashboardPage() {
               {!profileLoading && appointmentProfiles.length === 0 && (
                 <p className={styles.emptyNote}>No appointment profiles yet. Create one above to start configuring.</p>
               )}
-
-              {appointmentProfiles.length > 0 && (
-                <div className={`${styles.formGroup} ${styles.profileSelectGroup}`}>
-                  <label className={styles.label} htmlFor="appointment-profile-select">Active appointment profile</label>
-                  <select
-                    id="appointment-profile-select"
-                    className={styles.input}
-                    value={selectedAppointmentProfileId}
-                    onChange={e => {
-                      setSelectedAppointmentProfileId(e.target.value)
-                      setScheduleSuccess(null)
-                      setScheduleError(null)
-                    }}
-                  >
-                    {appointmentProfiles.map(profile => (
-                      <option key={profile.appointmentProfileId} value={profile.appointmentProfileId}>
-                        {profile.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className={styles.statsRow}>
-                <article className={styles.statCard}>
-                  <span className={styles.statLabel}>Enabled days</span>
-                  <strong className={styles.statValue}>{appointmentSummary.enabledDays}/7</strong>
-                </article>
-                <article className={styles.statCard}>
-                  <span className={styles.statLabel}>Total weekly capacity</span>
-                  <strong className={styles.statValue}>{appointmentSummary.totalWeeklySlots}</strong>
-                  <span className={styles.statHint}>appointments/week</span>
-                </article>
-              </div>
 
               {scheduleError && (
                 <div className={styles.errorBanner} role="alert">{scheduleError}</div>
@@ -1049,106 +1111,200 @@ export function AdminDashboardPage() {
                 <div className={styles.successBanner} role="status">{scheduleSuccess}</div>
               )}
 
-              {appointmentShareLink && (
-                <div className={styles.successBanner} role="status">
-                  <span>Shareable appointment link:</span>
-                  <strong className={styles.linkText}>{window.location.origin}{appointmentShareLink}</strong>
-                  <button className={styles.copyBtn} type="button" onClick={copyAppointmentLink}>
-                    {copiedAppointmentLink ? '✓ Copied!' : 'Copy Link'}
-                  </button>
-                </div>
+              {!profileLoading && appointmentProfiles.length > 0 && (
+                <ul className={styles.appointmentProfileList}>
+                  {appointmentProfiles.map(profile => {
+                    const assignedCount = appointmentStaffAssignments[profile.appointmentProfileId]?.length ?? 0
+                    return (
+                      <li key={profile.appointmentProfileId} className={styles.appointmentProfileCard}>
+                        <div className={styles.appointmentProfileCardInfo}>
+                          <strong className={styles.appointmentProfileName}>{profile.name}</strong>
+                          <span className={styles.appointmentProfileMeta}>
+                            {profile.isActive ? 'Active profile' : 'Inactive profile'}
+                          </span>
+                          <span className={styles.appointmentProfileMeta}>
+                            Assigned staff: {assignedCount}
+                          </span>
+                        </div>
+                        <div className={styles.appointmentProfileCardActions}>
+                          <button
+                            className={styles.copyBtn}
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(`${window.location.origin}${profile.shareableLink}`)}
+                          >
+                            Copy Link
+                          </button>
+                          <button
+                            className={styles.createBtn}
+                            type="button"
+                            onClick={() => openAppointmentEditor(profile)}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
               )}
 
-              {scheduleLoading && <p className={styles.emptyNote}>Loading schedule...</p>}
+              {appointmentEditorOpen && editingAppointmentProfile && (
+                <div className={styles.appointmentModalOverlay} onClick={closeAppointmentEditor} role="presentation">
+                  <div className={styles.appointmentModal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="appointment-editor-title">
+                    <div className={styles.appointmentModalHeader}>
+                      <h3 id="appointment-editor-title" className={styles.appointmentModalTitle}>
+                        Edit Appointment: {editingAppointmentProfile.name}
+                      </h3>
+                      <button className={styles.copyBtn} type="button" onClick={closeAppointmentEditor}>Close</button>
+                    </div>
 
-              {!scheduleLoading && appointmentRules.length > 0 && (
-                <div className={styles.scheduleList}>
-                  {appointmentRules
-                    .slice()
-                    .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-                    .map(rule => {
-                      const daySlots = slotsForRule(rule)
-                      return (
-                        <article
-                          key={rule.dayOfWeek}
-                          className={`${styles.scheduleCard} ${rule.isEnabled ? styles.scheduleCardEnabled : styles.scheduleCardDisabled}`}
-                        >
-                          <header className={styles.scheduleCardHeader}>
-                            <div>
-                              <h3 className={styles.scheduleDay}>{dayLabels[rule.dayOfWeek]}</h3>
-                              <p className={styles.scheduleSummary}>
-                                {rule.isEnabled
-                                  ? `${toInputTime(rule.startTime)} - ${toInputTime(rule.endTime)} · every ${rule.slotDurationMinutes} min`
-                                  : 'Closed'}
-                              </p>
-                            </div>
-                            <span className={styles.capacityPill}>{daySlots} slots</span>
-                          </header>
-
-                          <div className={styles.scheduleGrid}>
-                            <label className={styles.checkboxLabel}>
-                              <input
-                                type="checkbox"
-                                checked={rule.isEnabled}
-                                onChange={e => updateRule(rule.dayOfWeek, { isEnabled: e.target.checked })}
-                              />
-                              <span>Open for appointments</span>
-                            </label>
-
-                            <div className={styles.formGroup}>
-                              <label className={styles.label}>Start time</label>
-                              <input
-                                className={styles.input}
-                                type="time"
-                                value={toInputTime(rule.startTime)}
-                                disabled={!rule.isEnabled}
-                                onChange={e => updateRule(rule.dayOfWeek, { startTime: `${e.target.value}:00` })}
-                              />
-                            </div>
-
-                            <div className={styles.formGroup}>
-                              <label className={styles.label}>End time</label>
-                              <input
-                                className={styles.input}
-                                type="time"
-                                value={toInputTime(rule.endTime)}
-                                disabled={!rule.isEnabled}
-                                onChange={e => updateRule(rule.dayOfWeek, { endTime: `${e.target.value}:00` })}
-                              />
-                            </div>
-
-                            <div className={styles.formGroup}>
-                              <label className={styles.label}>Duration per appointment (mins)</label>
-                              <input
-                                className={styles.input}
-                                type="number"
-                                min={5}
-                                max={240}
-                                value={rule.slotDurationMinutes}
-                                disabled={!rule.isEnabled}
-                                onChange={e => {
-                                  const parsed = Number.parseInt(e.target.value || '30', 10)
-                                  updateRule(rule.dayOfWeek, {
-                                    slotDurationMinutes: Number.isNaN(parsed) ? 30 : parsed,
-                                  })
-                                }}
-                              />
-                            </div>
-                          </div>
+                    <div className={styles.appointmentModalBody}>
+                      <div className={styles.statsRow}>
+                        <article className={styles.statCard}>
+                          <span className={styles.statLabel}>Enabled days</span>
+                          <strong className={styles.statValue}>{appointmentSummary.enabledDays}/7</strong>
                         </article>
-                      )
-                    })}
+                        <article className={styles.statCard}>
+                          <span className={styles.statLabel}>Total weekly capacity</span>
+                          <strong className={styles.statValue}>{appointmentSummary.totalWeeklySlots}</strong>
+                          <span className={styles.statHint}>appointments/week</span>
+                        </article>
+                      </div>
+
+                      {editorShareLink && (
+                        <div className={styles.successBanner} role="status">
+                          <span>Shareable appointment link:</span>
+                          <strong className={styles.linkText}>{window.location.origin}{editorShareLink}</strong>
+                          <button className={styles.copyBtn} type="button" onClick={copyAppointmentLink}>
+                            {copiedAppointmentLink ? '✓ Copied!' : 'Copy Link'}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className={styles.staffAssignCard}>
+                        <h4 className={styles.sectionSubTitle}>Assign Staff</h4>
+                        <p className={styles.sectionHint}>Select staff members responsible for this appointment profile.</p>
+                        {staffAccounts.filter(staff => staff.isActive).length === 0 && (
+                          <p className={styles.emptyNote}>No active staff accounts available.</p>
+                        )}
+                        <div className={styles.staffAssignGrid}>
+                          {staffAccounts
+                            .filter(staff => staff.isActive)
+                            .map(staff => (
+                              <label key={`appointment-staff-${staff.userId}`} className={styles.staffAssignItem}>
+                                <input
+                                  type="checkbox"
+                                  checked={editorAssignedStaffUserIds.includes(staff.userId)}
+                                  onChange={() => toggleEditorStaffAssignment(staff.userId)}
+                                />
+                                <span>
+                                  <strong>{staff.name}</strong>
+                                  <span className={styles.staffMeta}>{staff.email}</span>
+                                </span>
+                              </label>
+                            ))}
+                        </div>
+                      </div>
+
+                      {scheduleLoading && <p className={styles.emptyNote}>Loading schedule...</p>}
+
+                      {!scheduleLoading && editorRules.length > 0 && (
+                        <div className={styles.scheduleList}>
+                          {editorRules
+                            .slice()
+                            .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                            .map(rule => {
+                              const daySlots = slotsForRule(rule)
+                              return (
+                                <article
+                                  key={rule.dayOfWeek}
+                                  className={`${styles.scheduleCard} ${rule.isEnabled ? styles.scheduleCardEnabled : styles.scheduleCardDisabled}`}
+                                >
+                                  <header className={styles.scheduleCardHeader}>
+                                    <div>
+                                      <h3 className={styles.scheduleDay}>{dayLabels[rule.dayOfWeek]}</h3>
+                                      <p className={styles.scheduleSummary}>
+                                        {rule.isEnabled
+                                          ? `${toInputTime(rule.startTime)} - ${toInputTime(rule.endTime)} · every ${rule.slotDurationMinutes} min`
+                                          : 'Closed'}
+                                      </p>
+                                    </div>
+                                    <span className={styles.capacityPill}>{daySlots} slots</span>
+                                  </header>
+
+                                  <div className={styles.scheduleGrid}>
+                                    <label className={styles.checkboxLabel}>
+                                      <input
+                                        type="checkbox"
+                                        checked={rule.isEnabled}
+                                        onChange={e => updateRule(rule.dayOfWeek, { isEnabled: e.target.checked })}
+                                      />
+                                      <span>Open for appointments</span>
+                                    </label>
+
+                                    <div className={styles.formGroup}>
+                                      <label className={styles.label}>Start time</label>
+                                      <input
+                                        className={styles.input}
+                                        type="time"
+                                        value={toInputTime(rule.startTime)}
+                                        disabled={!rule.isEnabled}
+                                        onChange={e => updateRule(rule.dayOfWeek, { startTime: `${e.target.value}:00` })}
+                                      />
+                                    </div>
+
+                                    <div className={styles.formGroup}>
+                                      <label className={styles.label}>End time</label>
+                                      <input
+                                        className={styles.input}
+                                        type="time"
+                                        value={toInputTime(rule.endTime)}
+                                        disabled={!rule.isEnabled}
+                                        onChange={e => updateRule(rule.dayOfWeek, { endTime: `${e.target.value}:00` })}
+                                      />
+                                    </div>
+
+                                    <div className={styles.formGroup}>
+                                      <label className={styles.label}>Duration per appointment (mins)</label>
+                                      <input
+                                        className={styles.input}
+                                        type="number"
+                                        min={5}
+                                        max={240}
+                                        value={rule.slotDurationMinutes}
+                                        disabled={!rule.isEnabled}
+                                        onChange={e => {
+                                          const parsed = Number.parseInt(e.target.value || '30', 10)
+                                          updateRule(rule.dayOfWeek, {
+                                            slotDurationMinutes: Number.isNaN(parsed) ? 30 : parsed,
+                                          })
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                </article>
+                              )
+                            })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={styles.appointmentModalActions}>
+                      <button className={styles.secondaryBtn} type="button" onClick={closeAppointmentEditor}>
+                        Cancel
+                      </button>
+                      <button
+                        className={styles.createBtn}
+                        type="button"
+                        onClick={saveSchedule}
+                        disabled={scheduleSaving || scheduleLoading || editorRules.length !== 7}
+                      >
+                        {scheduleSaving ? 'Saving…' : 'Save Appointment Settings'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
-
-              <button
-                className={styles.createBtn}
-                type="button"
-                onClick={saveSchedule}
-                disabled={scheduleSaving || scheduleLoading || appointmentRules.length !== 7 || !selectedAppointmentProfileId}
-              >
-                {scheduleSaving ? 'Saving…' : 'Save Appointment Settings'}
-              </button>
             </section>
           </>
         )}

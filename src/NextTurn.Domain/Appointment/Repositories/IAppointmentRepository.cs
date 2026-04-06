@@ -64,4 +64,23 @@ public interface IAppointmentRepository
         Guid organisationId,
         Guid appointmentProfileId,
         CancellationToken cancellationToken);
+
+    Task<bool> IsStaffAlreadyAssignedAsync(
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken);
+
+    Task AddStaffAssignmentAsync(
+        Guid organisationId,
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken);
+
+    Task<bool> RemoveStaffAssignmentAsync(
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<(Guid StaffUserId, string Name, string Email, bool IsActive)>>
+        GetStaffAssignmentsAsync(Guid appointmentProfileId, CancellationToken cancellationToken);
 }

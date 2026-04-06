@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NextTurn.Domain.Auth;
 using NextTurn.Domain.Appointment.Enums;
 using NextTurn.Domain.Appointment.Repositories;
 using NextTurn.Infrastructure.Persistence;
@@ -173,5 +174,68 @@ public sealed class AppointmentRepository : IAppointmentRepository
             .FirstOrDefaultAsync(
                 p => p.OrganisationId == organisationId && p.Id == appointmentProfileId,
                 cancellationToken);
+    }
+
+    public async Task<bool> IsStaffAlreadyAssignedAsync(
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken)
+    {
+        return await _context.AppointmentProfileStaffAssignments
+            .AnyAsync(a => a.AppointmentProfileId == appointmentProfileId && a.StaffUserId == staffUserId, cancellationToken);
+    }
+
+    public async Task AddStaffAssignmentAsync(
+        Guid organisationId,
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken)
+    {
+        var assignment = Domain.Appointment.Entities.AppointmentProfileStaffAssignment.Create(
+            organisationId,
+            appointmentProfileId,
+            staffUserId);
+
+        await _context.AppointmentProfileStaffAssignments.AddAsync(assignment, cancellationToken);
+    }
+
+    public async Task<bool> RemoveStaffAssignmentAsync(
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken)
+    {
+        var assignment = await _context.AppointmentProfileStaffAssignments
+            .FirstOrDefaultAsync(
+                a => a.AppointmentProfileId == appointmentProfileId && a.StaffUserId == staffUserId,
+                cancellationToken);
+
+        if (assignment is null)
+            return false;
+
+        _context.AppointmentProfileStaffAssignments.Remove(assignment);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<(Guid StaffUserId, string Name, string Email, bool IsActive)>>
+        GetStaffAssignmentsAsync(Guid appointmentProfileId, CancellationToken cancellationToken)
+    {
+        return await _context.AppointmentProfileStaffAssignments
+            .Where(a => a.AppointmentProfileId == appointmentProfileId)
+            .Join(
+                _context.Users,
+                assignment => assignment.StaffUserId,
+                user => user.Id,
+                (assignment, user) => new
+                {
+                    user.Id,
+                    user.Name,
+                    Email = user.Email.Value,
+                    user.IsActive,
+                    user.Role,
+                })
+            .Where(x => x.Role == UserRole.Staff)
+            .OrderBy(x => x.Name)
+            .Select(x => ValueTuple.Create(x.Id, x.Name, x.Email, x.IsActive))
+            .ToListAsync(cancellationToken);
     }
 }
