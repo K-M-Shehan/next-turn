@@ -17,6 +17,8 @@ jobs:
     name: Backend → Azure App Service
     needs: regression-gate
     runs-on: ubuntu-latest
+    environment:
+      name: production
 
     steps:
       - name: Checkout
@@ -70,6 +72,8 @@ jobs:
     name: Frontend → Vercel
     needs: regression-gate
     runs-on: ubuntu-latest
+    environment:
+      name: production
 
     steps:
       - name: Checkout
