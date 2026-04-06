@@ -289,4 +289,34 @@ public sealed class QueueRepository : IQueueRepository
             .OrderBy(q => q.CreatedAt)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<bool> DeleteQueueAsync(Guid queueId, CancellationToken cancellationToken)
+    {
+        var queue = await _context.Queues
+            .FirstOrDefaultAsync(q => q.Id == queueId, cancellationToken);
+
+        if (queue is null)
+            return false;
+
+        var auditLogs = await _context.QueueActionAuditLogs
+            .Where(log => log.QueueId == queueId)
+            .ToListAsync(cancellationToken);
+        if (auditLogs.Count > 0)
+            _context.QueueActionAuditLogs.RemoveRange(auditLogs);
+
+        var assignments = await _context.QueueStaffAssignments
+            .Where(assignment => assignment.QueueId == queueId)
+            .ToListAsync(cancellationToken);
+        if (assignments.Count > 0)
+            _context.QueueStaffAssignments.RemoveRange(assignments);
+
+        var entries = await _context.QueueEntries
+            .Where(entry => entry.QueueId == queueId)
+            .ToListAsync(cancellationToken);
+        if (entries.Count > 0)
+            _context.QueueEntries.RemoveRange(entries);
+
+        _context.Queues.Remove(queue);
+        return true;
+    }
 }

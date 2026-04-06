@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using NextTurn.API.Models.Queues;
 using NextTurn.Application.Queue.Commands.CallNext;
 using NextTurn.Application.Queue.Commands.CreateQueue;
+using NextTurn.Application.Queue.Commands.DeleteQueue;
 using NextTurn.Application.Queue.Commands.JoinQueue;
 using NextTurn.Application.Queue.Commands.LeaveQueue;
 using NextTurn.Application.Queue.Commands.MarkNoShow;
@@ -193,6 +194,29 @@ public sealed class QueuesController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
 
         return CreatedAtAction(nameof(GetQueueStatus), new { queueId = result.QueueId }, result);
+    }
+
+    /// <summary>
+    /// Deletes a queue owned by the authenticated org admin's organisation.
+    /// </summary>
+    [HttpDelete("{queueId:guid}")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> DeleteQueue(
+        Guid queueId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetOrganisationId(out var organisationId))
+            return Unauthorized();
+
+        var command = new DeleteQueueCommand(organisationId, queueId);
+        await _sender.Send(command, cancellationToken);
+
+        return NoContent();
     }
 
     /// <summary>

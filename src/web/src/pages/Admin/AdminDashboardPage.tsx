@@ -14,6 +14,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   assignStaffToQueue,
   createQueue,
+  deleteQueue,
   getOrgQueues,
   listQueueStaffAssignments,
   unassignStaffFromQueue,
@@ -175,6 +176,7 @@ export function AdminDashboardPage() {
   const [queueAssignmentSelection, setQueueAssignmentSelection] = useState<Record<string, string>>({})
   const [queueAssignmentLoading, setQueueAssignmentLoading] = useState(false)
   const [queueAssignmentBusyKey, setQueueAssignmentBusyKey] = useState<string | null>(null)
+  const [queueDeleteBusyId, setQueueDeleteBusyId] = useState<string | null>(null)
   const [queueAssignmentError, setQueueAssignmentError] = useState<string | null>(null)
   const [queueAssignmentSuccess, setQueueAssignmentSuccess] = useState<string | null>(null)
 
@@ -632,6 +634,41 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function handleDeleteQueue(queue: OrgQueueSummary) {
+    if (!tenantId) return
+
+    const confirmed = window.confirm(
+      `Delete queue "${queue.name}"? This cannot be undone and may remove active entries.`,
+    )
+
+    if (!confirmed) return
+
+    setQueueDeleteBusyId(queue.queueId)
+    setQueueAssignmentError(null)
+    setQueueAssignmentSuccess(null)
+
+    try {
+      await deleteQueue(queue.queueId, tenantId)
+      setQueues(prev => prev.filter(item => item.queueId !== queue.queueId))
+      setQueueAssignments(prev => {
+        const next = { ...prev }
+        delete next[queue.queueId]
+        return next
+      })
+      setQueueAssignmentSelection(prev => {
+        const next = { ...prev }
+        delete next[queue.queueId]
+        return next
+      })
+      setQueueAssignmentSuccess(`Queue "${queue.name}" deleted.`)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setQueueAssignmentError(apiErr.detail ?? 'Could not delete queue.')
+    } finally {
+      setQueueDeleteBusyId(null)
+    }
+  }
+
   return (
     <div className={styles.page}>
       <nav className={styles.topNav}>
@@ -828,14 +865,25 @@ export function AdminDashboardPage() {
                           {window.location.origin}{queue.shareableLink}
                         </span>
                       </div>
-                      <button
-                        className={styles.copyBtn}
-                        type="button"
-                        onClick={() => copyLink(queue)}
-                        data-testid={`copy-btn-${queue.queueId}`}
-                      >
-                        {copiedId === queue.queueId ? '✓ Copied!' : 'Copy Link'}
-                      </button>
+                      <div className={styles.queueCardActions}>
+                        <button
+                          className={styles.copyBtn}
+                          type="button"
+                          onClick={() => copyLink(queue)}
+                          data-testid={`copy-btn-${queue.queueId}`}
+                        >
+                          {copiedId === queue.queueId ? '✓ Copied!' : 'Copy Link'}
+                        </button>
+                        <button
+                          className={styles.deleteBtn}
+                          type="button"
+                          onClick={() => handleDeleteQueue(queue)}
+                          disabled={queueDeleteBusyId === queue.queueId}
+                          data-testid={`delete-btn-${queue.queueId}`}
+                        >
+                          {queueDeleteBusyId === queue.queueId ? 'Deleting...' : 'Delete Queue'}
+                        </button>
+                      </div>
 
                       <div className={styles.assignmentArea}>
                         <h4 className={styles.assignmentTitle}>Assigned Staff</h4>
