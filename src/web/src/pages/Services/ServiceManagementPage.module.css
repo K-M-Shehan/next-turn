@@ -59,7 +59,8 @@
 .filters,
 .formCard,
 .listCard,
-.assignmentsCard {
+.assignmentsCard,
+.operationsCard {
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid #dbe4ec;
   border-radius: 16px;
@@ -209,6 +210,32 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
+}
+
+.targetSummary {
+  border: 1px solid #dbe4ec;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 0.75rem;
+}
+
+.targetChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.targetChip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 600;
 }
 
 .generatedLinks {

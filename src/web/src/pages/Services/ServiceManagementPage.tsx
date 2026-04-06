@@ -66,6 +66,8 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
 
   const [assignmentServiceId, setAssignmentServiceId] = useState<string>('')
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([])
+  const [operationServiceId, setOperationServiceId] = useState<string>('')
+  const [selectedOperationOfficeIds, setSelectedOperationOfficeIds] = useState<string[]>([])
   const [savingAssignments, setSavingAssignments] = useState(false)
   const [creatingFromService, setCreatingFromService] = useState<'queue' | 'appointment' | null>(null)
   const [latestQueueLinks, setLatestQueueLinks] = useState<GeneratedFlowLink[]>([])
@@ -75,6 +77,18 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
     () => services.find(s => s.serviceId === assignmentServiceId) ?? null,
     [services, assignmentServiceId],
   )
+
+  const selectedOperationService = useMemo(
+    () => services.find(s => s.serviceId === operationServiceId) ?? null,
+    [services, operationServiceId],
+  )
+
+  const operationServiceOffices = useMemo(() => {
+    if (!selectedOperationService) return []
+
+    const officeIds = new Set(selectedOperationService.assignedOfficeIds)
+    return offices.filter(office => officeIds.has(office.officeId))
+  }, [offices, selectedOperationService])
 
   const hasPendingAssignmentChanges = useMemo(() => {
     if (!selectedService) return false
@@ -109,6 +123,15 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
     setSelectedOfficeIds(selectedService.assignedOfficeIds)
   }, [selectedService])
 
+  useEffect(() => {
+    if (!selectedOperationService) {
+      setSelectedOperationOfficeIds([])
+      return
+    }
+
+    setSelectedOperationOfficeIds(selectedOperationService.assignedOfficeIds)
+  }, [selectedOperationService])
+
   async function loadData(currentTenantId: string, activeOnlyFilter: boolean) {
     setLoading(true)
     setError(null)
@@ -122,6 +145,10 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
       setServices(serviceResult.items)
       setOffices(officeResult.items)
       setAssignmentServiceId(prev => {
+        if (prev && serviceResult.items.some(x => x.serviceId === prev)) return prev
+        return serviceResult.items[0]?.serviceId ?? ''
+      })
+      setOperationServiceId(prev => {
         if (prev && serviceResult.items.some(x => x.serviceId === prev)) return prev
         return serviceResult.items[0]?.serviceId ?? ''
       })
@@ -214,6 +241,14 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
     )
   }
 
+  function toggleOperationOfficeSelection(officeId: string) {
+    setSelectedOperationOfficeIds(prev =>
+      prev.includes(officeId)
+        ? prev.filter(id => id !== officeId)
+        : [...prev, officeId],
+    )
+  }
+
   async function handleSaveAssignments() {
     if (!tenantId || !selectedService) return
 
@@ -247,14 +282,14 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
   }
 
   async function handleCreateQueueFromService() {
-    if (!tenantId || !selectedService) return
+    if (!tenantId || !selectedOperationService) return
 
-    if (hasPendingAssignmentChanges) {
+    if (assignmentServiceId === operationServiceId && hasPendingAssignmentChanges) {
       setError('Save office assignments before creating queues from this service.')
       return
     }
 
-    if (selectedService.assignedOfficeIds.length === 0) {
+    if (selectedOperationOfficeIds.length === 0) {
       setError('Assign at least one office to this service before creating queues.')
       return
     }
@@ -265,8 +300,8 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
     setLatestQueueLinks([])
 
     try {
-      const selectedOffices = offices.filter(office =>
-        selectedService.assignedOfficeIds.includes(office.officeId),
+      const selectedOffices = operationServiceOffices.filter(office =>
+        selectedOperationOfficeIds.includes(office.officeId),
       )
 
       const existingQueues = await getOrgQueues(tenantId)
@@ -276,7 +311,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
       let skippedCount = 0
 
       for (const office of selectedOffices) {
-        const queueName = `${selectedService.name} - ${office.name} Queue`
+        const queueName = `${selectedOperationService.name} - ${office.name} Queue`
         const queueNameKey = queueName.trim().toLowerCase()
 
         if (existingQueueNames.has(queueNameKey)) {
@@ -287,7 +322,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         const result = await createQueue(tenantId, {
           name: queueName,
           maxCapacity: 50,
-          averageServiceTimeSeconds: Math.max(60, selectedService.estimatedDurationMinutes * 60),
+          averageServiceTimeSeconds: Math.max(60, selectedOperationService.estimatedDurationMinutes * 60),
         })
 
         existingQueueNames.add(queueNameKey)
@@ -300,10 +335,10 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
       setLatestQueueLinks(createdQueueLinks)
 
       if (createdQueueLinks.length === 0) {
-        setSuccess(`No queues created. A queue already exists for each assigned office of "${selectedService.name}".`)
+        setSuccess(`No queues created. A queue already exists for each selected office of "${selectedOperationService.name}".`)
       } else {
         setSuccess(
-          `Created ${createdQueueLinks.length} queue${createdQueueLinks.length === 1 ? '' : 's'} from "${selectedService.name}"${skippedCount > 0 ? `; skipped ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'}` : ''}.`,
+          `Created ${createdQueueLinks.length} queue${createdQueueLinks.length === 1 ? '' : 's'} for "${selectedOperationService.name}"${skippedCount > 0 ? `; skipped ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'}` : ''}.`,
         )
       }
     } catch (err) {
@@ -315,14 +350,14 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
   }
 
   async function handleCreateAppointmentProfileFromService() {
-    if (!tenantId || !selectedService) return
+    if (!tenantId || !selectedOperationService) return
 
-    if (hasPendingAssignmentChanges) {
+    if (assignmentServiceId === operationServiceId && hasPendingAssignmentChanges) {
       setError('Save office assignments before creating appointment profiles from this service.')
       return
     }
 
-    if (selectedService.assignedOfficeIds.length === 0) {
+    if (selectedOperationOfficeIds.length === 0) {
       setError('Assign at least one office to this service before creating appointment profiles.')
       return
     }
@@ -333,10 +368,10 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
     setLatestAppointmentLinks([])
 
     try {
-      const slotDurationMinutes = Math.min(240, Math.max(5, selectedService.estimatedDurationMinutes))
+      const slotDurationMinutes = Math.min(240, Math.max(5, selectedOperationService.estimatedDurationMinutes))
 
-      const selectedOffices = offices.filter(office =>
-        selectedService.assignedOfficeIds.includes(office.officeId),
+      const selectedOffices = operationServiceOffices.filter(office =>
+        selectedOperationOfficeIds.includes(office.officeId),
       )
 
       const existingProfiles = await listAppointmentProfiles(tenantId)
@@ -346,7 +381,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
       let skippedCount = 0
 
       for (const office of selectedOffices) {
-        const profileName = `${selectedService.name} - ${office.name} Appointments`
+        const profileName = `${selectedOperationService.name} - ${office.name} Appointments`
         const profileNameKey = profileName.trim().toLowerCase()
 
         if (existingProfileNames.has(profileNameKey)) {
@@ -381,10 +416,10 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
       setLatestAppointmentLinks(createdAppointmentLinks)
 
       if (createdAppointmentLinks.length === 0) {
-        setSuccess(`No appointment profiles created. A profile already exists for each assigned office of "${selectedService.name}".`)
+        setSuccess(`No appointment profiles created. A profile already exists for each selected office of "${selectedOperationService.name}".`)
       } else {
         setSuccess(
-          `Created ${createdAppointmentLinks.length} appointment profile${createdAppointmentLinks.length === 1 ? '' : 's'} from "${selectedService.name}" with ${slotDurationMinutes}-minute slots${skippedCount > 0 ? `; skipped ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'}` : ''}.`,
+          `Created ${createdAppointmentLinks.length} appointment profile${createdAppointmentLinks.length === 1 ? '' : 's'} for "${selectedOperationService.name}" with ${slotDurationMinutes}-minute slots${skippedCount > 0 ? `; skipped ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'}` : ''}.`,
         )
       }
     } catch (err) {
@@ -569,30 +604,85 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
             >
               {savingAssignments ? 'Saving assignments...' : 'Save Assignments'}
             </button>
+          </>
+        )}
+      </section>
 
-            <div className={styles.opsDivider} />
+      <section className={styles.operationsCard}>
+        <h2>Create Operational Flows from Service</h2>
+        <p className={styles.helperText}>
+          Choose the exact service and offices to target. The system creates one queue and one appointment profile per selected office, and skips duplicates.
+        </p>
+        {services.length === 0 ? (
+          <p>Create a service first.</p>
+        ) : (
+          <>
+            <label className={styles.meta}>Target service</label>
+            <select
+              className={styles.select}
+              value={operationServiceId}
+              onChange={(event) => setOperationServiceId(event.target.value)}
+            >
+              {services.map(service => (
+                <option key={service.serviceId} value={service.serviceId}>
+                  {service.name} ({service.code})
+                </option>
+              ))}
+            </select>
 
-            <h3 className={styles.opsTitle}>Create Operational Flows from Service</h3>
-            <p className={styles.helperText}>
-              Generate one queue and one appointment profile per assigned office. Existing office-specific flows are skipped.
-            </p>
+            <label className={styles.meta}>Target offices</label>
+            {operationServiceOffices.length === 0 ? (
+              <p className={styles.helperText}>No offices are assigned to this service yet. Use Office Availability (Now) above.</p>
+            ) : (
+              <>
+                <div className={styles.officeGrid}>
+                  {operationServiceOffices.map(office => (
+                    <label key={`operation-${office.officeId}`} className={styles.officeCard}>
+                      <input
+                        type="checkbox"
+                        checked={selectedOperationOfficeIds.includes(office.officeId)}
+                        onChange={() => toggleOperationOfficeSelection(office.officeId)}
+                      />
+                      <span>{office.name}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div className={styles.targetSummary}>
+                  <p className={styles.meta}>
+                    Targeted service: <strong>{selectedOperationService?.name ?? '-'}</strong>
+                  </p>
+                  <p className={styles.meta}>Targeted offices ({selectedOperationOfficeIds.length}):</p>
+                  <div className={styles.targetChips}>
+                    {operationServiceOffices
+                      .filter(office => selectedOperationOfficeIds.includes(office.officeId))
+                      .map(office => (
+                        <span key={`chip-${office.officeId}`} className={styles.targetChip}>{office.name}</span>
+                      ))}
+                    {selectedOperationOfficeIds.length === 0 && (
+                      <span className={styles.targetChip}>No office selected</span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className={styles.opsActions}>
               <button
                 type="button"
                 className={styles.secondaryBtn}
                 onClick={handleCreateQueueFromService}
-                disabled={!selectedService || creatingFromService !== null}
+                disabled={!selectedOperationService || creatingFromService !== null || selectedOperationOfficeIds.length === 0}
               >
-                {creatingFromService === 'queue' ? 'Creating queues...' : 'Create Queues from Service'}
+                {creatingFromService === 'queue' ? 'Creating queues...' : 'Create Queues for Selected Offices'}
               </button>
               <button
                 type="button"
                 className={styles.secondaryBtn}
                 onClick={handleCreateAppointmentProfileFromService}
-                disabled={!selectedService || creatingFromService !== null}
+                disabled={!selectedOperationService || creatingFromService !== null || selectedOperationOfficeIds.length === 0}
               >
-                {creatingFromService === 'appointment' ? 'Creating profiles...' : 'Create Appointment Profiles from Service'}
+                {creatingFromService === 'appointment' ? 'Creating profiles...' : 'Create Appointment Profiles for Selected Offices'}
               </button>
             </div>
 
@@ -600,12 +690,12 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
               <div className={styles.generatedLinks} role="status">
                 {latestQueueLinks.map(item => (
                   <p key={`queue-${item.officeName}-${item.link}`}>
-                    Queue ({item.officeName}): <strong>{window.location.origin}{item.link}</strong>
+                    Queue ({selectedOperationService?.name} - {item.officeName}): <strong>{window.location.origin}{item.link}</strong>
                   </p>
                 ))}
                 {latestAppointmentLinks.map(item => (
                   <p key={`appointment-${item.officeName}-${item.link}`}>
-                    Appointment ({item.officeName}): <strong>{window.location.origin}{item.link}</strong>
+                    Appointment ({selectedOperationService?.name} - {item.officeName}): <strong>{window.location.origin}{item.link}</strong>
                   </p>
                 ))}
               </div>
