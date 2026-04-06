@@ -14,6 +14,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   assignStaffToQueue,
   createQueue,
+  deleteQueue,
   getOrgQueues,
   listQueueStaffAssignments,
   unassignStaffFromQueue,
@@ -21,7 +22,6 @@ import {
   type QueueStaffAssignment,
 } from '../../api/queues'
 import {
-  deactivateStaffUser,
   inviteStaffUser,
   listStaffUsers,
   reactivateStaffUser,
@@ -29,13 +29,26 @@ import {
   type StaffUserSummary,
 } from '../../api/auth'
 import {
+  listStaff,
+  updateStaff,
+  deactivateStaff,
+  type StaffDto,
+} from '../../api/staff'
+import { listOffices, type OfficeDto } from '../../api/offices'
+import {
+  assignStaffToAppointmentProfile,
   getAppointmentSchedule,
+  listAppointmentProfileStaffAssignments,
   configureAppointmentSchedule,
   listAppointmentProfiles,
   createAppointmentProfile,
+  unassignStaffFromAppointmentProfile,
+  type AppointmentStaffAssignment,
   type AppointmentProfileSummary,
   type AppointmentDayRule,
 } from '../../api/appointments'
+import { OfficeManagementPage } from '../Offices'
+import { ServiceManagementPage } from '../Services'
 import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import logoImg from '../../assets/nextTurn-logo.png'
@@ -53,6 +66,14 @@ interface CreateStaffForm {
   phone: string
 }
 
+interface StaffProfileForm {
+  name: string
+  phone: string
+  shiftStart: string
+  shiftEnd: string
+  officeId: string
+}
+
 const defaultForm: CreateForm = {
   name: '',
   maxCapacity: '50',
@@ -63,6 +84,14 @@ const defaultStaffForm: CreateStaffForm = {
   name: '',
   email: '',
   phone: '',
+}
+
+const defaultStaffProfileForm: StaffProfileForm = {
+  name: '',
+  phone: '',
+  shiftStart: '',
+  shiftEnd: '',
+  officeId: '',
 }
 
 const dayLabels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -84,6 +113,26 @@ function slotsForRule(rule: AppointmentDayRule): number {
   return Math.floor(windowMinutes / rule.slotDurationMinutes)
 }
 
+function normalizeShiftInput(value: string | null | undefined): string {
+  if (!value) return ''
+  return value.length >= 5 ? value.slice(0, 5) : value
+}
+
+function getFirstValidationMessage(apiError: ApiError): string | undefined {
+  if (!apiError.errors) return undefined
+
+  for (const value of Object.values(apiError.errors)) {
+    if (Array.isArray(value) && value.length > 0) {
+      const first = value[0]
+      if (typeof first === 'string' && first.trim().length > 0) {
+        return first
+      }
+    }
+  }
+
+  return undefined
+}
+
 export function AdminDashboardPage() {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
@@ -98,20 +147,23 @@ export function AdminDashboardPage() {
   const [newLink, setNewLink] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
-  const [appointmentRules, setAppointmentRules] = useState<AppointmentDayRule[]>([])
   const [appointmentProfiles, setAppointmentProfiles] = useState<AppointmentProfileSummary[]>([])
-  const [selectedAppointmentProfileId, setSelectedAppointmentProfileId] = useState<string>('')
   const [newAppointmentProfileName, setNewAppointmentProfileName] = useState('')
   const [profileError, setProfileError] = useState<string | null>(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [profileCreating, setProfileCreating] = useState(false)
-  const [appointmentShareLink, setAppointmentShareLink] = useState<string | null>(null)
-  const [scheduleLoading, setScheduleLoading] = useState(true)
+  const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleSaving, setScheduleSaving] = useState(false)
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null)
   const [copiedAppointmentLink, setCopiedAppointmentLink] = useState(false)
-  const [activeTab, setActiveTab] = useState<'queues' | 'appointments' | 'staff'>('queues')
+  const [activeTab, setActiveTab] = useState<'offices' | 'services' | 'queues' | 'appointments' | 'staff'>('queues')
+  const [appointmentEditorOpen, setAppointmentEditorOpen] = useState(false)
+  const [editingAppointmentProfile, setEditingAppointmentProfile] = useState<AppointmentProfileSummary | null>(null)
+  const [editorRules, setEditorRules] = useState<AppointmentDayRule[]>([])
+  const [editorShareLink, setEditorShareLink] = useState<string | null>(null)
+  const [appointmentStaffAssignments, setAppointmentStaffAssignments] = useState<Record<string, AppointmentStaffAssignment[]>>({})
+  const [editorAssignedStaffUserIds, setEditorAssignedStaffUserIds] = useState<string[]>([])
 
   const [staffForm, setStaffForm] = useState<CreateStaffForm>(defaultStaffForm)
   const [staffCreating, setStaffCreating] = useState(false)
@@ -121,18 +173,55 @@ export function AdminDashboardPage() {
   const [staffAccounts, setStaffAccounts] = useState<StaffUserSummary[]>([])
   const [staffAccountsLoading, setStaffAccountsLoading] = useState(false)
   const [staffActionUserId, setStaffActionUserId] = useState<string | null>(null)
+  const [staffProfiles, setStaffProfiles] = useState<StaffDto[]>([])
+  const [staffProfilesLoading, setStaffProfilesLoading] = useState(false)
+  const [officeOptions, setOfficeOptions] = useState<OfficeDto[]>([])
+  const [selectedStaffProfileId, setSelectedStaffProfileId] = useState<string | null>(null)
+  const [staffProfileForm, setStaffProfileForm] = useState<StaffProfileForm>(defaultStaffProfileForm)
+  const [staffProfileSaving, setStaffProfileSaving] = useState(false)
   const [queueAssignments, setQueueAssignments] = useState<Record<string, QueueStaffAssignment[]>>({})
   const [queueAssignmentSelection, setQueueAssignmentSelection] = useState<Record<string, string>>({})
   const [queueAssignmentLoading, setQueueAssignmentLoading] = useState(false)
   const [queueAssignmentBusyKey, setQueueAssignmentBusyKey] = useState<string | null>(null)
+  const [queueDeleteBusyId, setQueueDeleteBusyId] = useState<string | null>(null)
   const [queueAssignmentError, setQueueAssignmentError] = useState<string | null>(null)
   const [queueAssignmentSuccess, setQueueAssignmentSuccess] = useState<string | null>(null)
 
   const appointmentSummary = useMemo(() => {
-    const enabledDays = appointmentRules.filter(r => r.isEnabled).length
-    const totalWeeklySlots = appointmentRules.reduce((sum, rule) => sum + slotsForRule(rule), 0)
+    const enabledDays = editorRules.filter(r => r.isEnabled).length
+    const totalWeeklySlots = editorRules.reduce((sum, rule) => sum + slotsForRule(rule), 0)
     return { enabledDays, totalWeeklySlots }
-  }, [appointmentRules])
+  }, [editorRules])
+
+  const staffProfileByEmail = useMemo(
+    () => new Map(staffProfiles.map(profile => [profile.email.toLowerCase(), profile])),
+    [staffProfiles],
+  )
+
+  const officeNameById = useMemo(
+    () => new Map(officeOptions.map(office => [office.officeId, office.name])),
+    [officeOptions],
+  )
+
+  async function loadAppointmentAssignments(
+    currentTenantId: string,
+    profiles: AppointmentProfileSummary[],
+  ): Promise<Record<string, AppointmentStaffAssignment[]>> {
+    if (profiles.length === 0) return {}
+
+    const pairs = await Promise.all(
+      profiles.map(async profile => {
+        const assigned = await listAppointmentProfileStaffAssignments(
+          currentTenantId,
+          profile.appointmentProfileId,
+        )
+
+        return [profile.appointmentProfileId, assigned] as const
+      }),
+    )
+
+    return Object.fromEntries(pairs)
+  }
 
   if (!payload) {
     clearToken()
@@ -149,9 +238,10 @@ export function AdminDashboardPage() {
       .catch(() => setLoadError('Could not load queues. Please refresh the page.'))
 
     listAppointmentProfiles(tenantId)
-      .then(profiles => {
+      .then(async profiles => {
         setAppointmentProfiles(profiles)
-        setSelectedAppointmentProfileId(prev => prev || profiles[0]?.appointmentProfileId || '')
+        const assignments = await loadAppointmentAssignments(tenantId, profiles)
+        setAppointmentStaffAssignments(assignments)
       })
       .catch((err: ApiError) => {
         if (err.status === 403) {
@@ -168,27 +258,6 @@ export function AdminDashboardPage() {
       })
       .finally(() => setProfileLoading(false))
   }, [tenantId])
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (!tenantId || !selectedAppointmentProfileId) {
-      setAppointmentRules([])
-      setAppointmentShareLink(null)
-      setScheduleLoading(false)
-      return
-    }
-
-    setScheduleLoading(true)
-    setScheduleError(null)
-
-    getAppointmentSchedule(tenantId, selectedAppointmentProfileId)
-      .then(config => {
-        setAppointmentRules(config.dayRules)
-        setAppointmentShareLink(config.shareableLink)
-      })
-      .catch(() => setScheduleError('Could not load appointment schedule.'))
-      .finally(() => setScheduleLoading(false))
-  }, [tenantId, selectedAppointmentProfileId])
 
   function handleLogout() {
     clearToken()
@@ -257,22 +326,72 @@ export function AdminDashboardPage() {
   }
 
   async function copyAppointmentLink() {
-    if (!appointmentShareLink) return
-    await navigator.clipboard.writeText(`${window.location.origin}${appointmentShareLink}`)
+    if (!editorShareLink) return
+    await navigator.clipboard.writeText(`${window.location.origin}${editorShareLink}`)
     setCopiedAppointmentLink(true)
     setTimeout(() => setCopiedAppointmentLink(false), 2000)
   }
 
   function updateRule(dayOfWeek: number, changes: Partial<AppointmentDayRule>) {
-    setAppointmentRules(prev =>
+    setEditorRules(prev =>
       prev.map(rule => (rule.dayOfWeek === dayOfWeek ? { ...rule, ...changes } : rule)),
     )
     setScheduleSuccess(null)
     setScheduleError(null)
   }
 
+  function toggleEditorStaffAssignment(staffUserId: string) {
+    setEditorAssignedStaffUserIds(prev =>
+      prev.includes(staffUserId)
+        ? prev.filter(id => id !== staffUserId)
+        : [...prev, staffUserId],
+    )
+  }
+
+  async function openAppointmentEditor(profile: AppointmentProfileSummary) {
+    if (!tenantId) return
+
+    setEditingAppointmentProfile(profile)
+    setAppointmentEditorOpen(true)
+    setScheduleLoading(true)
+    setScheduleError(null)
+    setScheduleSuccess(null)
+
+    if (staffAccounts.length === 0) {
+      await loadStaffAccounts(tenantId)
+    }
+
+    try {
+      const config = await getAppointmentSchedule(tenantId, profile.appointmentProfileId)
+      const assignedStaff = await listAppointmentProfileStaffAssignments(tenantId, profile.appointmentProfileId)
+      setEditorRules(config.dayRules)
+      setEditorShareLink(config.shareableLink)
+      setEditorAssignedStaffUserIds(assignedStaff.map(a => a.staffUserId))
+      setAppointmentStaffAssignments(prev => ({
+        ...prev,
+        [profile.appointmentProfileId]: assignedStaff,
+      }))
+    } catch {
+      setScheduleError('Could not load appointment schedule.')
+      setEditorRules([])
+      setEditorShareLink(null)
+      setEditorAssignedStaffUserIds([])
+    } finally {
+      setScheduleLoading(false)
+    }
+  }
+
+  function closeAppointmentEditor() {
+    setAppointmentEditorOpen(false)
+    setEditingAppointmentProfile(null)
+    setEditorRules([])
+    setEditorShareLink(null)
+    setEditorAssignedStaffUserIds([])
+    setCopiedAppointmentLink(false)
+  }
+
   async function saveSchedule() {
-    if (!tenantId || !selectedAppointmentProfileId || appointmentRules.length !== 7) return
+    if (!tenantId || !editingAppointmentProfile || editorRules.length !== 7) return
 
     setScheduleSaving(true)
     setScheduleError(null)
@@ -281,10 +400,46 @@ export function AdminDashboardPage() {
     try {
       const result = await configureAppointmentSchedule(
         tenantId,
-        selectedAppointmentProfileId,
-        appointmentRules,
+        editingAppointmentProfile.appointmentProfileId,
+        editorRules,
       )
-      setAppointmentShareLink(result.shareableLink)
+
+      const currentAssigned = appointmentStaffAssignments[editingAppointmentProfile.appointmentProfileId] ?? []
+      const currentIds = new Set(currentAssigned.map(a => a.staffUserId))
+      const nextIds = new Set(editorAssignedStaffUserIds)
+
+      const toAssign = editorAssignedStaffUserIds.filter(id => !currentIds.has(id))
+      const toUnassign = currentAssigned
+        .map(a => a.staffUserId)
+        .filter(id => !nextIds.has(id))
+
+      for (const staffUserId of toAssign) {
+        await assignStaffToAppointmentProfile(
+          tenantId,
+          editingAppointmentProfile.appointmentProfileId,
+          staffUserId,
+        )
+      }
+
+      for (const staffUserId of toUnassign) {
+        await unassignStaffFromAppointmentProfile(
+          tenantId,
+          editingAppointmentProfile.appointmentProfileId,
+          staffUserId,
+        )
+      }
+
+      const refreshedAssigned = await listAppointmentProfileStaffAssignments(
+        tenantId,
+        editingAppointmentProfile.appointmentProfileId,
+      )
+
+      setAppointmentStaffAssignments(prev => ({
+        ...prev,
+        [editingAppointmentProfile.appointmentProfileId]: refreshedAssigned,
+      }))
+
+      setEditorShareLink(result.shareableLink)
       setScheduleSuccess('Appointment settings saved.')
     } catch (err) {
       const apiErr = err as ApiError
@@ -304,7 +459,10 @@ export function AdminDashboardPage() {
     try {
       const created = await createAppointmentProfile(tenantId, newAppointmentProfileName.trim())
       setAppointmentProfiles(prev => [created, ...prev])
-      setSelectedAppointmentProfileId(created.appointmentProfileId)
+      setAppointmentStaffAssignments(prev => ({
+        ...prev,
+        [created.appointmentProfileId]: [],
+      }))
       setNewAppointmentProfileName('')
       setScheduleSuccess('Appointment profile created.')
     } catch (err) {
@@ -337,7 +495,7 @@ export function AdminDashboardPage() {
     } catch (err) {
       const apiErr = err as ApiError
       if (apiErr.status === 422) {
-        const firstError = apiErr.errors ? Object.values(apiErr.errors)[0]?.[0] : undefined
+        const firstError = getFirstValidationMessage(apiErr)
         setStaffError(firstError ?? 'Please check the staff details and try again.')
       } else {
         setStaffError(apiErr.detail ?? 'Could not create staff account.')
@@ -357,6 +515,103 @@ export function AdminDashboardPage() {
       setStaffError(apiErr.detail ?? 'Could not load staff accounts.')
     } finally {
       setStaffAccountsLoading(false)
+    }
+  }
+
+  async function loadStaffManagementData(currentTenantId: string) {
+    setStaffProfilesLoading(true)
+
+    try {
+      const [staffResult, officeResult] = await Promise.all([
+        listStaff(currentTenantId, 1, 100),
+        listOffices(currentTenantId, { isActive: true, pageNumber: 1, pageSize: 100 }),
+      ])
+
+      setStaffProfiles(staffResult.items)
+      setOfficeOptions(officeResult.items)
+
+      setSelectedStaffProfileId(prev => {
+        if (prev && staffResult.items.some(x => x.staffUserId === prev)) return prev
+        return null
+      })
+    } catch (err) {
+      const apiErr = err as ApiError
+      setStaffError(apiErr.detail ?? 'Could not load staff profile management data.')
+    } finally {
+      setStaffProfilesLoading(false)
+    }
+  }
+
+  function beginEditStaffProfile(profile: StaffDto) {
+    setSelectedStaffProfileId(profile.staffUserId)
+    setStaffProfileForm({
+      name: profile.name,
+      phone: profile.phone ?? '',
+      shiftStart: normalizeShiftInput(profile.shiftStart),
+      shiftEnd: normalizeShiftInput(profile.shiftEnd),
+      officeId: profile.officeIds[0] ?? '',
+    })
+    setStaffError(null)
+    setStaffSuccess(null)
+  }
+
+  function resetStaffProfileEditor() {
+    setSelectedStaffProfileId(null)
+    setStaffProfileForm(defaultStaffProfileForm)
+  }
+
+  async function saveStaffProfile() {
+    if (!tenantId || !selectedStaffProfileId) return
+
+    const shiftStart = staffProfileForm.shiftStart.trim()
+    const shiftEnd = staffProfileForm.shiftEnd.trim()
+    const hasShiftStart = shiftStart.length > 0
+    const hasShiftEnd = shiftEnd.length > 0
+
+    if (hasShiftStart !== hasShiftEnd) {
+      setStaffError('Shift start and shift end must both be provided.')
+      return
+    }
+
+    if (hasShiftStart && hasShiftEnd && toMinutes(shiftStart) >= toMinutes(shiftEnd)) {
+      setStaffError('Shift end must be after shift start.')
+      return
+    }
+
+    if (!staffProfileForm.officeId) {
+      setStaffError('Please assign exactly one office.')
+      return
+    }
+
+    setStaffProfileSaving(true)
+    setStaffError(null)
+    setStaffSuccess(null)
+
+    try {
+      await updateStaff(tenantId, selectedStaffProfileId, {
+        name: staffProfileForm.name.trim(),
+        phone: staffProfileForm.phone.trim() || null,
+        officeIds: [staffProfileForm.officeId],
+        shiftStart: shiftStart || null,
+        shiftEnd: shiftEnd || null,
+      })
+
+      setStaffSuccess('Staff profile updated successfully.')
+      await Promise.all([
+        loadStaffAccounts(tenantId),
+        loadStaffManagementData(tenantId),
+      ])
+      resetStaffProfileEditor()
+    } catch (err) {
+      const apiErr = err as ApiError
+      if (apiErr.status === 422) {
+        const firstError = getFirstValidationMessage(apiErr)
+        setStaffError(firstError ?? apiErr.detail ?? 'Could not update staff profile.')
+      } else {
+        setStaffError(apiErr.detail ?? 'Could not update staff profile.')
+      }
+    } finally {
+      setStaffProfileSaving(false)
     }
   }
 
@@ -389,7 +644,10 @@ export function AdminDashboardPage() {
   useEffect(() => {
     if (activeTab !== 'staff' || !tenantId) return
 
-    void loadStaffAccounts(tenantId)
+    void Promise.all([
+      loadStaffAccounts(tenantId),
+      loadStaffManagementData(tenantId),
+    ])
   }, [activeTab, tenantId])
 
   useEffect(() => {
@@ -411,14 +669,17 @@ export function AdminDashboardPage() {
 
     try {
       if (user.isActive) {
-        await deactivateStaffUser(tenantId, user.userId)
+        await deactivateStaff(tenantId, user.userId)
         setStaffSuccess('Staff account deactivated.')
       } else {
         await reactivateStaffUser(tenantId, user.userId)
         setStaffSuccess('Staff account reactivated.')
       }
 
-      await loadStaffAccounts(tenantId)
+      await Promise.all([
+        loadStaffAccounts(tenantId),
+        loadStaffManagementData(tenantId),
+      ])
     } catch (err) {
       const apiErr = err as ApiError
       setStaffError(apiErr.detail ?? 'Could not update staff account status.')
@@ -469,6 +730,41 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function handleDeleteQueue(queue: OrgQueueSummary) {
+    if (!tenantId) return
+
+    const confirmed = window.confirm(
+      `Delete queue "${queue.name}"? This cannot be undone and may remove active entries.`,
+    )
+
+    if (!confirmed) return
+
+    setQueueDeleteBusyId(queue.queueId)
+    setQueueAssignmentError(null)
+    setQueueAssignmentSuccess(null)
+
+    try {
+      await deleteQueue(queue.queueId, tenantId)
+      setQueues(prev => prev.filter(item => item.queueId !== queue.queueId))
+      setQueueAssignments(prev => {
+        const next = { ...prev }
+        delete next[queue.queueId]
+        return next
+      })
+      setQueueAssignmentSelection(prev => {
+        const next = { ...prev }
+        delete next[queue.queueId]
+        return next
+      })
+      setQueueAssignmentSuccess(`Queue "${queue.name}" deleted.`)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setQueueAssignmentError(apiErr.detail ?? 'Could not delete queue.')
+    } finally {
+      setQueueDeleteBusyId(null)
+    }
+  }
+
   return (
     <div className={styles.page}>
       <nav className={styles.topNav}>
@@ -484,30 +780,25 @@ export function AdminDashboardPage() {
             <h1 className={styles.pageTitle}>Operations Control Center</h1>
             <p className={styles.pageSubtitle}>Manage queues and appointment capacity from one place.</p>
           </div>
-          <div className={styles.tabs}>
-            <button
-              type="button"
-              className={styles.tabBtn}
-              onClick={() => navigate(`/admin/${tenantId}/offices`)}
-            >
-              Manage Offices
-            </button>
-            <button
-              type="button"
-              className={styles.tabBtn}
-              onClick={() => navigate(`/admin/${tenantId}/services`)}
-            >
-              Manage Services
-            </button>
-            <button
-              type="button"
-              className={styles.tabBtn}
-              onClick={() => navigate(`/admin/${tenantId}/staff-management`)}
-            >
-              Staff Management
-            </button>
-          </div>
           <div className={styles.tabs} role="tablist" aria-label="Admin sections">
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'offices' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('offices')}
+              role="tab"
+              aria-selected={activeTab === 'offices'}
+            >
+              Offices
+            </button>
+            <button
+              type="button"
+              className={`${styles.tabBtn} ${activeTab === 'services' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('services')}
+              role="tab"
+              aria-selected={activeTab === 'services'}
+            >
+              Services
+            </button>
             <button
               type="button"
               className={`${styles.tabBtn} ${activeTab === 'queues' ? styles.tabBtnActive : ''}`}
@@ -537,6 +828,14 @@ export function AdminDashboardPage() {
             </button>
           </div>
         </section>
+
+        {activeTab === 'offices' && (
+          <OfficeManagementPage embedded />
+        )}
+
+        {activeTab === 'services' && (
+          <ServiceManagementPage embedded />
+        )}
 
         {activeTab === 'queues' && (
           <>
@@ -662,14 +961,25 @@ export function AdminDashboardPage() {
                           {window.location.origin}{queue.shareableLink}
                         </span>
                       </div>
-                      <button
-                        className={styles.copyBtn}
-                        type="button"
-                        onClick={() => copyLink(queue)}
-                        data-testid={`copy-btn-${queue.queueId}`}
-                      >
-                        {copiedId === queue.queueId ? '✓ Copied!' : 'Copy Link'}
-                      </button>
+                      <div className={styles.queueCardActions}>
+                        <button
+                          className={styles.copyBtn}
+                          type="button"
+                          onClick={() => copyLink(queue)}
+                          data-testid={`copy-btn-${queue.queueId}`}
+                        >
+                          {copiedId === queue.queueId ? '✓ Copied!' : 'Copy Link'}
+                        </button>
+                        <button
+                          className={styles.deleteBtn}
+                          type="button"
+                          onClick={() => handleDeleteQueue(queue)}
+                          disabled={queueDeleteBusyId === queue.queueId}
+                          data-testid={`delete-btn-${queue.queueId}`}
+                        >
+                          {queueDeleteBusyId === queue.queueId ? 'Deleting...' : 'Delete Queue'}
+                        </button>
+                      </div>
 
                       <div className={styles.assignmentArea}>
                         <h4 className={styles.assignmentTitle}>Assigned Staff</h4>
@@ -782,9 +1092,9 @@ export function AdminDashboardPage() {
             </section>
 
             <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>View and Configure Appointment Profiles</h2>
+              <h2 className={styles.sectionTitle}>Your Appointments</h2>
               <p className={styles.sectionHint}>
-                Select a profile, copy its shareable link, and configure operating hours and slot duration.
+                View available appointment profiles, then edit a profile to configure schedule and assign staff.
               </p>
 
               {profileLoading && <p className={styles.emptyNote}>Loading appointment profiles...</p>}
@@ -792,40 +1102,6 @@ export function AdminDashboardPage() {
               {!profileLoading && appointmentProfiles.length === 0 && (
                 <p className={styles.emptyNote}>No appointment profiles yet. Create one above to start configuring.</p>
               )}
-
-              {appointmentProfiles.length > 0 && (
-                <div className={`${styles.formGroup} ${styles.profileSelectGroup}`}>
-                  <label className={styles.label} htmlFor="appointment-profile-select">Active appointment profile</label>
-                  <select
-                    id="appointment-profile-select"
-                    className={styles.input}
-                    value={selectedAppointmentProfileId}
-                    onChange={e => {
-                      setSelectedAppointmentProfileId(e.target.value)
-                      setScheduleSuccess(null)
-                      setScheduleError(null)
-                    }}
-                  >
-                    {appointmentProfiles.map(profile => (
-                      <option key={profile.appointmentProfileId} value={profile.appointmentProfileId}>
-                        {profile.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div className={styles.statsRow}>
-                <article className={styles.statCard}>
-                  <span className={styles.statLabel}>Enabled days</span>
-                  <strong className={styles.statValue}>{appointmentSummary.enabledDays}/7</strong>
-                </article>
-                <article className={styles.statCard}>
-                  <span className={styles.statLabel}>Total weekly capacity</span>
-                  <strong className={styles.statValue}>{appointmentSummary.totalWeeklySlots}</strong>
-                  <span className={styles.statHint}>appointments/week</span>
-                </article>
-              </div>
 
               {scheduleError && (
                 <div className={styles.errorBanner} role="alert">{scheduleError}</div>
@@ -835,106 +1111,200 @@ export function AdminDashboardPage() {
                 <div className={styles.successBanner} role="status">{scheduleSuccess}</div>
               )}
 
-              {appointmentShareLink && (
-                <div className={styles.successBanner} role="status">
-                  <span>Shareable appointment link:</span>
-                  <strong className={styles.linkText}>{window.location.origin}{appointmentShareLink}</strong>
-                  <button className={styles.copyBtn} type="button" onClick={copyAppointmentLink}>
-                    {copiedAppointmentLink ? '✓ Copied!' : 'Copy Link'}
-                  </button>
-                </div>
+              {!profileLoading && appointmentProfiles.length > 0 && (
+                <ul className={styles.appointmentProfileList}>
+                  {appointmentProfiles.map(profile => {
+                    const assignedCount = appointmentStaffAssignments[profile.appointmentProfileId]?.length ?? 0
+                    return (
+                      <li key={profile.appointmentProfileId} className={styles.appointmentProfileCard}>
+                        <div className={styles.appointmentProfileCardInfo}>
+                          <strong className={styles.appointmentProfileName}>{profile.name}</strong>
+                          <span className={styles.appointmentProfileMeta}>
+                            {profile.isActive ? 'Active profile' : 'Inactive profile'}
+                          </span>
+                          <span className={styles.appointmentProfileMeta}>
+                            Assigned staff: {assignedCount}
+                          </span>
+                        </div>
+                        <div className={styles.appointmentProfileCardActions}>
+                          <button
+                            className={styles.copyBtn}
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(`${window.location.origin}${profile.shareableLink}`)}
+                          >
+                            Copy Link
+                          </button>
+                          <button
+                            className={styles.createBtn}
+                            type="button"
+                            onClick={() => openAppointmentEditor(profile)}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
               )}
 
-              {scheduleLoading && <p className={styles.emptyNote}>Loading schedule...</p>}
+              {appointmentEditorOpen && editingAppointmentProfile && (
+                <div className={styles.appointmentModalOverlay} onClick={closeAppointmentEditor} role="presentation">
+                  <div className={styles.appointmentModal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="appointment-editor-title">
+                    <div className={styles.appointmentModalHeader}>
+                      <h3 id="appointment-editor-title" className={styles.appointmentModalTitle}>
+                        Edit Appointment: {editingAppointmentProfile.name}
+                      </h3>
+                      <button className={styles.copyBtn} type="button" onClick={closeAppointmentEditor}>Close</button>
+                    </div>
 
-              {!scheduleLoading && appointmentRules.length > 0 && (
-                <div className={styles.scheduleList}>
-                  {appointmentRules
-                    .slice()
-                    .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
-                    .map(rule => {
-                      const daySlots = slotsForRule(rule)
-                      return (
-                        <article
-                          key={rule.dayOfWeek}
-                          className={`${styles.scheduleCard} ${rule.isEnabled ? styles.scheduleCardEnabled : styles.scheduleCardDisabled}`}
-                        >
-                          <header className={styles.scheduleCardHeader}>
-                            <div>
-                              <h3 className={styles.scheduleDay}>{dayLabels[rule.dayOfWeek]}</h3>
-                              <p className={styles.scheduleSummary}>
-                                {rule.isEnabled
-                                  ? `${toInputTime(rule.startTime)} - ${toInputTime(rule.endTime)} · every ${rule.slotDurationMinutes} min`
-                                  : 'Closed'}
-                              </p>
-                            </div>
-                            <span className={styles.capacityPill}>{daySlots} slots</span>
-                          </header>
-
-                          <div className={styles.scheduleGrid}>
-                            <label className={styles.checkboxLabel}>
-                              <input
-                                type="checkbox"
-                                checked={rule.isEnabled}
-                                onChange={e => updateRule(rule.dayOfWeek, { isEnabled: e.target.checked })}
-                              />
-                              <span>Open for appointments</span>
-                            </label>
-
-                            <div className={styles.formGroup}>
-                              <label className={styles.label}>Start time</label>
-                              <input
-                                className={styles.input}
-                                type="time"
-                                value={toInputTime(rule.startTime)}
-                                disabled={!rule.isEnabled}
-                                onChange={e => updateRule(rule.dayOfWeek, { startTime: `${e.target.value}:00` })}
-                              />
-                            </div>
-
-                            <div className={styles.formGroup}>
-                              <label className={styles.label}>End time</label>
-                              <input
-                                className={styles.input}
-                                type="time"
-                                value={toInputTime(rule.endTime)}
-                                disabled={!rule.isEnabled}
-                                onChange={e => updateRule(rule.dayOfWeek, { endTime: `${e.target.value}:00` })}
-                              />
-                            </div>
-
-                            <div className={styles.formGroup}>
-                              <label className={styles.label}>Duration per appointment (mins)</label>
-                              <input
-                                className={styles.input}
-                                type="number"
-                                min={5}
-                                max={240}
-                                value={rule.slotDurationMinutes}
-                                disabled={!rule.isEnabled}
-                                onChange={e => {
-                                  const parsed = Number.parseInt(e.target.value || '30', 10)
-                                  updateRule(rule.dayOfWeek, {
-                                    slotDurationMinutes: Number.isNaN(parsed) ? 30 : parsed,
-                                  })
-                                }}
-                              />
-                            </div>
-                          </div>
+                    <div className={styles.appointmentModalBody}>
+                      <div className={styles.statsRow}>
+                        <article className={styles.statCard}>
+                          <span className={styles.statLabel}>Enabled days</span>
+                          <strong className={styles.statValue}>{appointmentSummary.enabledDays}/7</strong>
                         </article>
-                      )
-                    })}
+                        <article className={styles.statCard}>
+                          <span className={styles.statLabel}>Total weekly capacity</span>
+                          <strong className={styles.statValue}>{appointmentSummary.totalWeeklySlots}</strong>
+                          <span className={styles.statHint}>appointments/week</span>
+                        </article>
+                      </div>
+
+                      {editorShareLink && (
+                        <div className={styles.successBanner} role="status">
+                          <span>Shareable appointment link:</span>
+                          <strong className={styles.linkText}>{window.location.origin}{editorShareLink}</strong>
+                          <button className={styles.copyBtn} type="button" onClick={copyAppointmentLink}>
+                            {copiedAppointmentLink ? '✓ Copied!' : 'Copy Link'}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className={styles.staffAssignCard}>
+                        <h4 className={styles.sectionSubTitle}>Assign Staff</h4>
+                        <p className={styles.sectionHint}>Select staff members responsible for this appointment profile.</p>
+                        {staffAccounts.filter(staff => staff.isActive).length === 0 && (
+                          <p className={styles.emptyNote}>No active staff accounts available.</p>
+                        )}
+                        <div className={styles.staffAssignGrid}>
+                          {staffAccounts
+                            .filter(staff => staff.isActive)
+                            .map(staff => (
+                              <label key={`appointment-staff-${staff.userId}`} className={styles.staffAssignItem}>
+                                <input
+                                  type="checkbox"
+                                  checked={editorAssignedStaffUserIds.includes(staff.userId)}
+                                  onChange={() => toggleEditorStaffAssignment(staff.userId)}
+                                />
+                                <span>
+                                  <strong>{staff.name}</strong>
+                                  <span className={styles.staffMeta}>{staff.email}</span>
+                                </span>
+                              </label>
+                            ))}
+                        </div>
+                      </div>
+
+                      {scheduleLoading && <p className={styles.emptyNote}>Loading schedule...</p>}
+
+                      {!scheduleLoading && editorRules.length > 0 && (
+                        <div className={styles.scheduleList}>
+                          {editorRules
+                            .slice()
+                            .sort((a, b) => a.dayOfWeek - b.dayOfWeek)
+                            .map(rule => {
+                              const daySlots = slotsForRule(rule)
+                              return (
+                                <article
+                                  key={rule.dayOfWeek}
+                                  className={`${styles.scheduleCard} ${rule.isEnabled ? styles.scheduleCardEnabled : styles.scheduleCardDisabled}`}
+                                >
+                                  <header className={styles.scheduleCardHeader}>
+                                    <div>
+                                      <h3 className={styles.scheduleDay}>{dayLabels[rule.dayOfWeek]}</h3>
+                                      <p className={styles.scheduleSummary}>
+                                        {rule.isEnabled
+                                          ? `${toInputTime(rule.startTime)} - ${toInputTime(rule.endTime)} · every ${rule.slotDurationMinutes} min`
+                                          : 'Closed'}
+                                      </p>
+                                    </div>
+                                    <span className={styles.capacityPill}>{daySlots} slots</span>
+                                  </header>
+
+                                  <div className={styles.scheduleGrid}>
+                                    <label className={styles.checkboxLabel}>
+                                      <input
+                                        type="checkbox"
+                                        checked={rule.isEnabled}
+                                        onChange={e => updateRule(rule.dayOfWeek, { isEnabled: e.target.checked })}
+                                      />
+                                      <span>Open for appointments</span>
+                                    </label>
+
+                                    <div className={styles.formGroup}>
+                                      <label className={styles.label}>Start time</label>
+                                      <input
+                                        className={styles.input}
+                                        type="time"
+                                        value={toInputTime(rule.startTime)}
+                                        disabled={!rule.isEnabled}
+                                        onChange={e => updateRule(rule.dayOfWeek, { startTime: `${e.target.value}:00` })}
+                                      />
+                                    </div>
+
+                                    <div className={styles.formGroup}>
+                                      <label className={styles.label}>End time</label>
+                                      <input
+                                        className={styles.input}
+                                        type="time"
+                                        value={toInputTime(rule.endTime)}
+                                        disabled={!rule.isEnabled}
+                                        onChange={e => updateRule(rule.dayOfWeek, { endTime: `${e.target.value}:00` })}
+                                      />
+                                    </div>
+
+                                    <div className={styles.formGroup}>
+                                      <label className={styles.label}>Duration per appointment (mins)</label>
+                                      <input
+                                        className={styles.input}
+                                        type="number"
+                                        min={5}
+                                        max={240}
+                                        value={rule.slotDurationMinutes}
+                                        disabled={!rule.isEnabled}
+                                        onChange={e => {
+                                          const parsed = Number.parseInt(e.target.value || '30', 10)
+                                          updateRule(rule.dayOfWeek, {
+                                            slotDurationMinutes: Number.isNaN(parsed) ? 30 : parsed,
+                                          })
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                </article>
+                              )
+                            })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={styles.appointmentModalActions}>
+                      <button className={styles.secondaryBtn} type="button" onClick={closeAppointmentEditor}>
+                        Cancel
+                      </button>
+                      <button
+                        className={styles.createBtn}
+                        type="button"
+                        onClick={saveSchedule}
+                        disabled={scheduleSaving || scheduleLoading || editorRules.length !== 7}
+                      >
+                        {scheduleSaving ? 'Saving…' : 'Save Appointment Settings'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
-
-              <button
-                className={styles.createBtn}
-                type="button"
-                onClick={saveSchedule}
-                disabled={scheduleSaving || scheduleLoading || appointmentRules.length !== 7 || !selectedAppointmentProfileId}
-              >
-                {scheduleSaving ? 'Saving…' : 'Save Appointment Settings'}
-              </button>
             </section>
           </>
         )}
@@ -1036,33 +1406,162 @@ export function AdminDashboardPage() {
                 <ul className={styles.staffList}>
                   {staffAccounts.map(user => (
                     <li key={user.userId} className={styles.staffCard}>
-                      <div className={styles.staffCardInfo}>
-                        <strong className={styles.staffName}>{user.name}</strong>
-                        <span className={styles.staffMeta}>{user.email}</span>
-                        {user.phone && <span className={styles.staffMeta}>{user.phone}</span>}
-                        <span className={styles.staffMeta}>
-                          Created {new Date(user.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
+                      {(() => {
+                        const profile = staffProfileByEmail.get(user.email.toLowerCase())
+                        return (
+                          <>
+                            <div className={styles.staffCardInfo}>
+                              <strong className={styles.staffName}>{user.name}</strong>
+                              <span className={styles.staffMeta}>{user.email}</span>
+                              {user.phone && <span className={styles.staffMeta}>{user.phone}</span>}
+                              {profile?.shiftStart && profile?.shiftEnd && (
+                                <span className={styles.staffMeta}>Shift: {profile.shiftStart}-{profile.shiftEnd}</span>
+                              )}
+                              {profile && (
+                                <span className={styles.staffMeta}>
+                                  Assigned office: {profile.officeIds[0] ? (officeNameById.get(profile.officeIds[0]) ?? 'Unmapped office') : 'Unassigned'}
+                                </span>
+                              )}
+                              <span className={styles.staffMeta}>
+                                Created {new Date(user.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
 
-                      <div className={styles.staffActions}>
-                        <span className={user.isActive ? styles.statusActive : styles.statusInactive}>
-                          {user.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                        <button
-                          type="button"
-                          className={styles.copyBtn}
-                          disabled={staffActionUserId === user.userId}
-                          onClick={() => handleStaffStatusToggle(user)}
-                        >
-                          {staffActionUserId === user.userId
-                            ? 'Updating...'
-                            : (user.isActive ? 'Deactivate' : 'Reactivate')}
-                        </button>
-                      </div>
+                            <div className={styles.staffActions}>
+                              <span className={user.isActive ? styles.statusActive : styles.statusInactive}>
+                                {user.isActive ? 'Active' : 'Inactive'}
+                              </span>
+                              <button
+                                type="button"
+                                className={styles.copyBtn}
+                                disabled={staffActionUserId === user.userId}
+                                onClick={() => handleStaffStatusToggle(user)}
+                              >
+                                {staffActionUserId === user.userId
+                                  ? 'Updating...'
+                                  : (user.isActive ? 'Deactivate' : 'Reactivate')}
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.copyBtn}
+                                onClick={() => profile && beginEditStaffProfile(profile)}
+                                disabled={!profile}
+                              >
+                                Edit Details
+                              </button>
+                            </div>
+                          </>
+                        )
+                      })()}
                     </li>
                   ))}
                 </ul>
+              )}
+            </div>
+
+            <div className={styles.staffListBlock}>
+              <h3 className={styles.sectionSubTitle}>Staff Profile Management</h3>
+              <p className={styles.sectionHint}>Edit assigned offices, counter and shift details from Staff Accounts.</p>
+
+              {staffProfilesLoading && (
+                <p className={styles.emptyNote}>Loading staff profile data...</p>
+              )}
+
+              {!staffProfilesLoading && selectedStaffProfileId && (
+                <div className={styles.profileEditorCard}>
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-name">Name</label>
+                      <input
+                        id="staff-edit-name"
+                        className={styles.input}
+                        type="text"
+                        value={staffProfileForm.name}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-phone">Phone</label>
+                      <input
+                        id="staff-edit-phone"
+                        className={styles.input}
+                        type="tel"
+                        value={staffProfileForm.phone}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-shift-start">Shift Start (HH:mm)</label>
+                      <input
+                        id="staff-edit-shift-start"
+                        className={styles.input}
+                        type="time"
+                        value={staffProfileForm.shiftStart}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftStart: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="staff-edit-shift-end">Shift End (HH:mm)</label>
+                      <input
+                        id="staff-edit-shift-end"
+                        className={styles.input}
+                        type="time"
+                        value={staffProfileForm.shiftEnd}
+                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftEnd: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className={styles.sectionSubTitle}>Assigned Office</p>
+                    {officeOptions.length === 0 ? (
+                      <p className={styles.emptyNote}>No active offices found.</p>
+                    ) : (
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-office">Office</label>
+                        <select
+                          id="staff-edit-office"
+                          className={styles.input}
+                          value={staffProfileForm.officeId}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, officeId: e.target.value }))}
+                        >
+                          <option value="">Select one office</option>
+                          {officeOptions.map(office => (
+                            <option key={office.officeId} value={office.officeId}>
+                              {office.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={styles.staffEditorActions}>
+                    <button
+                      type="button"
+                      className={styles.createBtn}
+                      onClick={saveStaffProfile}
+                      disabled={staffProfileSaving || !staffProfileForm.name.trim()}
+                    >
+                      {staffProfileSaving ? 'Saving...' : 'Save Staff Details'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.copyBtn}
+                      onClick={resetStaffProfileEditor}
+                      disabled={staffProfileSaving}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {!staffProfilesLoading && !selectedStaffProfileId && (
+                <p className={styles.emptyNote}>Choose a staff account above and click Edit Details.</p>
               )}
             </div>
           </section>

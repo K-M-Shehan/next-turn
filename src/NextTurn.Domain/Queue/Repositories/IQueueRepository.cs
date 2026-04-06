@@ -124,4 +124,6 @@ public interface IQueueRepository
         GetStaffAssignmentsAsync(Guid queueId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<QueueEntity>> GetQueuesAssignedToStaffAsync(Guid staffUserId, CancellationToken cancellationToken);
+
+    Task<bool> DeleteQueueAsync(Guid queueId, CancellationToken cancellationToken);
 }

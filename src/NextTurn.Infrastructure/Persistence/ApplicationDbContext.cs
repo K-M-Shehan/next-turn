@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using NextTurn.Application.Common.Interfaces;
 using AppointmentEntity  = NextTurn.Domain.Appointment.Entities.Appointment;
 using AppointmentProfile = NextTurn.Domain.Appointment.Entities.AppointmentProfile;
+using AppointmentProfileStaffAssignment = NextTurn.Domain.Appointment.Entities.AppointmentProfileStaffAssignment;
 using AppointmentScheduleRule = NextTurn.Domain.Appointment.Entities.AppointmentScheduleRule;
 using NextTurn.Domain.Auth.Entities;
 using StaffOfficeAssignment = NextTurn.Domain.Auth.Entities.StaffOfficeAssignment;
@@ -53,6 +54,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     // Appointment module (NT-19).
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
     public DbSet<AppointmentProfile> AppointmentProfiles => Set<AppointmentProfile>();
+    public DbSet<AppointmentProfileStaffAssignment> AppointmentProfileStaffAssignments => Set<AppointmentProfileStaffAssignment>();
     public DbSet<AppointmentScheduleRule> AppointmentScheduleRules => Set<AppointmentScheduleRule>();
     public DbSet<StaffOfficeAssignment> StaffOfficeAssignments => Set<StaffOfficeAssignment>();
     public DbSet<ServiceEntity> Services => Set<ServiceEntity>();
@@ -112,6 +114,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         modelBuilder.Entity<AppointmentScheduleRule>()
             .HasQueryFilter(r => r.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<AppointmentProfileStaffAssignment>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
         modelBuilder.Entity<StaffOfficeAssignment>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);

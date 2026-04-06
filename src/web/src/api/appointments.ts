@@ -27,6 +27,13 @@ export interface AppointmentProfileSummary {
   shareableLink: string
 }
 
+export interface AppointmentStaffAssignment {
+  staffUserId: string
+  name: string
+  email: string
+  isActive: boolean
+}
+
 export interface AppointmentBookingContext {
   organisationId: string
   organisationName: string
@@ -280,6 +287,71 @@ export async function createAppointmentProfile(
     )
 
     return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+export async function listAppointmentProfileStaffAssignments(
+  organisationId: string,
+  appointmentProfileId: string,
+): Promise<AppointmentStaffAssignment[]> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<AppointmentStaffAssignment[]>(
+      `/appointments/profiles/${appointmentProfileId}/staff-assignments`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': organisationId,
+        },
+      },
+    )
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+export async function assignStaffToAppointmentProfile(
+  organisationId: string,
+  appointmentProfileId: string,
+  staffUserId: string,
+): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.post(
+      `/appointments/profiles/${appointmentProfileId}/staff-assignments/${staffUserId}`,
+      null,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': organisationId,
+        },
+      },
+    )
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+export async function unassignStaffFromAppointmentProfile(
+  organisationId: string,
+  appointmentProfileId: string,
+  staffUserId: string,
+): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.delete(
+      `/appointments/profiles/${appointmentProfileId}/staff-assignments/${staffUserId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': organisationId,
+        },
+      },
+    )
   } catch (err) {
     throw parseApiError(err)
   }
