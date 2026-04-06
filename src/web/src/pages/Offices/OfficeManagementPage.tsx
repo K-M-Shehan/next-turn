@@ -7,6 +7,7 @@ import {
   updateOffice,
   type OfficeDto,
 } from '../../api/offices'
+import { listStaff, type StaffDto } from '../../api/staff'
 import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import styles from './OfficeManagementPage.module.css'
@@ -39,6 +40,7 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
   const payload = getTokenPayload()
 
   const [offices, setOffices] = useState<OfficeDto[]>([])
+  const [staffMembers, setStaffMembers] = useState<StaffDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isActiveFilter, setIsActiveFilter] = useState<'all' | 'active' | 'inactive'>('active')
@@ -56,6 +58,18 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
     if (isActiveFilter === 'all') return undefined
     return isActiveFilter === 'active'
   }, [isActiveFilter])
+
+  const staffByOffice = useMemo(() => {
+    const map = new Map<string, StaffDto[]>()
+    for (const staff of staffMembers) {
+      for (const officeId of staff.officeIds) {
+        const list = map.get(officeId) ?? []
+        list.push(staff)
+        map.set(officeId, list)
+      }
+    }
+    return map
+  }, [staffMembers])
 
   useEffect(() => {
     if (!payload) {
@@ -75,14 +89,18 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
     setError(null)
 
     try {
-      const result = await listOffices(currentTenantId, {
-        isActive,
-        search: searchTerm?.trim() ? searchTerm.trim() : undefined,
-        pageNumber: 1,
-        pageSize: 50,
-      })
+      const [officesResult, staffResult] = await Promise.all([
+        listOffices(currentTenantId, {
+          isActive,
+          search: searchTerm?.trim() ? searchTerm.trim() : undefined,
+          pageNumber: 1,
+          pageSize: 50,
+        }),
+        listStaff(currentTenantId, 1, 100),
+      ])
 
-      setOffices(result.items)
+      setOffices(officesResult.items)
+      setStaffMembers(staffResult.items)
     } catch (err) {
       const apiErr = err as ApiError
       setError(apiErr.detail ?? 'Could not load offices.')
@@ -268,6 +286,27 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
             )}
           </div>
         </form>
+
+        {mode === 'edit' && editOfficeId && (
+          <div className={styles.staffPanel}>
+            <h3 className={styles.staffPanelTitle}>Staff In This Office</h3>
+            {(staffByOffice.get(editOfficeId)?.length ?? 0) === 0 ? (
+              <p className={styles.meta}>No staff currently assigned to this office.</p>
+            ) : (
+              <ul className={styles.staffList}>
+                {(staffByOffice.get(editOfficeId) ?? []).map(staff => (
+                  <li key={staff.staffUserId} className={styles.staffItem}>
+                    <strong>{staff.name}</strong>
+                    <span className={styles.meta}>{staff.email}</span>
+                    <span className={staff.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                      {staff.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </section>
 
       <section className={styles.listCard}>
@@ -293,6 +332,9 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
                     <p className={styles.meta}>Coordinates: {office.latitude}, {office.longitude}</p>
                   )}
                   <p className={styles.meta}>Hours: {office.openingHours}</p>
+                  <p className={styles.meta}>
+                    Staff assigned: {(staffByOffice.get(office.officeId)?.length ?? 0)}
+                  </p>
                 </div>
 
                 <div className={styles.itemActions}>

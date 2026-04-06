@@ -20,7 +20,7 @@ public sealed class CreateStaffCommandValidator : AbstractValidator<CreateStaffC
 
         RuleFor(x => x.OfficeIds)
             .NotNull().WithMessage("Office assignments are required.")
-            .Must(x => x.Count > 0).WithMessage("At least one office must be assigned.");
+            .Must(x => x.Count == 1).WithMessage("Exactly one office must be assigned.");
 
         RuleForEach(x => x.OfficeIds)
             .NotEmpty().WithMessage("Office ID cannot be empty.");

@@ -125,6 +125,34 @@
   gap: 0.75rem;
 }
 
+.staffPanel {
+  margin-top: 0.9rem;
+  border-top: 1px dashed #dbe4ec;
+  padding-top: 0.8rem;
+}
+
+.staffPanelTitle {
+  margin: 0 0 0.5rem;
+  font-size: 0.98rem;
+}
+
+.staffList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.staffItem {
+  border: 1px solid #dbe4ec;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.55rem 0.65rem;
+  display: grid;
+  gap: 0.15rem;
+}
+
 .list {
   list-style: none;
   padding: 0;

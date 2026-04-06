@@ -67,7 +67,7 @@ interface StaffProfileForm {
   counterName: string
   shiftStart: string
   shiftEnd: string
-  officeIds: string[]
+  officeId: string
 }
 
 const defaultForm: CreateForm = {
@@ -88,7 +88,7 @@ const defaultStaffProfileForm: StaffProfileForm = {
   counterName: '',
   shiftStart: '',
   shiftEnd: '',
-  officeIds: [],
+  officeId: '',
 }
 
 const dayLabels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -189,6 +189,11 @@ export function AdminDashboardPage() {
   const staffProfileByEmail = useMemo(
     () => new Map(staffProfiles.map(profile => [profile.email.toLowerCase(), profile])),
     [staffProfiles],
+  )
+
+  const officeNameById = useMemo(
+    () => new Map(officeOptions.map(office => [office.officeId, office.name])),
+    [officeOptions],
   )
 
   if (!payload) {
@@ -449,7 +454,7 @@ export function AdminDashboardPage() {
       counterName: profile.counterName ?? '',
       shiftStart: normalizeShiftInput(profile.shiftStart),
       shiftEnd: normalizeShiftInput(profile.shiftEnd),
-      officeIds: profile.officeIds,
+      officeId: profile.officeIds[0] ?? '',
     })
     setStaffError(null)
     setStaffSuccess(null)
@@ -458,15 +463,6 @@ export function AdminDashboardPage() {
   function resetStaffProfileEditor() {
     setSelectedStaffProfileId(null)
     setStaffProfileForm(defaultStaffProfileForm)
-  }
-
-  function toggleStaffOfficeSelection(officeId: string) {
-    setStaffProfileForm(prev => ({
-      ...prev,
-      officeIds: prev.officeIds.includes(officeId)
-        ? prev.officeIds.filter(id => id !== officeId)
-        : [...prev.officeIds, officeId],
-    }))
   }
 
   async function saveStaffProfile() {
@@ -487,6 +483,11 @@ export function AdminDashboardPage() {
       return
     }
 
+    if (!staffProfileForm.officeId) {
+      setStaffError('Please assign exactly one office.')
+      return
+    }
+
     setStaffProfileSaving(true)
     setStaffError(null)
     setStaffSuccess(null)
@@ -495,7 +496,7 @@ export function AdminDashboardPage() {
       await updateStaff(tenantId, selectedStaffProfileId, {
         name: staffProfileForm.name.trim(),
         phone: staffProfileForm.phone.trim() || null,
-        officeIds: staffProfileForm.officeIds,
+        officeIds: [staffProfileForm.officeId],
         counterName: staffProfileForm.counterName.trim() || null,
         shiftStart: shiftStart || null,
         shiftEnd: shiftEnd || null,
@@ -1218,7 +1219,9 @@ export function AdminDashboardPage() {
                                 <span className={styles.staffMeta}>Shift: {profile.shiftStart}-{profile.shiftEnd}</span>
                               )}
                               {profile && (
-                                <span className={styles.staffMeta}>Assigned offices: {profile.officeIds.length}</span>
+                                <span className={styles.staffMeta}>
+                                  Assigned office: {profile.officeIds[0] ? (officeNameById.get(profile.officeIds[0]) ?? 'Unmapped office') : 'Unassigned'}
+                                </span>
                               )}
                               <span className={styles.staffMeta}>
                                 Created {new Date(user.createdAt).toLocaleDateString()}
@@ -1325,21 +1328,25 @@ export function AdminDashboardPage() {
                   </div>
 
                   <div>
-                    <p className={styles.sectionSubTitle}>Assigned Offices</p>
+                    <p className={styles.sectionSubTitle}>Assigned Office</p>
                     {officeOptions.length === 0 ? (
                       <p className={styles.emptyNote}>No active offices found.</p>
                     ) : (
-                      <div className={styles.staffOfficeGrid}>
-                        {officeOptions.map(office => (
-                          <label key={office.officeId} className={styles.staffOfficeItem}>
-                            <input
-                              type="checkbox"
-                              checked={staffProfileForm.officeIds.includes(office.officeId)}
-                              onChange={() => toggleStaffOfficeSelection(office.officeId)}
-                            />
-                            <span>{office.name}</span>
-                          </label>
-                        ))}
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-office">Office</label>
+                        <select
+                          id="staff-edit-office"
+                          className={styles.input}
+                          value={staffProfileForm.officeId}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, officeId: e.target.value }))}
+                        >
+                          <option value="">Select one office</option>
+                          {officeOptions.map(office => (
+                            <option key={office.officeId} value={office.officeId}>
+                              {office.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     )}
                   </div>
