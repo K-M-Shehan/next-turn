@@ -8,12 +8,15 @@ using NextTurn.Application.Appointment.Commands.CancelAppointment;
 using NextTurn.Application.Appointment.Commands.ConfigureAppointmentSchedule;
 using NextTurn.Application.Appointment.Commands.CreateAppointmentProfile;
 using NextTurn.Application.Appointment.Commands.RescheduleAppointment;
+using NextTurn.Application.Appointment.Commands.AssignStaffToAppointmentProfile;
+using NextTurn.Application.Appointment.Commands.UnassignStaffFromAppointmentProfile;
 using NextTurn.Application.Appointment.Common;
 using NextTurn.Application.Appointment.Queries.GetAppointmentBookingContext;
 using NextTurn.Application.Appointment.Queries.GetAppointmentSchedule;
 using NextTurn.Application.Appointment.Queries.GetAvailableSlots;
 using NextTurn.Application.Appointment.Queries.GetMyAppointments;
 using NextTurn.Application.Appointment.Queries.ListAppointmentProfiles;
+using NextTurn.Application.Appointment.Queries.ListAppointmentProfileStaffAssignments;
 
 namespace NextTurn.API.Controllers;
 
@@ -187,6 +190,52 @@ public sealed class AppointmentsController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
 
         return Ok(result);
+    }
+
+    [HttpGet("profiles/{appointmentProfileId:guid}/staff-assignments")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(typeof(IReadOnlyList<AppointmentStaffAssignmentDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> ListProfileStaffAssignments(
+        Guid appointmentProfileId,
+        CancellationToken cancellationToken)
+    {
+        var query = new ListAppointmentProfileStaffAssignmentsQuery(appointmentProfileId);
+        var result = await _sender.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("profiles/{appointmentProfileId:guid}/staff-assignments/{staffUserId:guid}")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AssignStaffToProfile(
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken)
+    {
+        var command = new AssignStaffToAppointmentProfileCommand(appointmentProfileId, staffUserId);
+        await _sender.Send(command, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpDelete("profiles/{appointmentProfileId:guid}/staff-assignments/{staffUserId:guid}")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UnassignStaffFromProfile(
+        Guid appointmentProfileId,
+        Guid staffUserId,
+        CancellationToken cancellationToken)
+    {
+        var command = new UnassignStaffFromAppointmentProfileCommand(appointmentProfileId, staffUserId);
+        await _sender.Send(command, cancellationToken);
+        return NoContent();
     }
 
     [HttpPut("{appointmentId:guid}/reschedule")]

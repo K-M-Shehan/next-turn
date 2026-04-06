@@ -34,7 +34,13 @@ import type { CreateQueueResult, OrgQueueSummary } from '../../../api/queues'
 // Preserve type exports from queues module; stub only the network functions.
 vi.mock('../../../api/queues', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../api/queues')>()
-  return { ...actual, createQueue: vi.fn(), getOrgQueues: vi.fn() }
+  return {
+    ...actual,
+    createQueue: vi.fn(),
+    getOrgQueues: vi.fn(),
+    deleteQueue: vi.fn(),
+    listQueueStaffAssignments: vi.fn(),
+  }
 })
 
 // getTokenPayload must return a valid payload; otherwise the component redirects to '/'.
@@ -90,6 +96,8 @@ const SAMPLE_QUEUE: OrgQueueSummary = {
 
 const mockCreateQueue  = vi.mocked(queuesApi.createQueue)
 const mockGetOrgQueues = vi.mocked(queuesApi.getOrgQueues)
+const mockDeleteQueue = vi.mocked(queuesApi.deleteQueue)
+const mockListQueueStaffAssignments = vi.mocked(queuesApi.listQueueStaffAssignments)
 
 function makeApiError(
   status: number,
@@ -115,8 +123,11 @@ function renderPage() {
 beforeEach(() => {
   mockCreateQueue.mockReset()
   mockGetOrgQueues.mockReset()
+  mockDeleteQueue.mockReset()
+  mockListQueueStaffAssignments.mockReset()
   // Default: empty queue list; most tests override as needed.
   mockGetOrgQueues.mockResolvedValue([])
+  mockListQueueStaffAssignments.mockResolvedValue([])
 })
 
 // ---------------------------------------------------------------------------
@@ -345,5 +356,42 @@ describe('AdminDashboardPage — create queue errors', () => {
 
     expect(await screen.findByTestId('create-error')).toBeInTheDocument()
     expect(screen.getByText(/organisation not found/i)).toBeInTheDocument()
+  })
+})
+
+describe('AdminDashboardPage — delete queue', () => {
+  it('does not delete when confirmation is cancelled', async () => {
+    const user = userEvent.setup()
+    mockGetOrgQueues.mockResolvedValue([SAMPLE_QUEUE])
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    renderPage()
+
+    const deleteButton = await screen.findByTestId(`delete-btn-${QUEUE_ID}`)
+    await user.click(deleteButton)
+
+    expect(confirmSpy).toHaveBeenCalled()
+    expect(mockDeleteQueue).not.toHaveBeenCalled()
+
+    confirmSpy.mockRestore()
+  })
+
+  it('deletes queue when confirmation is accepted', async () => {
+    const user = userEvent.setup()
+    mockGetOrgQueues.mockResolvedValue([SAMPLE_QUEUE])
+    mockDeleteQueue.mockResolvedValue(undefined)
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    renderPage()
+
+    const deleteButton = await screen.findByTestId(`delete-btn-${QUEUE_ID}`)
+    await user.click(deleteButton)
+
+    await waitFor(() => {
+      expect(mockDeleteQueue).toHaveBeenCalledWith(QUEUE_ID, TENANT_ID)
+    })
+    expect(screen.queryByText('Main Counter')).not.toBeInTheDocument()
+
+    confirmSpy.mockRestore()
   })
 })

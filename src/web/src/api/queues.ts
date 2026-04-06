@@ -179,6 +179,28 @@ export async function getOrgQueues(
 }
 
 /**
+ * DELETE /api/queues/{queueId}
+ *
+ * Deletes a queue owned by the authenticated org admin's organisation.
+ */
+export async function deleteQueue(
+  queueId: string,
+  tenantId: string,
+): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.delete(`/queues/${queueId}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'X-Tenant-Id': tenantId,
+      },
+    })
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
  * GET /api/queues/browse
  *
  * Lists all queues for the authenticated user's organisation.

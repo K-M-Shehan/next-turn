@@ -17,7 +17,8 @@ public sealed class UpdateStaffCommandValidator : AbstractValidator<UpdateStaffC
             .MaximumLength(20).WithMessage("Phone must not exceed 20 characters.");
 
         RuleFor(x => x.OfficeIds)
-            .NotNull().WithMessage("Office assignments are required.");
+            .NotNull().WithMessage("Office assignments are required.")
+            .Must(x => x.Count == 1).WithMessage("Exactly one office must be assigned.");
 
         RuleForEach(x => x.OfficeIds)
             .NotEmpty().WithMessage("Office ID cannot be empty.");

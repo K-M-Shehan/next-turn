@@ -7,6 +7,7 @@ import {
   updateOffice,
   type OfficeDto,
 } from '../../api/offices'
+import { listStaff, type StaffDto } from '../../api/staff'
 import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import styles from './OfficeManagementPage.module.css'
@@ -29,12 +30,17 @@ const defaultForm: OfficeForm = {
   openingHours: '',
 }
 
-export function OfficeManagementPage() {
+interface OfficeManagementPageProps {
+  embedded?: boolean
+}
+
+export function OfficeManagementPage({ embedded = false }: OfficeManagementPageProps = {}) {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
   const payload = getTokenPayload()
 
   const [offices, setOffices] = useState<OfficeDto[]>([])
+  const [staffMembers, setStaffMembers] = useState<StaffDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isActiveFilter, setIsActiveFilter] = useState<'all' | 'active' | 'inactive'>('active')
@@ -42,13 +48,29 @@ export function OfficeManagementPage() {
   const [form, setForm] = useState<OfficeForm>(defaultForm)
   const [mode, setMode] = useState<Mode>('create')
   const [editOfficeId, setEditOfficeId] = useState<string | null>(null)
+  const [selectedOffice, setSelectedOffice] = useState<OfficeDto | null>(null)
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
+
+  const activeCount = useMemo(() => offices.filter(x => x.isActive).length, [offices])
+  const inactiveCount = useMemo(() => offices.filter(x => !x.isActive).length, [offices])
 
   const derivedIsActive = useMemo(() => {
     if (isActiveFilter === 'all') return undefined
     return isActiveFilter === 'active'
   }, [isActiveFilter])
+
+  const staffByOffice = useMemo(() => {
+    const map = new Map<string, StaffDto[]>()
+    for (const staff of staffMembers) {
+      for (const officeId of staff.officeIds) {
+        const list = map.get(officeId) ?? []
+        list.push(staff)
+        map.set(officeId, list)
+      }
+    }
+    return map
+  }, [staffMembers])
 
   useEffect(() => {
     if (!payload) {
@@ -68,14 +90,18 @@ export function OfficeManagementPage() {
     setError(null)
 
     try {
-      const result = await listOffices(currentTenantId, {
-        isActive,
-        search: searchTerm?.trim() ? searchTerm.trim() : undefined,
-        pageNumber: 1,
-        pageSize: 50,
-      })
+      const [officesResult, staffResult] = await Promise.all([
+        listOffices(currentTenantId, {
+          isActive,
+          search: searchTerm?.trim() ? searchTerm.trim() : undefined,
+          pageNumber: 1,
+          pageSize: 50,
+        }),
+        listStaff(currentTenantId, 1, 100),
+      ])
 
-      setOffices(result.items)
+      setOffices(officesResult.items)
+      setStaffMembers(staffResult.items)
     } catch (err) {
       const apiErr = err as ApiError
       setError(apiErr.detail ?? 'Could not load offices.')
@@ -88,6 +114,14 @@ export function OfficeManagementPage() {
     setForm(defaultForm)
     setMode('create')
     setEditOfficeId(null)
+  }
+
+  function openOfficeDetails(office: OfficeDto) {
+    setSelectedOffice(office)
+  }
+
+  function closeOfficeDetails() {
+    setSelectedOffice(null)
   }
 
   function selectForEdit(office: OfficeDto) {
@@ -142,6 +176,10 @@ export function OfficeManagementPage() {
   async function handleDeactivate(officeId: string) {
     if (!tenantId) return
 
+    if (!window.confirm('Deactivate this office? It will be hidden from public selection.')) {
+      return
+    }
+
     setError(null)
     setSuccess(null)
 
@@ -156,34 +194,55 @@ export function OfficeManagementPage() {
   }
 
   return (
-    <div className={styles.page}>
+    <div className={embedded ? styles.embeddedPage : styles.page}>
       <header className={styles.header}>
-        <h1>Office Management</h1>
-        <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
-          Back to Admin
-        </button>
+        <div>
+          <h1 className={styles.title}>Office Management</h1>
+          <p className={styles.subtitle}>Create and manage organisation branches and locations.</p>
+        </div>
+        {!embedded && (
+          <button type="button" className={styles.backBtn} onClick={() => navigate(`/admin/${tenantId}`)}>
+            Back to Admin
+          </button>
+        )}
       </header>
 
       {error && <div className={styles.error}>{error}</div>}
       {success && <div className={styles.success}>{success}</div>}
 
       <section className={styles.filters}>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name or address"
-          className={styles.input}
-        />
-        <select
-          value={isActiveFilter}
-          onChange={(e) => setIsActiveFilter(e.target.value as 'all' | 'active' | 'inactive')}
-          className={styles.select}
-        >
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="all">All</option>
-        </select>
+        <div className={styles.filterGrid}>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by office name or address"
+            className={styles.input}
+          />
+          <select
+            value={isActiveFilter}
+            onChange={(e) => setIsActiveFilter(e.target.value as 'all' | 'active' | 'inactive')}
+            className={styles.select}
+            aria-label="Office status filter"
+          >
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+            <option value="all">All offices</option>
+          </select>
+          <button
+            type="button"
+            className={styles.secondaryBtn}
+            onClick={() => {
+              setSearch('')
+              setIsActiveFilter('active')
+            }}
+          >
+            Reset Filters
+          </button>
+        </div>
+        <p className={styles.metaSummary}>
+          Showing {offices.length} offices · {activeCount} active · {inactiveCount} inactive
+        </p>
       </section>
 
       <section className={styles.formCard}>
@@ -236,6 +295,27 @@ export function OfficeManagementPage() {
             )}
           </div>
         </form>
+
+        {mode === 'edit' && editOfficeId && (
+          <div className={styles.staffPanel}>
+            <h3 className={styles.staffPanelTitle}>Staff In This Office</h3>
+            {(staffByOffice.get(editOfficeId)?.length ?? 0) === 0 ? (
+              <p className={styles.meta}>No staff currently assigned to this office.</p>
+            ) : (
+              <ul className={styles.staffList}>
+                {(staffByOffice.get(editOfficeId) ?? []).map(staff => (
+                  <li key={staff.staffUserId} className={styles.staffItem}>
+                    <strong>{staff.name}</strong>
+                    <span className={styles.meta}>{staff.email}</span>
+                    <span className={staff.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                      {staff.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </section>
 
       <section className={styles.listCard}>
@@ -247,13 +327,34 @@ export function OfficeManagementPage() {
         ) : (
           <ul className={styles.list}>
             {offices.map((office) => (
-              <li key={office.officeId} className={styles.item}>
+              <li
+                key={office.officeId}
+                className={styles.item}
+                role="button"
+                tabIndex={0}
+                onClick={() => openOfficeDetails(office)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openOfficeDetails(office)
+                  }
+                }}
+              >
                 <div>
                   <h3>{office.name}</h3>
                   <p>{office.address}</p>
                   <p className={styles.meta}>
-                    {office.isActive ? 'Active' : 'Inactive'}
+                    <span className={office.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                      {office.isActive ? 'Active' : 'Inactive'}
+                    </span>
                     {office.deactivatedAt ? ` · Deactivated ${new Date(office.deactivatedAt).toLocaleString()}` : ''}
+                  </p>
+                  {office.latitude !== null && office.longitude !== null && (
+                    <p className={styles.meta}>Coordinates: {office.latitude}, {office.longitude}</p>
+                  )}
+                  <p className={styles.meta}>Hours: {office.openingHours}</p>
+                  <p className={styles.meta}>
+                    Staff assigned: {(staffByOffice.get(office.officeId)?.length ?? 0)}
                   </p>
                 </div>
 
@@ -261,7 +362,10 @@ export function OfficeManagementPage() {
                   <button
                     type="button"
                     className={styles.secondaryBtn}
-                    onClick={() => selectForEdit(office)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      selectForEdit(office)
+                    }}
                     disabled={!office.isActive}
                   >
                     Edit
@@ -269,7 +373,10 @@ export function OfficeManagementPage() {
                   <button
                     type="button"
                     className={styles.dangerBtn}
-                    onClick={() => handleDeactivate(office.officeId)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void handleDeactivate(office.officeId)
+                    }}
                     disabled={!office.isActive}
                   >
                     Deactivate
@@ -280,6 +387,70 @@ export function OfficeManagementPage() {
           </ul>
         )}
       </section>
+
+      {selectedOffice && (
+        <div className={styles.modalOverlay} onClick={closeOfficeDetails}>
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="office-detail-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <h3 id="office-detail-title" className={styles.modalTitle}>{selectedOffice.name}</h3>
+              <button type="button" className={styles.secondaryBtn} onClick={closeOfficeDetails}>
+                Close
+              </button>
+            </div>
+
+            <div className={styles.modalBody}>
+              <p><strong>Address:</strong> {selectedOffice.address}</p>
+              <p><strong>Status:</strong> {selectedOffice.isActive ? 'Active' : 'Inactive'}</p>
+              <p><strong>Opening hours:</strong> {selectedOffice.openingHours}</p>
+              {selectedOffice.latitude !== null && selectedOffice.longitude !== null && (
+                <p><strong>Coordinates:</strong> {selectedOffice.latitude}, {selectedOffice.longitude}</p>
+              )}
+              {selectedOffice.deactivatedAt && (
+                <p><strong>Deactivated at:</strong> {new Date(selectedOffice.deactivatedAt).toLocaleString()}</p>
+              )}
+
+              <div className={styles.staffPanel}>
+                <h4 className={styles.staffPanelTitle}>Assigned Staff</h4>
+                {(staffByOffice.get(selectedOffice.officeId)?.length ?? 0) === 0 ? (
+                  <p className={styles.meta}>No staff currently assigned to this office.</p>
+                ) : (
+                  <ul className={styles.staffList}>
+                    {(staffByOffice.get(selectedOffice.officeId) ?? []).map(staff => (
+                      <li key={staff.staffUserId} className={styles.staffItem}>
+                        <strong>{staff.name}</strong>
+                        <span className={styles.meta}>{staff.email}</span>
+                        <span className={staff.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                          {staff.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                onClick={() => {
+                  selectForEdit(selectedOffice)
+                  closeOfficeDetails()
+                }}
+                disabled={!selectedOffice.isActive}
+              >
+                Edit Office
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

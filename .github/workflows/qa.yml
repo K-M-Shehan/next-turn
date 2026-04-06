@@ -86,6 +86,63 @@ jobs:
           echo "- Filter: Suite=Regression & Layer=Integration" >> $GITHUB_STEP_SUMMARY
           echo "- Artifact: critical-integration-test-results" >> $GITHUB_STEP_SUMMARY
 
+  newman-contract-tests:
+    name: Newman Contract Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Detect contract collection
+        id: detect_collection
+        run: |
+          if [ -f "postman/NextTurn.postman_collection.json" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Newman
+        if: steps.detect_collection.outputs.exists == 'true'
+        run: npm install --global newman
+
+      - name: Run Newman contract suite
+        if: steps.detect_collection.outputs.exists == 'true'
+        run: |
+          newman run postman/NextTurn.postman_collection.json \
+            --environment postman/nextturn.postman_environment.json \
+            --reporters cli,junit \
+            --reporter-junit-export TestResults/newman/newman-results.xml
+
+      - name: Skip note when collection missing
+        if: steps.detect_collection.outputs.exists != 'true'
+        run: echo "No Postman collection found; skipping Newman contract tests."
+
+      - name: Upload Newman results
+        if: always() && steps.detect_collection.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-contract-test-results
+          path: TestResults/newman
+
+      - name: Newman summary
+        if: always()
+        run: |
+          echo "### Newman Contract Tests" >> $GITHUB_STEP_SUMMARY
+          echo "- Collection present: ${{ steps.detect_collection.outputs.exists }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.detect_collection.outputs.exists }}" = "true" ]; then
+            echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Artifact: newman-contract-test-results" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- Status: skipped (collection not found)" >> $GITHUB_STEP_SUMMARY
+          fi
+
   playwright-smoke:
     name: Playwright Smoke
     runs-on: ubuntu-latest
@@ -311,6 +368,7 @@ jobs:
     needs:
       - unit-tests
       - critical-integration-tests
+      - newman-contract-tests
       - playwright-smoke
       - playwright-full-regression
 
@@ -320,6 +378,7 @@ jobs:
           echo "## Regression Suite Overview" >> $GITHUB_STEP_SUMMARY
           echo "- Unit Tests: ${{ needs.unit-tests.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Critical Integration Tests: ${{ needs.critical-integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Newman Contract Tests: ${{ needs.newman-contract-tests.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Playwright Smoke: ${{ needs.playwright-smoke.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Playwright Full Regression: ${{ needs.playwright-full-regression.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Artifacts page: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
@@ -328,6 +387,7 @@ jobs:
         if: |
           needs.unit-tests.result != 'success' ||
           needs.critical-integration-tests.result != 'success' ||
+          needs.newman-contract-tests.result != 'success' ||
           needs.playwright-smoke.result != 'success' ||
           needs.playwright-full-regression.result != 'success'
         run: exit 1
