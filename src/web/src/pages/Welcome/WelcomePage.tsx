@@ -313,7 +313,7 @@ function ForOrgsSection() {
               <ArrowRightIcon />
             </Link>
             <Link to="/find-org-login" className={styles.forOrgsLinkMuted}>
-              Already an admin? Find login link
+              Staff or admin? Find your login link
             </Link>
           </div>
         </div>

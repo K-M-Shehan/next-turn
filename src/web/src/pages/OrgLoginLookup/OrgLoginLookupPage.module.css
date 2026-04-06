@@ -117,6 +117,56 @@
   margin: 0;
 }
 
+.multiBox {
+  margin-top: 4px;
+  border: 1px solid rgba(2, 132, 199, 0.25);
+  background: rgba(239, 246, 255, 0.9);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.multiTitle {
+  margin: 0;
+  font-weight: 700;
+}
+
+.multiSubtitle {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+
+.workspaceList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.workspaceItem {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.88);
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspaceMeta {
+  display: grid;
+  gap: 2px;
+}
+
+.workspaceMeta span {
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
 .loginBtn {
   border: 1px solid var(--color-primary);
   background: transparent;
@@ -132,5 +182,10 @@
 @media (max-width: 640px) {
   .card {
     padding: 18px;
+  }
+
+  .workspaceItem {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

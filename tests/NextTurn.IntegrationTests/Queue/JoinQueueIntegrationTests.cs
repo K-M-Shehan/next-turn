@@ -22,6 +22,9 @@ namespace NextTurn.IntegrationTests.Queue;
 ///   6. Malformed queueId GUID in route → 422 Unprocessable Entity
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class JoinQueueIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

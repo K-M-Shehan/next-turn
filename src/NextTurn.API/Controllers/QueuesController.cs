@@ -5,10 +5,13 @@ using Microsoft.AspNetCore.Mvc;
 using NextTurn.API.Models.Queues;
 using NextTurn.Application.Queue.Commands.CallNext;
 using NextTurn.Application.Queue.Commands.CreateQueue;
+using NextTurn.Application.Queue.Commands.DeleteQueue;
 using NextTurn.Application.Queue.Commands.JoinQueue;
 using NextTurn.Application.Queue.Commands.LeaveQueue;
 using NextTurn.Application.Queue.Commands.MarkNoShow;
 using NextTurn.Application.Queue.Commands.MarkServed;
+using NextTurn.Application.Queue.Commands.ServeNext;
+using NextTurn.Application.Queue.Commands.Skip;
 using NextTurn.Application.Queue.Commands.AssignStaffToQueue;
 using NextTurn.Application.Queue.Commands.UnassignStaffFromQueue;
 using NextTurn.Application.Queue.Commands;
@@ -191,6 +194,29 @@ public sealed class QueuesController : ControllerBase
         var result = await _sender.Send(command, cancellationToken);
 
         return CreatedAtAction(nameof(GetQueueStatus), new { queueId = result.QueueId }, result);
+    }
+
+    /// <summary>
+    /// Deletes a queue owned by the authenticated org admin's organisation.
+    /// </summary>
+    [HttpDelete("{queueId:guid}")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> DeleteQueue(
+        Guid queueId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetOrganisationId(out var organisationId))
+            return Unauthorized();
+
+        var command = new DeleteQueueCommand(organisationId, queueId);
+        await _sender.Send(command, cancellationToken);
+
+        return NoContent();
     }
 
     /// <summary>
@@ -489,6 +515,59 @@ public sealed class QueuesController : ControllerBase
         }
 
         var command = new MarkNoShowCommand(queueId);
+        var result = await _sender.Send(command, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Marks the queue head as served and advances the queue.
+    /// </summary>
+    [HttpPost("{queueId:guid}/serve-next")]
+    [Authorize(Roles = "Staff")]
+    [ProducesResponseType(typeof(QueueEntryActionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ServeNext(
+        Guid queueId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var isAssigned = await _queueRepository.IsStaffAssignedToQueueAsync(queueId, userId, cancellationToken);
+        if (!isAssigned)
+            return Forbid();
+
+        var command = new ServeNextCommand(queueId, userId);
+        var result = await _sender.Send(command, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Marks the queue head as skipped/no-show and advances the queue.
+    /// </summary>
+    [HttpPost("{queueId:guid}/skip")]
+    [Authorize(Roles = "Staff")]
+    [ProducesResponseType(typeof(QueueEntryActionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> Skip(
+        Guid queueId,
+        [FromBody] SkipQueueEntryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var isAssigned = await _queueRepository.IsStaffAssignedToQueueAsync(queueId, userId, cancellationToken);
+        if (!isAssigned)
+            return Forbid();
+
+        var command = new SkipCommand(queueId, userId, request?.Reason);
         var result = await _sender.Send(command, cancellationToken);
         return Ok(result);
     }

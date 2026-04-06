@@ -2,13 +2,19 @@ using Microsoft.EntityFrameworkCore;
 using NextTurn.Application.Common.Interfaces;
 using AppointmentEntity  = NextTurn.Domain.Appointment.Entities.Appointment;
 using AppointmentProfile = NextTurn.Domain.Appointment.Entities.AppointmentProfile;
+using AppointmentProfileStaffAssignment = NextTurn.Domain.Appointment.Entities.AppointmentProfileStaffAssignment;
 using AppointmentScheduleRule = NextTurn.Domain.Appointment.Entities.AppointmentScheduleRule;
 using NextTurn.Domain.Auth.Entities;
+using StaffOfficeAssignment = NextTurn.Domain.Auth.Entities.StaffOfficeAssignment;
 using NextTurn.Infrastructure.Persistence.Configurations.Auth;
 using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
 using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 using QueueStaffAssignment = NextTurn.Domain.Queue.Entities.QueueStaffAssignment;
+using QueueActionAuditLog = NextTurn.Domain.Queue.Entities.QueueActionAuditLog;
+using OfficeEntity = NextTurn.Domain.Office.Entities.Office;
+using ServiceEntity = NextTurn.Domain.Service.Entities.Service;
+using ServiceOfficeAssignment = NextTurn.Domain.Service.Entities.ServiceOfficeAssignment;
 
 namespace NextTurn.Infrastructure.Persistence;
 
@@ -37,16 +43,22 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     public DbSet<User>             Users        => Set<User>();
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
+    public DbSet<OfficeEntity> Offices => Set<OfficeEntity>();
 
     // Queue module (NT-16) — EF Core entity configurations and migration added in NT-16-3.
     public DbSet<QueueEntity> Queues       => Set<QueueEntity>();
     public DbSet<QueueEntry>  QueueEntries => Set<QueueEntry>();
     public DbSet<QueueStaffAssignment> QueueStaffAssignments => Set<QueueStaffAssignment>();
+    public DbSet<QueueActionAuditLog> QueueActionAuditLogs => Set<QueueActionAuditLog>();
 
     // Appointment module (NT-19).
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
     public DbSet<AppointmentProfile> AppointmentProfiles => Set<AppointmentProfile>();
+    public DbSet<AppointmentProfileStaffAssignment> AppointmentProfileStaffAssignments => Set<AppointmentProfileStaffAssignment>();
     public DbSet<AppointmentScheduleRule> AppointmentScheduleRules => Set<AppointmentScheduleRule>();
+    public DbSet<StaffOfficeAssignment> StaffOfficeAssignments => Set<StaffOfficeAssignment>();
+    public DbSet<ServiceEntity> Services => Set<ServiceEntity>();
+    public DbSet<ServiceOfficeAssignment> ServiceOfficeAssignments => Set<ServiceOfficeAssignment>();
 
     // ── Model configuration ───────────────────────────────────────────────────
 
@@ -87,6 +99,12 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<QueueStaffAssignment>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
+        modelBuilder.Entity<QueueActionAuditLog>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<OfficeEntity>()
+            .HasQueryFilter(o => o.OrganisationId == _tenantContext.TenantId);
+
         // Appointments: scoped by organisation (tenant).
         modelBuilder.Entity<AppointmentEntity>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
@@ -96,6 +114,18 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         modelBuilder.Entity<AppointmentScheduleRule>()
             .HasQueryFilter(r => r.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<AppointmentProfileStaffAssignment>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<StaffOfficeAssignment>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<ServiceEntity>()
+            .HasQueryFilter(s => s.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<ServiceOfficeAssignment>()
+            .HasQueryFilter(s => s.OrganisationId == _tenantContext.TenantId);
     }
 
     // ── SaveChanges override ──────────────────────────────────────────────────

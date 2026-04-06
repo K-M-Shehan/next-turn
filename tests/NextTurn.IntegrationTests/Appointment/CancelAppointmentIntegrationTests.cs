@@ -12,6 +12,9 @@ using NextTurn.Infrastructure.Persistence;
 namespace NextTurn.IntegrationTests.Appointment;
 
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class CancelAppointmentIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

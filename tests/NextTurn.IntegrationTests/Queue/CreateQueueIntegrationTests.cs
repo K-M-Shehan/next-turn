@@ -29,6 +29,9 @@ namespace NextTurn.IntegrationTests.Queue;
 ///   11. AverageServiceTimeSeconds = 0 → 422 Unprocessable Entity
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class CreateQueueIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {

@@ -13,11 +13,10 @@ vi.mock('../../../api/queues', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../api/queues')>()
   return {
     ...actual,
-    getAvailableQueues: vi.fn(),
+    getStaffQueues: vi.fn(),
     getQueueDashboard: vi.fn(),
-    callNext: vi.fn(),
-    markServed: vi.fn(),
-    markNoShow: vi.fn(),
+    serveNext: vi.fn(),
+    skipQueueEntry: vi.fn(),
   }
 })
 
@@ -35,10 +34,10 @@ vi.mock('../../../utils/authToken', () => ({
   getToken: vi.fn(() => 'test-jwt-token'),
 }))
 
-const mockGetAvailableQueues = vi.mocked(queuesApi.getAvailableQueues)
+const mockGetStaffQueues = vi.mocked(queuesApi.getStaffQueues)
 const mockGetQueueDashboard = vi.mocked(queuesApi.getQueueDashboard)
-const mockCallNext = vi.mocked(queuesApi.callNext)
-const mockMarkServed = vi.mocked(queuesApi.markServed)
+const mockServeNext = vi.mocked(queuesApi.serveNext)
+const mockSkipQueueEntry = vi.mocked(queuesApi.skipQueueEntry)
 
 function renderPage() {
   return render(
@@ -51,12 +50,14 @@ function renderPage() {
 }
 
 beforeEach(() => {
-  mockGetAvailableQueues.mockReset()
+  mockGetStaffQueues.mockReset()
   mockGetQueueDashboard.mockReset()
-  mockCallNext.mockReset()
-  mockMarkServed.mockReset()
+  mockServeNext.mockReset()
+  mockSkipQueueEntry.mockReset()
 
-  mockGetAvailableQueues.mockResolvedValue([
+  vi.spyOn(window, 'prompt').mockReturnValue('No-show')
+
+  mockGetStaffQueues.mockResolvedValue([
     {
       queueId: QUEUE_ID,
       name: 'Main Counter',
@@ -82,16 +83,16 @@ beforeEach(() => {
     ],
   })
 
-  mockCallNext.mockResolvedValue({
-    entryId: 'entry-1',
-    ticketNumber: 1,
-    status: 'Serving',
-  })
-
-  mockMarkServed.mockResolvedValue({
+  mockServeNext.mockResolvedValue({
     entryId: 'entry-1',
     ticketNumber: 1,
     status: 'Served',
+  })
+
+  mockSkipQueueEntry.mockResolvedValue({
+    entryId: 'entry-1',
+    ticketNumber: 1,
+    status: 'NoShow',
   })
 })
 
@@ -99,7 +100,7 @@ describe('StaffDashboardPage', () => {
   it('loads queues and dashboard for selected queue', async () => {
     renderPage()
 
-    await waitFor(() => expect(mockGetAvailableQueues).toHaveBeenCalledWith(TENANT_ID))
+    await waitFor(() => expect(mockGetStaffQueues).toHaveBeenCalledWith(TENANT_ID))
     await waitFor(() => expect(mockGetQueueDashboard).toHaveBeenCalledWith(QUEUE_ID, TENANT_ID))
 
     expect(await screen.findByText('Main Counter')).toBeInTheDocument()
@@ -107,7 +108,7 @@ describe('StaffDashboardPage', () => {
     expect(screen.getByTestId('waiting-list')).toBeInTheDocument()
   })
 
-  it('calls next ticket and refreshes dashboard', async () => {
+  it('serves queue head and refreshes dashboard', async () => {
     mockGetQueueDashboard
       .mockResolvedValueOnce({
         queueId: QUEUE_ID,
@@ -122,31 +123,40 @@ describe('StaffDashboardPage', () => {
         queueName: 'Main Counter',
         queueStatus: 'Active',
         waitingCount: 0,
-        currentlyServing: { entryId: 'entry-1', ticketNumber: 1, joinedAt: '2026-03-01T08:00:00Z' },
+        currentlyServing: null,
         waitingEntries: [],
       })
 
     const user = userEvent.setup()
     renderPage()
 
-    const btn = await screen.findByTestId('call-next-btn')
+    const btn = await screen.findByTestId('serve-next-btn')
     await user.click(btn)
 
-    expect(mockCallNext).toHaveBeenCalledWith(QUEUE_ID, TENANT_ID)
-    await waitFor(() => expect(screen.getByTestId('current-ticket')).toBeInTheDocument())
+    expect(mockServeNext).toHaveBeenCalledWith(QUEUE_ID, TENANT_ID)
+    await waitFor(() => expect(screen.queryByTestId('current-ticket')).not.toBeInTheDocument())
   })
 
-  it('disables served/no-show actions when nothing is currently serving', async () => {
+  it('disables serve/skip actions when queue has no active entries', async () => {
+    mockGetQueueDashboard.mockResolvedValue({
+      queueId: QUEUE_ID,
+      queueName: 'Main Counter',
+      queueStatus: 'Active',
+      waitingCount: 0,
+      currentlyServing: null,
+      waitingEntries: [],
+    })
+
     renderPage()
 
-    const servedBtn = await screen.findByTestId('mark-served-btn')
-    const noShowBtn = await screen.findByTestId('mark-noshow-btn')
+    const serveBtn = await screen.findByTestId('serve-next-btn')
+    const skipBtn = await screen.findByTestId('skip-next-btn')
 
-    expect(servedBtn).toBeDisabled()
-    expect(noShowBtn).toBeDisabled()
+    expect(serveBtn).toBeDisabled()
+    expect(skipBtn).toBeDisabled()
   })
 
-  it('marks current ticket as served when serving entry exists', async () => {
+  it('skips queue head and sends optional reason', async () => {
     mockGetQueueDashboard
       .mockResolvedValueOnce({
         queueId: QUEUE_ID,
@@ -160,18 +170,18 @@ describe('StaffDashboardPage', () => {
         queueId: QUEUE_ID,
         queueName: 'Main Counter',
         queueStatus: 'Active',
-        waitingCount: 0,
+        waitingCount: 1,
         currentlyServing: null,
-        waitingEntries: [],
+        waitingEntries: [{ entryId: 'entry-2', ticketNumber: 2, joinedAt: '2026-03-01T08:01:00Z' }],
       })
 
     const user = userEvent.setup()
     renderPage()
 
-    const servedBtn = await screen.findByTestId('mark-served-btn')
-    await user.click(servedBtn)
+    const skipBtn = await screen.findByTestId('skip-next-btn')
+    await user.click(skipBtn)
 
-    expect(mockMarkServed).toHaveBeenCalledWith(QUEUE_ID, TENANT_ID)
-    await waitFor(() => expect(screen.queryByTestId('current-ticket')).not.toBeInTheDocument())
+    expect(mockSkipQueueEntry).toHaveBeenCalledWith(QUEUE_ID, TENANT_ID, { reason: 'No-show' })
+    await waitFor(() => expect(screen.getByTestId('waiting-list')).toBeInTheDocument())
   })
 })

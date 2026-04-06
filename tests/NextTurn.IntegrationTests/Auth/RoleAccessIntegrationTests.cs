@@ -29,6 +29,9 @@ namespace NextTurn.IntegrationTests.Auth;
 ///   Role body — response carries the caller's role string
 /// </summary>
 [Collection("Integration")]
+[Trait("Suite", "Regression")]
+[Trait("Type", "Full")]
+[Trait("Layer", "Integration")]
 public sealed class RoleAccessIntegrationTests
     : IClassFixture<NextTurnWebApplicationFactory>, IAsyncLifetime
 {
