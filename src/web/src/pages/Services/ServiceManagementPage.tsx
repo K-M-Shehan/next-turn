@@ -10,11 +10,12 @@ import {
   type ServiceDto,
 } from '../../api/services'
 import { listOffices, type OfficeDto } from '../../api/offices'
-import { createQueue } from '../../api/queues'
+import { createQueue, getOrgQueues } from '../../api/queues'
 import {
   configureAppointmentSchedule,
   createAppointmentProfile,
   getAppointmentSchedule,
+  listAppointmentProfiles,
 } from '../../api/appointments'
 import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
@@ -42,6 +43,11 @@ interface ServiceManagementPageProps {
   embedded?: boolean
 }
 
+interface GeneratedFlowLink {
+  officeName: string
+  link: string
+}
+
 export function ServiceManagementPage({ embedded = false }: ServiceManagementPageProps = {}) {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
@@ -62,13 +68,24 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
   const [selectedOfficeIds, setSelectedOfficeIds] = useState<string[]>([])
   const [savingAssignments, setSavingAssignments] = useState(false)
   const [creatingFromService, setCreatingFromService] = useState<'queue' | 'appointment' | null>(null)
-  const [latestQueueLink, setLatestQueueLink] = useState<string | null>(null)
-  const [latestAppointmentLink, setLatestAppointmentLink] = useState<string | null>(null)
+  const [latestQueueLinks, setLatestQueueLinks] = useState<GeneratedFlowLink[]>([])
+  const [latestAppointmentLinks, setLatestAppointmentLinks] = useState<GeneratedFlowLink[]>([])
 
   const selectedService = useMemo(
     () => services.find(s => s.serviceId === assignmentServiceId) ?? null,
     [services, assignmentServiceId],
   )
+
+  const hasPendingAssignmentChanges = useMemo(() => {
+    if (!selectedService) return false
+
+    const currentSorted = [...selectedService.assignedOfficeIds].sort()
+    const selectedSorted = [...selectedOfficeIds].sort()
+
+    if (currentSorted.length !== selectedSorted.length) return true
+
+    return currentSorted.some((id, idx) => id !== selectedSorted[idx])
+  }, [selectedOfficeIds, selectedService])
 
   useEffect(() => {
     if (!payload) {
@@ -232,20 +249,63 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
   async function handleCreateQueueFromService() {
     if (!tenantId || !selectedService) return
 
+    if (hasPendingAssignmentChanges) {
+      setError('Save office assignments before creating queues from this service.')
+      return
+    }
+
+    if (selectedService.assignedOfficeIds.length === 0) {
+      setError('Assign at least one office to this service before creating queues.')
+      return
+    }
+
     setCreatingFromService('queue')
     setError(null)
     setSuccess(null)
-    setLatestQueueLink(null)
+    setLatestQueueLinks([])
 
     try {
-      const result = await createQueue(tenantId, {
-        name: `${selectedService.name} Queue`,
-        maxCapacity: 50,
-        averageServiceTimeSeconds: Math.max(60, selectedService.estimatedDurationMinutes * 60),
-      })
+      const selectedOffices = offices.filter(office =>
+        selectedService.assignedOfficeIds.includes(office.officeId),
+      )
 
-      setLatestQueueLink(result.shareableLink)
-      setSuccess(`Queue created from service "${selectedService.name}".`)
+      const existingQueues = await getOrgQueues(tenantId)
+      const existingQueueNames = new Set(existingQueues.map(queue => queue.name.trim().toLowerCase()))
+
+      const createdQueueLinks: GeneratedFlowLink[] = []
+      let skippedCount = 0
+
+      for (const office of selectedOffices) {
+        const queueName = `${selectedService.name} - ${office.name} Queue`
+        const queueNameKey = queueName.trim().toLowerCase()
+
+        if (existingQueueNames.has(queueNameKey)) {
+          skippedCount += 1
+          continue
+        }
+
+        const result = await createQueue(tenantId, {
+          name: queueName,
+          maxCapacity: 50,
+          averageServiceTimeSeconds: Math.max(60, selectedService.estimatedDurationMinutes * 60),
+        })
+
+        existingQueueNames.add(queueNameKey)
+        createdQueueLinks.push({
+          officeName: office.name,
+          link: result.shareableLink,
+        })
+      }
+
+      setLatestQueueLinks(createdQueueLinks)
+
+      if (createdQueueLinks.length === 0) {
+        setSuccess(`No queues created. A queue already exists for each assigned office of "${selectedService.name}".`)
+      } else {
+        setSuccess(
+          `Created ${createdQueueLinks.length} queue${createdQueueLinks.length === 1 ? '' : 's'} from "${selectedService.name}"${skippedCount > 0 ? `; skipped ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'}` : ''}.`,
+        )
+      }
     } catch (err) {
       const apiErr = err as ApiError
       setError(apiErr.detail ?? 'Could not create queue from this service.')
@@ -257,32 +317,76 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
   async function handleCreateAppointmentProfileFromService() {
     if (!tenantId || !selectedService) return
 
+    if (hasPendingAssignmentChanges) {
+      setError('Save office assignments before creating appointment profiles from this service.')
+      return
+    }
+
+    if (selectedService.assignedOfficeIds.length === 0) {
+      setError('Assign at least one office to this service before creating appointment profiles.')
+      return
+    }
+
     setCreatingFromService('appointment')
     setError(null)
     setSuccess(null)
-    setLatestAppointmentLink(null)
+    setLatestAppointmentLinks([])
 
     try {
-      const profile = await createAppointmentProfile(
-        tenantId,
-        `${selectedService.name} Appointments`,
-      )
-
-      // Apply service duration as default slot duration while preserving existing day open/close windows.
-      const config = await getAppointmentSchedule(tenantId, profile.appointmentProfileId)
       const slotDurationMinutes = Math.min(240, Math.max(5, selectedService.estimatedDurationMinutes))
 
-      await configureAppointmentSchedule(
-        tenantId,
-        profile.appointmentProfileId,
-        config.dayRules.map(rule => ({
-          ...rule,
-          slotDurationMinutes,
-        })),
+      const selectedOffices = offices.filter(office =>
+        selectedService.assignedOfficeIds.includes(office.officeId),
       )
 
-      setLatestAppointmentLink(profile.shareableLink)
-      setSuccess(`Appointment profile created from service "${selectedService.name}" with ${slotDurationMinutes}-minute slots.`)
+      const existingProfiles = await listAppointmentProfiles(tenantId)
+      const existingProfileNames = new Set(existingProfiles.map(profile => profile.name.trim().toLowerCase()))
+
+      const createdAppointmentLinks: GeneratedFlowLink[] = []
+      let skippedCount = 0
+
+      for (const office of selectedOffices) {
+        const profileName = `${selectedService.name} - ${office.name} Appointments`
+        const profileNameKey = profileName.trim().toLowerCase()
+
+        if (existingProfileNames.has(profileNameKey)) {
+          skippedCount += 1
+          continue
+        }
+
+        const profile = await createAppointmentProfile(
+          tenantId,
+          profileName,
+        )
+
+        // Apply service duration as default slot duration while preserving existing day open/close windows.
+        const config = await getAppointmentSchedule(tenantId, profile.appointmentProfileId)
+
+        await configureAppointmentSchedule(
+          tenantId,
+          profile.appointmentProfileId,
+          config.dayRules.map(rule => ({
+            ...rule,
+            slotDurationMinutes,
+          })),
+        )
+
+        existingProfileNames.add(profileNameKey)
+        createdAppointmentLinks.push({
+          officeName: office.name,
+          link: profile.shareableLink,
+        })
+      }
+
+      setLatestAppointmentLinks(createdAppointmentLinks)
+
+      if (createdAppointmentLinks.length === 0) {
+        setSuccess(`No appointment profiles created. A profile already exists for each assigned office of "${selectedService.name}".`)
+      } else {
+        setSuccess(
+          `Created ${createdAppointmentLinks.length} appointment profile${createdAppointmentLinks.length === 1 ? '' : 's'} from "${selectedService.name}" with ${slotDurationMinutes}-minute slots${skippedCount > 0 ? `; skipped ${skippedCount} duplicate${skippedCount === 1 ? '' : 's'}` : ''}.`,
+        )
+      }
     } catch (err) {
       const apiErr = err as ApiError
       setError(apiErr.detail ?? 'Could not create appointment profile from this service.')
@@ -470,7 +574,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
 
             <h3 className={styles.opsTitle}>Create Operational Flows from Service</h3>
             <p className={styles.helperText}>
-              Generate a queue or appointment profile using this service definition as defaults.
+              Generate one queue and one appointment profile per assigned office. Existing office-specific flows are skipped.
             </p>
 
             <div className={styles.opsActions}>
@@ -480,7 +584,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
                 onClick={handleCreateQueueFromService}
                 disabled={!selectedService || creatingFromService !== null}
               >
-                {creatingFromService === 'queue' ? 'Creating queue...' : 'Create Queue from Service'}
+                {creatingFromService === 'queue' ? 'Creating queues...' : 'Create Queues from Service'}
               </button>
               <button
                 type="button"
@@ -488,22 +592,22 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
                 onClick={handleCreateAppointmentProfileFromService}
                 disabled={!selectedService || creatingFromService !== null}
               >
-                {creatingFromService === 'appointment' ? 'Creating profile...' : 'Create Appointment Profile from Service'}
+                {creatingFromService === 'appointment' ? 'Creating profiles...' : 'Create Appointment Profiles from Service'}
               </button>
             </div>
 
-            {(latestQueueLink || latestAppointmentLink) && (
+            {(latestQueueLinks.length > 0 || latestAppointmentLinks.length > 0) && (
               <div className={styles.generatedLinks} role="status">
-                {latestQueueLink && (
-                  <p>
-                    Queue link: <strong>{window.location.origin}{latestQueueLink}</strong>
+                {latestQueueLinks.map(item => (
+                  <p key={`queue-${item.officeName}-${item.link}`}>
+                    Queue ({item.officeName}): <strong>{window.location.origin}{item.link}</strong>
                   </p>
-                )}
-                {latestAppointmentLink && (
-                  <p>
-                    Appointment link: <strong>{window.location.origin}{latestAppointmentLink}</strong>
+                ))}
+                {latestAppointmentLinks.map(item => (
+                  <p key={`appointment-${item.officeName}-${item.link}`}>
+                    Appointment ({item.officeName}): <strong>{window.location.origin}{item.link}</strong>
                   </p>
-                )}
+                ))}
               </div>
             )}
           </>
