@@ -124,6 +124,11 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      - name: Restore projects for EF metadata
+        run: |
+          dotnet restore src/NextTurn.Infrastructure/NextTurn.Infrastructure.csproj
+          dotnet restore src/NextTurn.API/NextTurn.API.csproj
+
       - name: Install EF Tools
         run: dotnet tool install --global dotnet-ef
 
@@ -167,13 +172,12 @@ jobs:
           path: frontend-dist
 
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: frontend-dist
-          vercel-args: "--prod"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" frontend-dist
 
   rollback-backend:
     name: Rollback Backend (Artifact Redeploy)
@@ -213,10 +217,9 @@ jobs:
           path: frontend-dist
 
       - name: Deploy frontend artifact to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: frontend-dist
-          vercel-args: "--prod"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN" frontend-dist
