@@ -48,6 +48,28 @@ export interface CreateQueueBody {
   averageServiceTimeSeconds: number
 }
 
+export interface QueuePerformanceFilterParams {
+  startDate: string
+  endDate: string
+  serviceId?: string
+  officeId?: string
+}
+
+export interface PeakHourSummary {
+  hourOfDay: number
+  servedCount: number
+}
+
+export interface QueuePerformanceReportResult {
+  startDate: string
+  endDate: string
+  serviceId: string | null
+  officeId: string | null
+  totalServed: number
+  averageWaitMinutes: number
+  peakHours: PeakHourSummary[]
+}
+
 /**
  * POST /api/queues/{queueId}/join
  *
@@ -172,6 +194,69 @@ export async function getOrgQueues(
         },
       }
     )
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/reports/performance
+ */
+export async function getQueuePerformanceReport(
+  tenantId: string,
+  filter: QueuePerformanceFilterParams,
+): Promise<QueuePerformanceReportResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<QueuePerformanceReportResult>(
+      '/queues/reports/performance',
+      {
+        params: {
+          startDate: filter.startDate,
+          endDate: filter.endDate,
+          serviceId: filter.serviceId,
+          officeId: filter.officeId,
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/reports/performance/export
+ */
+export async function exportQueuePerformanceReportCsv(
+  tenantId: string,
+  filter: QueuePerformanceFilterParams,
+): Promise<Blob> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<Blob>(
+      '/queues/reports/performance/export',
+      {
+        params: {
+          startDate: filter.startDate,
+          endDate: filter.endDate,
+          serviceId: filter.serviceId,
+          officeId: filter.officeId,
+        },
+        responseType: 'blob',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
+
     return data
   } catch (err) {
     throw parseApiError(err)
