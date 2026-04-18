@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NextTurn.Application.Appointment.Notifications;
 using NextTurn.Application.Auth.Commands.RegisterUser;
 using NextTurn.Application.Common.Behaviours;
+using NextTurn.Application.Queue.Reports;
 
 namespace NextTurn.Application;
 
@@ -41,6 +42,7 @@ public static class DependencyInjection
             typeof(ValidationBehavior<,>));
 
         services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
+        services.AddSingleton<QueuePerformanceCalculator>();
 
         return services;
     }

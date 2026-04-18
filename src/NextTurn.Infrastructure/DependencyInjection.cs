@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Application.Queue.Reports;
 using NextTurn.Domain.Appointment.Repositories;
 using NextTurn.Domain.Auth.Repositories;
 using NextTurn.Domain.Organisation.Repositories;
@@ -88,6 +89,8 @@ public static class DependencyInjection
         // StubQueueStateService derives position from SQL COUNT queries.
         // Sprint 2+: swap for a Redis-backed implementation — no caller changes needed.
         services.AddScoped<IQueueStateService, StubQueueStateService>();
+        services.AddScoped<IQueuePerformanceReportService, QueuePerformanceReportService>();
+        services.AddScoped<IQueuePerformanceExportService, QueuePerformanceExportService>();
 
         return services;
     }
