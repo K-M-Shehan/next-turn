@@ -26,4 +26,14 @@ public interface IEmailService
         string invitePath,
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends a queue turn-approaching notification when a user is close to being served.
+    /// </summary>
+    Task SendQueueTurnApproachingEmailAsync(
+        string toEmail,
+        string queueName,
+        int ticketNumber,
+        int positionInQueue,
+        CancellationToken cancellationToken);
 }

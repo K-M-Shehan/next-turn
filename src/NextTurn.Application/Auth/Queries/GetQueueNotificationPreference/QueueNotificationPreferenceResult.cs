@@ -1,0 +1,3 @@
+namespace NextTurn.Application.Auth.Queries.GetQueueNotificationPreference;
+
+public sealed record QueueNotificationPreferenceResult(bool QueueTurnApproachingNotificationsEnabled);
