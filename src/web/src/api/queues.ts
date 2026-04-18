@@ -70,6 +70,41 @@ export interface QueuePerformanceReportResult {
   peakHours: PeakHourSummary[]
 }
 
+export interface DailyQueueMetricTrend {
+  previousDay: number
+  previousWeek: number
+  deltaFromPreviousDay: number
+  deltaFromPreviousWeek: number
+  changePercentFromPreviousDay: number
+  changePercentFromPreviousWeek: number
+}
+
+export interface DailyQueueSummaryRow {
+  officeId: string
+  officeName: string
+  serviceId: string
+  serviceName: string
+  served: number
+  skipped: number
+  noShows: number
+  servedTrend: DailyQueueMetricTrend
+  skippedTrend: DailyQueueMetricTrend
+  noShowsTrend: DailyQueueMetricTrend
+}
+
+export interface DailyQueueSummaryReportResult {
+  date: string
+  previousDayDate: string
+  previousWeekDate: string
+  totalServed: number
+  totalSkipped: number
+  totalNoShows: number
+  totalServedTrend: DailyQueueMetricTrend
+  totalSkippedTrend: DailyQueueMetricTrend
+  totalNoShowsTrend: DailyQueueMetricTrend
+  rows: DailyQueueSummaryRow[]
+}
+
 /**
  * POST /api/queues/{queueId}/join
  *
@@ -218,6 +253,32 @@ export async function getQueuePerformanceReport(
           serviceId: filter.serviceId,
           officeId: filter.officeId,
         },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/reports/daily-summary
+ */
+export async function getDailyQueueSummaryReport(
+  tenantId: string,
+  date: string,
+): Promise<DailyQueueSummaryReportResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<DailyQueueSummaryReportResult>(
+      '/queues/reports/daily-summary',
+      {
+        params: { date },
         headers: {
           Authorization: `Bearer ${token}`,
           'X-Tenant-Id': tenantId,

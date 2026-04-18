@@ -133,13 +133,22 @@ export function QueuePerformanceReportPage() {
     <div className={styles.page}>
       <nav className={styles.topNav}>
         <img src={logoImg} alt="NextTurn" className={styles.logo} />
-        <button
-          type="button"
-          className={styles.backBtn}
-          onClick={() => navigate(`/admin/${tenantId}`)}
-        >
-          Back to Admin
-        </button>
+        <div className={styles.navActions}>
+          <button
+            type="button"
+            className={styles.backBtn}
+            onClick={() => navigate(`/admin/${tenantId}/reports/daily-summary`)}
+          >
+            Daily Summary
+          </button>
+          <button
+            type="button"
+            className={styles.backBtn}
+            onClick={() => navigate(`/admin/${tenantId}`)}
+          >
+            Back to Admin
+          </button>
+        </div>
       </nav>
 
       <main className={styles.main}>
