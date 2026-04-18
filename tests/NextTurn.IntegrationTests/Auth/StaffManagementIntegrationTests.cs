@@ -49,6 +49,17 @@ public sealed class StaffManagementIntegrationTests
         var office = await officeResponse.Content.ReadFromJsonAsync<OfficeDto>();
         office.Should().NotBeNull();
 
+        var secondOfficeResponse = await adminClient.PostAsJsonAsync("/api/offices", new
+        {
+            name = "Branch Office",
+            address = "No. 2 Main Street",
+            openingHours = "Mon-Fri 09:00-17:00"
+        });
+
+        secondOfficeResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var secondOffice = await secondOfficeResponse.Content.ReadFromJsonAsync<OfficeDto>();
+        secondOffice.Should().NotBeNull();
+
         var createStaff = await adminClient.PostAsJsonAsync("/api/staff", new
         {
             name = "Counter Agent",
@@ -70,7 +81,7 @@ public sealed class StaffManagementIntegrationTests
         {
             name = "Counter Agent Updated",
             phone = "0722222222",
-            officeIds = Array.Empty<Guid>(),
+            officeIds = new[] { secondOffice!.OfficeId },
             counterName = "Counter B",
             shiftStart = "10:00",
             shiftEnd = "18:00"
@@ -81,7 +92,7 @@ public sealed class StaffManagementIntegrationTests
         var updated = await updateStaff.Content.ReadFromJsonAsync<StaffDto>();
         updated.Should().NotBeNull();
         updated!.Name.Should().Be("Counter Agent Updated");
-        updated.OfficeIds.Should().BeEmpty();
+        updated.OfficeIds.Should().ContainSingle().Which.Should().Be(secondOffice!.OfficeId);
 
         var deactivate = await adminClient.PatchAsync($"/api/staff/{created.StaffUserId}/deactivate", null);
         deactivate.StatusCode.Should().Be(HttpStatusCode.NoContent);

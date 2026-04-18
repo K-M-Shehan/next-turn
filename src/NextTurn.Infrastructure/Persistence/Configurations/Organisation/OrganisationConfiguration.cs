@@ -87,5 +87,9 @@ public class OrganisationConfiguration : IEntityTypeConfiguration<OrganisationEn
 
         builder.Property(o => o.CreatedAt)
             .IsRequired();
+
+        builder.Property(o => o.QueueNotificationThreshold)
+            .IsRequired()
+            .HasDefaultValue(3);
     }
 }

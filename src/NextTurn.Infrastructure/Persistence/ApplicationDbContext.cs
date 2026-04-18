@@ -12,6 +12,7 @@ using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 using QueueStaffAssignment = NextTurn.Domain.Queue.Entities.QueueStaffAssignment;
 using QueueActionAuditLog = NextTurn.Domain.Queue.Entities.QueueActionAuditLog;
+using QueueTurnNotificationAuditLog = NextTurn.Domain.Queue.Entities.QueueTurnNotificationAuditLog;
 using OfficeEntity = NextTurn.Domain.Office.Entities.Office;
 using ServiceEntity = NextTurn.Domain.Service.Entities.Service;
 using ServiceOfficeAssignment = NextTurn.Domain.Service.Entities.ServiceOfficeAssignment;
@@ -50,6 +51,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<QueueEntry>  QueueEntries => Set<QueueEntry>();
     public DbSet<QueueStaffAssignment> QueueStaffAssignments => Set<QueueStaffAssignment>();
     public DbSet<QueueActionAuditLog> QueueActionAuditLogs => Set<QueueActionAuditLog>();
+    public DbSet<QueueTurnNotificationAuditLog> QueueTurnNotificationAuditLogs => Set<QueueTurnNotificationAuditLog>();
 
     // Appointment module (NT-19).
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
@@ -100,6 +102,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
         modelBuilder.Entity<QueueActionAuditLog>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<QueueTurnNotificationAuditLog>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
         modelBuilder.Entity<OfficeEntity>()

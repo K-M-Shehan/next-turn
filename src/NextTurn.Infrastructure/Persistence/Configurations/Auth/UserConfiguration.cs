@@ -101,6 +101,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(u => u.QueueTurnApproachingNotificationsEnabled)
+            .IsRequired()
+            .HasDefaultValue(true);
+
         builder.Property(u => u.StaffInviteTokenHash)
             .HasMaxLength(128);
 

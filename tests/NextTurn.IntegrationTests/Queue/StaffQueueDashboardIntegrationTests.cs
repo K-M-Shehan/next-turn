@@ -291,6 +291,61 @@ public sealed class StaffQueueDashboardIntegrationTests
         audit.Reason.Should().Be("Citizen did not arrive");
     }
 
+    [Fact]
+    public async Task ServeNext_WhenNextUserWithinThreshold_WritesNotificationAuditLog()
+    {
+        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(UserBId);
+
+        var serveResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/serve-next", null);
+        serveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var waitingEntryForUserB = await db.QueueEntries
+            .IgnoreQueryFilters()
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserBId);
+
+        var notificationAudit = await db.QueueTurnNotificationAuditLogs
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(a =>
+                a.QueueId == _queueId &&
+                a.QueueEntryId == waitingEntryForUserB.Id &&
+                a.UserId == UserBId &&
+                a.DeliveryStatus == "Sent");
+
+        notificationAudit.Should().NotBeNull();
+        notificationAudit!.PositionInQueue.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ServeNext_WhenUserPreferenceDisabled_DoesNotWriteNotificationAuditLog()
+    {
+        await using (var setupScope = _factory.Services.CreateAsyncScope())
+        {
+            var db = setupScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var userB = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Id == UserBId);
+            userB.SetQueueTurnApproachingNotificationsEnabled(false);
+            await db.SaveChangesAsync();
+        }
+
+        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(UserBId);
+
+        var serveResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/serve-next", null);
+        serveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var assertScope = _factory.Services.CreateAsyncScope();
+        var assertDb = assertScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var exists = await assertDb.QueueTurnNotificationAuditLogs
+            .IgnoreQueryFilters()
+            .AnyAsync(a => a.QueueId == _queueId && a.UserId == UserBId);
+
+        exists.Should().BeFalse();
+    }
+
     private Task<HttpResponseMessage> JoinQueueAsync(Guid userId)
     {
         return UserClient(userId).PostAsync($"/api/queues/{_queueId}/join", null);

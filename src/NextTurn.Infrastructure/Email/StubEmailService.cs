@@ -50,4 +50,21 @@ public sealed class StubEmailService : IEmailService
 
         return Task.CompletedTask;
     }
+
+    public Task SendQueueTurnApproachingEmailAsync(
+        string toEmail,
+        string queueName,
+        int ticketNumber,
+        int positionInQueue,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[STUB] Queue approaching notification would be sent to {Email}. Queue: {QueueName}, Ticket: {TicketNumber}, Position: {PositionInQueue}",
+            toEmail,
+            queueName,
+            ticketNumber,
+            positionInQueue);
+
+        return Task.CompletedTask;
+    }
 }

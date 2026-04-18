@@ -2,8 +2,10 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 using NextTurn.API.Models.Auth;
 using NextTurn.Application.Auth;
+using NextTurn.Application.Auth.Commands.UpdateQueueNotificationPreference;
 using NextTurn.Application.Auth.Commands.CreateStaffUser;
 using NextTurn.Application.Auth.Commands.InviteStaffUser;
 using NextTurn.Application.Auth.Commands.AcceptStaffInvite;
@@ -13,6 +15,7 @@ using NextTurn.Application.Auth.Commands.LoginUser;
 using NextTurn.Application.Auth.Commands.ReactivateStaffUser;
 using NextTurn.Application.Auth.Commands.RegisterGlobalUser;
 using NextTurn.Application.Auth.Commands.RegisterUser;
+using NextTurn.Application.Auth.Queries.GetQueueNotificationPreference;
 using NextTurn.Application.Auth.Queries.ListStaffUsers;
 
 namespace NextTurn.API.Controllers;
@@ -36,6 +39,14 @@ public sealed class AuthController : ControllerBase
     public AuthController(ISender sender)
     {
         _sender = sender;
+    }
+
+    private bool TryGetUserId(out Guid userId)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                          ?? User.FindFirstValue("sub");
+
+        return Guid.TryParse(userIdClaim, out userId);
     }
 
     /// <summary>
@@ -294,6 +305,46 @@ public sealed class AuthController : ControllerBase
         CancellationToken cancellationToken)
     {
         await _sender.Send(new ReactivateStaffUserCommand(userId), cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Gets the authenticated user's queue notification preference.
+    /// </summary>
+    [HttpGet("notification-preferences")]
+    [Authorize]
+    [ProducesResponseType(typeof(QueueNotificationPreferenceResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetNotificationPreference(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var result = await _sender.Send(new GetQueueNotificationPreferenceQuery(userId), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Updates the authenticated user's queue notification preference.
+    /// </summary>
+    [HttpPut("notification-preferences")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateNotificationPreference(
+        [FromBody] UpdateQueueNotificationPreferenceRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        await _sender.Send(
+            new UpdateQueueNotificationPreferenceCommand(
+                userId,
+                request.QueueTurnApproachingNotificationsEnabled),
+            cancellationToken);
+
         return NoContent();
     }
 }

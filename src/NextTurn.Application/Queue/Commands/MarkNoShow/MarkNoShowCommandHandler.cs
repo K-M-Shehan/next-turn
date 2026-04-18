@@ -1,5 +1,6 @@
 using MediatR;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Application.Queue.Commands.NotifyApproachingTurn;
 using NextTurn.Application.Queue.Commands;
 using NextTurn.Domain.Common;
 using NextTurn.Domain.Queue.Repositories;
@@ -10,13 +11,16 @@ public sealed class MarkNoShowCommandHandler : IRequestHandler<MarkNoShowCommand
 {
     private readonly IQueueRepository _queueRepository;
     private readonly IApplicationDbContext _context;
+    private readonly ISender _sender;
 
     public MarkNoShowCommandHandler(
         IQueueRepository queueRepository,
-        IApplicationDbContext context)
+        IApplicationDbContext context,
+        ISender sender)
     {
         _queueRepository = queueRepository;
         _context = context;
+        _sender = sender;
     }
 
     public async Task<QueueEntryActionResult> Handle(
@@ -33,6 +37,7 @@ public sealed class MarkNoShowCommandHandler : IRequestHandler<MarkNoShowCommand
 
         servingEntry.MarkNoShow();
         await _context.SaveChangesAsync(cancellationToken);
+        await _sender.Send(new NotifyApproachingTurnCommand(command.QueueId), cancellationToken);
 
         return new QueueEntryActionResult(servingEntry.Id, servingEntry.TicketNumber, servingEntry.Status.ToString());
     }

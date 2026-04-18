@@ -40,6 +40,10 @@ export interface StaffUserSummary {
   createdAt: string
 }
 
+export interface QueueNotificationPreferenceResult {
+  queueTurnApproachingNotificationsEnabled: boolean
+}
+
 /**
  * Shape returned by POST /api/auth/login on HTTP 200.
  * Mirrors NextTurn.API.Models.Auth.LoginResponse on the backend.
@@ -247,6 +251,58 @@ export async function reactivateStaffUser(tenantId: string, userId: string): Pro
         'X-Tenant-Id': tenantId,
       },
     })
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * GET /api/auth/notification-preferences
+ */
+export async function getQueueNotificationPreference(tenantId?: string): Promise<QueueNotificationPreferenceResult> {
+  try {
+    const token = getToken()
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    }
+
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+
+    const { data } = await apiClient.get<QueueNotificationPreferenceResult>('/auth/notification-preferences', {
+      headers,
+    })
+    return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+/**
+ * PUT /api/auth/notification-preferences
+ */
+export async function updateQueueNotificationPreference(
+  tenantId: string | undefined,
+  queueTurnApproachingNotificationsEnabled: boolean,
+): Promise<void> {
+  try {
+    const token = getToken()
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+    }
+
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+
+    await apiClient.put(
+      '/auth/notification-preferences',
+      { queueTurnApproachingNotificationsEnabled },
+      { headers },
+    )
   } catch (err) {
     const parsed: ApiError = parseApiError(err)
     throw parsed

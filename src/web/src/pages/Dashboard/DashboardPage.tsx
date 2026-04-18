@@ -22,6 +22,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { clearToken } from '../../utils/authToken'
 import { getTokenPayload } from '../../utils/authToken'
+import { getQueueNotificationPreference, updateQueueNotificationPreference } from '../../api/auth'
 import { getMyQueues, type MyQueueEntry } from '../../api/queues'
 import { cancelAppointment, getMyAppointmentBookings, type MyAppointmentBooking } from '../../api/appointments'
 import type { ApiError } from '../../types/api'
@@ -62,6 +63,13 @@ export function DashboardPage() {
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null)
   const [appointmentsSuccess, setAppointmentsSuccess] = useState<string | null>(null)
   const [cancellingAppointmentId, setCancellingAppointmentId] = useState<string | null>(null)
+  const [queueNotificationsEnabled, setQueueNotificationsEnabled] = useState(true)
+  const [notificationsLoading, setNotificationsLoading] = useState(true)
+  const [notificationsSaving, setNotificationsSaving] = useState(false)
+  const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null)
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
+
+  const tenantId = payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid
 
   useEffect(() => {
     getMyQueues()
@@ -71,7 +79,17 @@ export function DashboardPage() {
     getMyAppointmentBookings()
       .then(data => { setAppointments(data); setAppointmentsLoading(false) })
       .catch(() => { setAppointmentsError('Could not load your appointment bookings.'); setAppointmentsLoading(false) })
-  }, [])
+
+    getQueueNotificationPreference(tenantId)
+      .then(data => {
+        setQueueNotificationsEnabled(data.queueTurnApproachingNotificationsEnabled)
+        setNotificationsLoading(false)
+      })
+      .catch(() => {
+        setNotificationsError('Could not load your queue notification setting.')
+        setNotificationsLoading(false)
+      })
+  }, [tenantId])
 
   useEffect(() => {
     if (!appointmentsSuccess) return
@@ -122,6 +140,22 @@ export function DashboardPage() {
   function handleLogout() {
     clearToken()
     navigate('/', { replace: true })
+  }
+
+  async function handleSaveNotificationPreference() {
+    setNotificationsError(null)
+    setNotificationsMessage(null)
+    setNotificationsSaving(true)
+
+    try {
+      await updateQueueNotificationPreference(tenantId, queueNotificationsEnabled)
+      setNotificationsMessage('Queue notification preference saved.')
+    } catch (err) {
+      const apiErr = err as ApiError
+      setNotificationsError(apiErr.detail ?? 'Could not save queue notification setting.')
+    } finally {
+      setNotificationsSaving(false)
+    }
   }
 
   async function handleCancelAppointment(appointment: MyAppointmentBooking) {
@@ -185,6 +219,44 @@ export function DashboardPage() {
               <p className={styles.welcomeSub}>{email}</p>
             </div>
           </div>
+
+          <section className={styles.settingsSection} aria-label="Queue notification settings">
+            <div className={styles.sectionHeader}>
+              <BellIcon />
+              <h2 className={styles.sectionTitle}>Queue Notifications</h2>
+            </div>
+
+            {notificationsLoading && <p className={styles.queueEmpty}>Loading settings…</p>}
+
+            {!notificationsLoading && (
+              <>
+                <label className={styles.settingsToggle}>
+                  <input
+                    type="checkbox"
+                    checked={queueNotificationsEnabled}
+                    onChange={e => {
+                      setQueueNotificationsEnabled(e.target.checked)
+                      setNotificationsMessage(null)
+                      setNotificationsError(null)
+                    }}
+                  />
+                  <span>Notify me by email when my queue turn is approaching.</span>
+                </label>
+
+                <button
+                  type="button"
+                  className={styles.settingsSaveBtn}
+                  onClick={handleSaveNotificationPreference}
+                  disabled={notificationsSaving}
+                >
+                  {notificationsSaving ? 'Saving...' : 'Save preference'}
+                </button>
+
+                {notificationsMessage && <p className={styles.queueSuccess}>{notificationsMessage}</p>}
+                {notificationsError && <p className={styles.queueError}>{notificationsError}</p>}
+              </>
+            )}
+          </section>
 
           {/* ── My active queues ─────────────────────────────────── */}
           <section className={styles.queueSection} aria-label="My active queues">
@@ -443,6 +515,16 @@ function CheckCircleIcon() {
       style={{ flexShrink: 0, color: 'var(--color-primary)' }}>
       <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
       <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+  )
+}
+
+function BellIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+      <path d="M13.73 21a2 2 0 01-3.46 0"/>
     </svg>
   )
 }
