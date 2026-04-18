@@ -16,6 +16,7 @@ using NextTurn.Application.Queue.Commands.AssignStaffToQueue;
 using NextTurn.Application.Queue.Commands.UnassignStaffFromQueue;
 using NextTurn.Application.Queue.Commands;
 using NextTurn.Application.Queue.Queries.ExportQueuePerformanceReportCsv;
+using NextTurn.Application.Queue.Queries.GetDailySummaryReport;
 using NextTurn.Application.Queue.Queries.GetQueueDashboard;
 using NextTurn.Application.Queue.Queries.GetQueuePerformanceReport;
 using NextTurn.Application.Queue.Queries.GetMyQueues;
@@ -294,6 +295,31 @@ public sealed class QueuesController : ControllerBase
     }
 
     /// <summary>
+    /// Returns daily queue summary with office/service breakdown and trend indicators.
+    /// </summary>
+    [HttpGet("reports/daily-summary")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> GetDailySummaryReport(
+        [FromQuery] DateOnly? date,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetOrganisationId(out var organisationId))
+            return Unauthorized();
+
+        var reportDate = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var result = await _sender.Send(
+            new DailySummaryReportQuery(organisationId, reportDate),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// List all active queues for the authenticated user's organisation.
     /// Accessible to any authenticated role so regular users can browse
     /// available queues on their dashboard without needing OrgAdmin rights.
@@ -568,7 +594,7 @@ public sealed class QueuesController : ControllerBase
                 return Forbid();
         }
 
-        var command = new MarkNoShowCommand(queueId);
+        var command = new MarkNoShowCommand(queueId, userId);
         var result = await _sender.Send(command, cancellationToken);
         return Ok(result);
     }
