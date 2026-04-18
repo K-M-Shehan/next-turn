@@ -33,6 +33,7 @@ import { AdminDashboardPage }   from './pages/Admin'
 import { StaffDashboardPage }   from './pages/Staff'
 import { OfficeManagementPage } from './pages/Offices'
 import { ServiceManagementPage } from './pages/Services'
+import { QueuePerformanceReportPage } from './pages/QueuePerformanceReport'
 import { StaffInviteAcceptPage } from './pages/StaffInviteAccept'
 import { OrgLoginLookupPage }   from './pages/OrgLoginLookup'
 import { TermsPage, PrivacyPage } from './pages/Legal'
@@ -107,6 +108,15 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['OrgAdmin', 'SystemAdmin']}>
             <ServiceManagementPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/:tenantId/reports"
+        element={
+          <ProtectedRoute allowedRoles={['OrgAdmin', 'SystemAdmin']}>
+            <QueuePerformanceReportPage />
           </ProtectedRoute>
         }
       />

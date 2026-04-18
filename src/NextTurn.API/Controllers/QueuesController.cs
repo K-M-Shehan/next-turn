@@ -15,7 +15,9 @@ using NextTurn.Application.Queue.Commands.Skip;
 using NextTurn.Application.Queue.Commands.AssignStaffToQueue;
 using NextTurn.Application.Queue.Commands.UnassignStaffFromQueue;
 using NextTurn.Application.Queue.Commands;
+using NextTurn.Application.Queue.Queries.ExportQueuePerformanceReportCsv;
 using NextTurn.Application.Queue.Queries.GetQueueDashboard;
+using NextTurn.Application.Queue.Queries.GetQueuePerformanceReport;
 using NextTurn.Application.Queue.Queries.GetMyQueues;
 using NextTurn.Application.Queue.Queries.GetQueueStatus;
 using NextTurn.Application.Queue.Queries.ListOrgQueues;
@@ -237,6 +239,58 @@ public sealed class QueuesController : ControllerBase
         var result = await _sender.Send(query, cancellationToken);
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Returns queue performance summary (average wait time and peak hours) for the tenant.
+    /// </summary>
+    [HttpGet("reports/performance")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> GetQueuePerformanceReport(
+        [FromQuery] DateOnly startDate,
+        [FromQuery] DateOnly endDate,
+        [FromQuery] Guid? serviceId,
+        [FromQuery] Guid? officeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetOrganisationId(out var organisationId))
+            return Unauthorized();
+
+        var result = await _sender.Send(
+            new QueuePerformanceReportQuery(organisationId, startDate, endDate, serviceId, officeId),
+            cancellationToken);
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Exports queue performance summary as CSV.
+    /// </summary>
+    [HttpGet("reports/performance/export")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ExportQueuePerformanceReport(
+        [FromQuery] DateOnly startDate,
+        [FromQuery] DateOnly endDate,
+        [FromQuery] Guid? serviceId,
+        [FromQuery] Guid? officeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetOrganisationId(out var organisationId))
+            return Unauthorized();
+
+        var csv = await _sender.Send(
+            new ExportQueuePerformanceReportCsvQuery(organisationId, startDate, endDate, serviceId, officeId),
+            cancellationToken);
+
+        return File(csv.Content, csv.ContentType, csv.FileName);
     }
 
     /// <summary>

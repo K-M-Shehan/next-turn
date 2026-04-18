@@ -264,6 +264,11 @@ export function AdminDashboardPage() {
     navigate('/', { replace: true })
   }
 
+  function openQueueReports() {
+    if (!tenantId) return
+    navigate(`/admin/${tenantId}/reports`)
+  }
+
   function validate(): boolean {
     const errors: Partial<CreateForm> = {}
     if (!form.name.trim()) errors.name = 'Queue name is required.'
@@ -779,6 +784,13 @@ export function AdminDashboardPage() {
           <div className={styles.toolbarHeader}>
             <h1 className={styles.pageTitle}>Operations Control Center</h1>
             <p className={styles.pageSubtitle}>Manage queues and appointment capacity from one place.</p>
+            <button
+              type="button"
+              className={styles.createBtn}
+              onClick={openQueueReports}
+            >
+              View Queue Performance Reports
+            </button>
           </div>
           <div className={styles.tabs} role="tablist" aria-label="Admin sections">
             <button
