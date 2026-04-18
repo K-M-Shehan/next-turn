@@ -22,7 +22,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { clearToken } from '../../utils/authToken'
 import { getTokenPayload } from '../../utils/authToken'
-import { getQueueNotificationPreference, updateQueueNotificationPreference } from '../../api/auth'
+import {
+  getAppointmentNotificationPreferences,
+  getQueueNotificationPreference,
+  updateAppointmentNotificationPreferences,
+  updateQueueNotificationPreference,
+} from '../../api/auth'
 import { getMyQueues, type MyQueueEntry } from '../../api/queues'
 import { cancelAppointment, getMyAppointmentBookings, type MyAppointmentBooking } from '../../api/appointments'
 import type { ApiError } from '../../types/api'
@@ -69,6 +74,14 @@ export function DashboardPage() {
   const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null)
   const [notificationsError, setNotificationsError] = useState<string | null>(null)
 
+  const [appointmentNotificationsLoading, setAppointmentNotificationsLoading] = useState(true)
+  const [appointmentNotificationsSaving, setAppointmentNotificationsSaving] = useState(false)
+  const [appointmentNotificationsMessage, setAppointmentNotificationsMessage] = useState<string | null>(null)
+  const [appointmentNotificationsError, setAppointmentNotificationsError] = useState<string | null>(null)
+  const [appointmentBookedNotificationsEnabled, setAppointmentBookedNotificationsEnabled] = useState(true)
+  const [appointmentRescheduledNotificationsEnabled, setAppointmentRescheduledNotificationsEnabled] = useState(true)
+  const [appointmentCancelledNotificationsEnabled, setAppointmentCancelledNotificationsEnabled] = useState(true)
+
   const tenantId = payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid
 
   useEffect(() => {
@@ -88,6 +101,18 @@ export function DashboardPage() {
       .catch(() => {
         setNotificationsError('Could not load your queue notification setting.')
         setNotificationsLoading(false)
+      })
+
+    getAppointmentNotificationPreferences(tenantId)
+      .then(data => {
+        setAppointmentBookedNotificationsEnabled(data.appointmentBookedNotificationsEnabled)
+        setAppointmentRescheduledNotificationsEnabled(data.appointmentRescheduledNotificationsEnabled)
+        setAppointmentCancelledNotificationsEnabled(data.appointmentCancelledNotificationsEnabled)
+        setAppointmentNotificationsLoading(false)
+      })
+      .catch(() => {
+        setAppointmentNotificationsError('Could not load your appointment notification settings.')
+        setAppointmentNotificationsLoading(false)
       })
   }, [tenantId])
 
@@ -155,6 +180,26 @@ export function DashboardPage() {
       setNotificationsError(apiErr.detail ?? 'Could not save queue notification setting.')
     } finally {
       setNotificationsSaving(false)
+    }
+  }
+
+  async function handleSaveAppointmentNotificationPreferences() {
+    setAppointmentNotificationsError(null)
+    setAppointmentNotificationsMessage(null)
+    setAppointmentNotificationsSaving(true)
+
+    try {
+      await updateAppointmentNotificationPreferences(tenantId, {
+        appointmentBookedNotificationsEnabled,
+        appointmentRescheduledNotificationsEnabled,
+        appointmentCancelledNotificationsEnabled,
+      })
+      setAppointmentNotificationsMessage('Appointment notification preferences saved.')
+    } catch (err) {
+      const apiErr = err as ApiError
+      setAppointmentNotificationsError(apiErr.detail ?? 'Could not save appointment notification settings.')
+    } finally {
+      setAppointmentNotificationsSaving(false)
     }
   }
 
@@ -254,6 +299,70 @@ export function DashboardPage() {
 
                 {notificationsMessage && <p className={styles.queueSuccess}>{notificationsMessage}</p>}
                 {notificationsError && <p className={styles.queueError}>{notificationsError}</p>}
+              </>
+            )}
+          </section>
+
+          <section className={styles.settingsSection} aria-label="Appointment notification settings">
+            <div className={styles.sectionHeader}>
+              <CalendarIcon />
+              <h2 className={styles.sectionTitle}>Appointment Notifications</h2>
+            </div>
+
+            {appointmentNotificationsLoading && <p className={styles.queueEmpty}>Loading settings…</p>}
+
+            {!appointmentNotificationsLoading && (
+              <>
+                <label className={styles.settingsToggle}>
+                  <input
+                    type="checkbox"
+                    checked={appointmentBookedNotificationsEnabled}
+                    onChange={e => {
+                      setAppointmentBookedNotificationsEnabled(e.target.checked)
+                      setAppointmentNotificationsMessage(null)
+                      setAppointmentNotificationsError(null)
+                    }}
+                  />
+                  <span>Email me booking confirmations.</span>
+                </label>
+
+                <label className={styles.settingsToggle}>
+                  <input
+                    type="checkbox"
+                    checked={appointmentRescheduledNotificationsEnabled}
+                    onChange={e => {
+                      setAppointmentRescheduledNotificationsEnabled(e.target.checked)
+                      setAppointmentNotificationsMessage(null)
+                      setAppointmentNotificationsError(null)
+                    }}
+                  />
+                  <span>Email me when appointments are rescheduled.</span>
+                </label>
+
+                <label className={styles.settingsToggle}>
+                  <input
+                    type="checkbox"
+                    checked={appointmentCancelledNotificationsEnabled}
+                    onChange={e => {
+                      setAppointmentCancelledNotificationsEnabled(e.target.checked)
+                      setAppointmentNotificationsMessage(null)
+                      setAppointmentNotificationsError(null)
+                    }}
+                  />
+                  <span>Email me when appointments are cancelled.</span>
+                </label>
+
+                <button
+                  type="button"
+                  className={styles.settingsSaveBtn}
+                  onClick={handleSaveAppointmentNotificationPreferences}
+                  disabled={appointmentNotificationsSaving}
+                >
+                  {appointmentNotificationsSaving ? 'Saving...' : 'Save preferences'}
+                </button>
+
+                {appointmentNotificationsMessage && <p className={styles.queueSuccess}>{appointmentNotificationsMessage}</p>}
+                {appointmentNotificationsError && <p className={styles.queueError}>{appointmentNotificationsError}</p>}
               </>
             )}
           </section>

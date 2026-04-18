@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using NextTurn.API.Models.Auth;
 using NextTurn.Application.Auth;
+using NextTurn.Application.Auth.Commands.UpdateAppointmentNotificationPreferences;
 using NextTurn.Application.Auth.Commands.UpdateQueueNotificationPreference;
 using NextTurn.Application.Auth.Commands.CreateStaffUser;
 using NextTurn.Application.Auth.Commands.InviteStaffUser;
@@ -16,6 +17,7 @@ using NextTurn.Application.Auth.Commands.ReactivateStaffUser;
 using NextTurn.Application.Auth.Commands.RegisterGlobalUser;
 using NextTurn.Application.Auth.Commands.RegisterUser;
 using NextTurn.Application.Auth.Queries.GetQueueNotificationPreference;
+using NextTurn.Application.Auth.Queries.GetAppointmentNotificationPreferences;
 using NextTurn.Application.Auth.Queries.ListStaffUsers;
 
 namespace NextTurn.API.Controllers;
@@ -343,6 +345,48 @@ public sealed class AuthController : ControllerBase
             new UpdateQueueNotificationPreferenceCommand(
                 userId,
                 request.QueueTurnApproachingNotificationsEnabled),
+            cancellationToken);
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Gets the authenticated user's appointment notification preferences.
+    /// </summary>
+    [HttpGet("appointment-notification-preferences")]
+    [Authorize]
+    [ProducesResponseType(typeof(AppointmentNotificationPreferencesResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetAppointmentNotificationPreferences(CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        var result = await _sender.Send(new GetAppointmentNotificationPreferencesQuery(userId), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Updates the authenticated user's appointment notification preferences.
+    /// </summary>
+    [HttpPut("appointment-notification-preferences")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateAppointmentNotificationPreferences(
+        [FromBody] UpdateAppointmentNotificationPreferencesRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized();
+
+        await _sender.Send(
+            new UpdateAppointmentNotificationPreferencesCommand(
+                userId,
+                request.AppointmentBookedNotificationsEnabled,
+                request.AppointmentRescheduledNotificationsEnabled,
+                request.AppointmentCancelledNotificationsEnabled),
             cancellationToken);
 
         return NoContent();
