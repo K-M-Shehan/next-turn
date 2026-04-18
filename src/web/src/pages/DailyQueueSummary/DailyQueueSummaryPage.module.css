@@ -5,7 +5,7 @@
 }
 
 .topNav {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 1.5rem 1.25rem 0;
   display: flex;
@@ -23,18 +23,8 @@
   gap: 0.6rem;
 }
 
-.backBtn {
-  border: 1px solid #2f4f4f;
-  background: #fff;
-  color: #2f4f4f;
-  border-radius: 999px;
-  padding: 0.55rem 1rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 .main {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 1rem 1.25rem 2rem;
 }
@@ -49,43 +39,31 @@
 }
 
 .subtitle {
-  margin-top: 0.5rem;
+  margin-top: 0.4rem;
   color: #4f5f70;
 }
 
-.filtersCard {
+.controls {
   background: #fff;
-  border-radius: 16px;
-  padding: 1rem;
+  border-radius: 14px;
   box-shadow: 0 8px 24px rgba(24, 39, 75, 0.08);
-}
-
-.filtersGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
+  padding: 1rem;
+  display: flex;
+  align-items: end;
+  gap: 0.8rem;
+  flex-wrap: wrap;
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.92rem;
-  color: #304052;
 }
 
 .input {
   border: 1px solid #c8d0d8;
   border-radius: 10px;
   padding: 0.55rem 0.7rem;
-  font-size: 0.95rem;
-}
-
-.actions {
-  margin-top: 0.9rem;
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
 }
 
 .primaryBtn,
@@ -119,64 +97,85 @@
 
 .results {
   margin-top: 1rem;
-  display: grid;
-  gap: 1rem;
 }
 
-.summaryGrid {
+.summaryCards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.8rem;
 }
 
-.metricCard {
+.card {
   background: #fff;
-  border-radius: 14px;
+  border-radius: 12px;
   padding: 0.9rem;
   box-shadow: 0 8px 24px rgba(24, 39, 75, 0.08);
 }
 
-.metricLabel {
+.cardLabel {
   color: #4f5f70;
   font-size: 0.85rem;
 }
 
-.metricValue {
+.cardValue {
   display: block;
   margin-top: 0.2rem;
-  font-size: 1.25rem;
+  font-size: 1.4rem;
 }
 
-.peakCard {
+.cardTrend {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.tableWrap {
+  margin-top: 1rem;
   background: #fff;
-  border-radius: 14px;
-  padding: 1rem;
+  border-radius: 12px;
   box-shadow: 0 8px 24px rgba(24, 39, 75, 0.08);
+  overflow-x: auto;
 }
 
-.sectionTitle {
-  margin: 0 0 0.7rem;
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.7rem;
+  border-bottom: 1px solid #eceff2;
+  text-align: left;
+}
+
+.table th {
+  font-size: 0.82rem;
+  color: #44576a;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.metricCell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.trendUp {
+  color: #0f766e;
+}
+
+.trendDown {
+  color: #be123c;
+}
+
+.trendNeutral {
+  color: #475569;
 }
 
 .emptyText {
-  margin: 0;
-  color: #4f5f70;
-}
-
-.peakList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.peakRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.6rem 0;
-  border-bottom: 1px solid #eceff2;
-}
-
-.peakRow:last-child {
-  border-bottom: none;
+  margin-top: 1rem;
+  color: #475569;
 }
