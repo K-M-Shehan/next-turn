@@ -1,6 +1,7 @@
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using NextTurn.Application.Appointment.Notifications;
 using NextTurn.Application.Auth.Commands.RegisterUser;
 using NextTurn.Application.Common.Behaviours;
 
@@ -38,6 +39,8 @@ public static class DependencyInjection
         services.AddTransient(
             typeof(IPipelineBehavior<,>),
             typeof(ValidationBehavior<,>));
+
+        services.AddScoped<IAppointmentNotificationService, AppointmentNotificationService>();
 
         return services;
     }

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Moq;
 using NextTurn.Application.Appointment.Commands.BookAppointment;
@@ -13,6 +14,7 @@ public sealed class BookAppointmentCommandHandlerTests
 {
     private readonly Mock<IAppointmentRepository> _appointmentRepositoryMock = new();
     private readonly Mock<IApplicationDbContext> _contextMock = new();
+    private readonly Mock<IPublisher> _publisherMock = new();
 
     private readonly BookAppointmentCommandHandler _handler;
 
@@ -45,7 +47,14 @@ public sealed class BookAppointmentCommandHandlerTests
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        _handler = new BookAppointmentCommandHandler(_appointmentRepositoryMock.Object, _contextMock.Object);
+        _publisherMock
+            .Setup(p => p.Publish(It.IsAny<AppointmentBookedNotification>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        _handler = new BookAppointmentCommandHandler(
+            _appointmentRepositoryMock.Object,
+            _contextMock.Object,
+            _publisherMock.Object);
     }
 
     [Fact]
@@ -73,6 +82,9 @@ public sealed class BookAppointmentCommandHandlerTests
             Times.Once);
 
         _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _publisherMock.Verify(
+            p => p.Publish(It.IsAny<AppointmentBookedNotification>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     [Fact]
@@ -89,6 +101,9 @@ public sealed class BookAppointmentCommandHandlerTests
 
         _appointmentRepositoryMock.Verify(r => r.AddAsync(It.IsAny<AppointmentEntity>(), It.IsAny<CancellationToken>()), Times.Never);
         _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _publisherMock.Verify(
+            p => p.Publish(It.IsAny<AppointmentBookedNotification>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

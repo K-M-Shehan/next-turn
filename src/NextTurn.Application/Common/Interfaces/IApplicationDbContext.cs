@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using AppointmentEntity = NextTurn.Domain.Appointment.Entities.Appointment;
+using AppointmentNotificationAuditLog = NextTurn.Domain.Appointment.Entities.AppointmentNotificationAuditLog;
 using AppointmentProfile = NextTurn.Domain.Appointment.Entities.AppointmentProfile;
 using AppointmentScheduleRule = NextTurn.Domain.Appointment.Entities.AppointmentScheduleRule;
 using NextTurn.Domain.Auth.Entities;
@@ -28,6 +29,7 @@ public interface IApplicationDbContext
     DbSet<QueueActionAuditLog> QueueActionAuditLogs { get; }
     DbSet<QueueTurnNotificationAuditLog> QueueTurnNotificationAuditLogs { get; }
     DbSet<AppointmentEntity> Appointments { get; }
+    DbSet<AppointmentNotificationAuditLog> AppointmentNotificationAuditLogs { get; }
     DbSet<AppointmentProfile> AppointmentProfiles { get; }
     DbSet<AppointmentScheduleRule> AppointmentScheduleRules { get; }
     DbSet<StaffOfficeAssignment> StaffOfficeAssignments { get; }
