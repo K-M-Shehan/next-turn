@@ -36,4 +36,17 @@ public interface IEmailService
         int ticketNumber,
         int positionInQueue,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends appointment status updates (booked, rescheduled, cancelled) with slot and context details.
+    /// </summary>
+    Task SendAppointmentStatusEmailAsync(
+        string toEmail,
+        string userName,
+        string notificationType,
+        DateTimeOffset slotStart,
+        DateTimeOffset slotEnd,
+        string officeName,
+        string serviceName,
+        CancellationToken cancellationToken);
 }

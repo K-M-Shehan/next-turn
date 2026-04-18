@@ -1,5 +1,5 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
+using NextTurn.Application.Appointment.Notifications;
 
 namespace NextTurn.Application.Appointment.Commands.RescheduleAppointment;
 
@@ -10,29 +10,20 @@ namespace NextTurn.Application.Appointment.Commands.RescheduleAppointment;
 public sealed class AppointmentRescheduledNotificationHandler
     : INotificationHandler<AppointmentRescheduledNotification>
 {
-    private readonly ILogger<AppointmentRescheduledNotificationHandler> _logger;
+    private readonly IAppointmentNotificationService _appointmentNotificationService;
 
     public AppointmentRescheduledNotificationHandler(
-        ILogger<AppointmentRescheduledNotificationHandler> logger)
+        IAppointmentNotificationService appointmentNotificationService)
     {
-        _logger = logger;
+        _appointmentNotificationService = appointmentNotificationService;
     }
 
     public Task Handle(
         AppointmentRescheduledNotification notification,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation(
-            "Appointment rescheduled. OldId: {OldId}, NewId: {NewId}, UserId: {UserId}, OrgId: {OrgId}, OldSlot: {OldStart}->{OldEnd}, NewSlot: {NewStart}->{NewEnd}.",
-            notification.PreviousAppointmentId,
+        return _appointmentNotificationService.SendRescheduleUpdateAsync(
             notification.NewAppointmentId,
-            notification.UserId,
-            notification.OrganisationId,
-            notification.PreviousSlotStart,
-            notification.PreviousSlotEnd,
-            notification.NewSlotStart,
-            notification.NewSlotEnd);
-
-        return Task.CompletedTask;
+            cancellationToken);
     }
 }

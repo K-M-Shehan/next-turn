@@ -67,4 +67,27 @@ public sealed class StubEmailService : IEmailService
 
         return Task.CompletedTask;
     }
+
+    public Task SendAppointmentStatusEmailAsync(
+        string toEmail,
+        string userName,
+        string notificationType,
+        DateTimeOffset slotStart,
+        DateTimeOffset slotEnd,
+        string officeName,
+        string serviceName,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[STUB] Appointment {NotificationType} email would be sent to {Email} ({UserName}). Slot: {SlotStart}->{SlotEnd}, Office: {OfficeName}, Service: {ServiceName}",
+            notificationType,
+            toEmail,
+            userName,
+            slotStart,
+            slotEnd,
+            officeName,
+            serviceName);
+
+        return Task.CompletedTask;
+    }
 }

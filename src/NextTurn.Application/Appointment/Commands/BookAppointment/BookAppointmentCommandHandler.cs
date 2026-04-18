@@ -14,13 +14,16 @@ public sealed class BookAppointmentCommandHandler : IRequestHandler<BookAppointm
 {
     private readonly IAppointmentRepository _appointmentRepository;
     private readonly IApplicationDbContext _context;
+    private readonly IPublisher _publisher;
 
     public BookAppointmentCommandHandler(
         IAppointmentRepository appointmentRepository,
-        IApplicationDbContext context)
+        IApplicationDbContext context,
+        IPublisher publisher)
     {
         _appointmentRepository = appointmentRepository;
         _context = context;
+        _publisher = publisher;
     }
 
     public async Task<BookAppointmentResult> Handle(
@@ -64,6 +67,8 @@ public sealed class BookAppointmentCommandHandler : IRequestHandler<BookAppointm
         {
             throw new ConflictDomainException("This time slot is already booked.");
         }
+
+        await _publisher.Publish(new AppointmentBookedNotification(appointment.Id), cancellationToken);
 
         return new BookAppointmentResult(appointment.Id);
     }
