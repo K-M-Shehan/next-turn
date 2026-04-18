@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using NextTurn.Application.Common.Interfaces;
 using AppointmentEntity  = NextTurn.Domain.Appointment.Entities.Appointment;
+using AppointmentNotificationAuditLog = NextTurn.Domain.Appointment.Entities.AppointmentNotificationAuditLog;
 using AppointmentProfile = NextTurn.Domain.Appointment.Entities.AppointmentProfile;
 using AppointmentProfileStaffAssignment = NextTurn.Domain.Appointment.Entities.AppointmentProfileStaffAssignment;
 using AppointmentScheduleRule = NextTurn.Domain.Appointment.Entities.AppointmentScheduleRule;
@@ -55,6 +56,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     // Appointment module (NT-19).
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
+    public DbSet<AppointmentNotificationAuditLog> AppointmentNotificationAuditLogs => Set<AppointmentNotificationAuditLog>();
     public DbSet<AppointmentProfile> AppointmentProfiles => Set<AppointmentProfile>();
     public DbSet<AppointmentProfileStaffAssignment> AppointmentProfileStaffAssignments => Set<AppointmentProfileStaffAssignment>();
     public DbSet<AppointmentScheduleRule> AppointmentScheduleRules => Set<AppointmentScheduleRule>();
@@ -112,6 +114,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
         // Appointments: scoped by organisation (tenant).
         modelBuilder.Entity<AppointmentEntity>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<AppointmentNotificationAuditLog>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
         modelBuilder.Entity<AppointmentProfile>()

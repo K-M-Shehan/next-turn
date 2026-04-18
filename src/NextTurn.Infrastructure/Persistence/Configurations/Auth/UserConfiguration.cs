@@ -105,6 +105,18 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasDefaultValue(true);
 
+        builder.Property(u => u.AppointmentBookedNotificationsEnabled)
+            .IsRequired()
+            .HasDefaultValue(true);
+
+        builder.Property(u => u.AppointmentRescheduledNotificationsEnabled)
+            .IsRequired()
+            .HasDefaultValue(true);
+
+        builder.Property(u => u.AppointmentCancelledNotificationsEnabled)
+            .IsRequired()
+            .HasDefaultValue(true);
+
         builder.Property(u => u.StaffInviteTokenHash)
             .HasMaxLength(128);
 
