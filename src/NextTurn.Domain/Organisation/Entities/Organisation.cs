@@ -29,6 +29,7 @@ public class Organisation
     public OrganisationType    Type        { get; private set; }
     public OrganisationStatus  Status      { get; private set; }
     public EmailAddress        AdminEmail  { get; private set; }
+    public int                 QueueNotificationThreshold { get; private set; }
     public DateTimeOffset      CreatedAt   { get; }
 
     // Required by EF Core for entity materialisation — prevents direct construction.
@@ -49,6 +50,7 @@ public class Organisation
         OrganisationType   type,
         OrganisationStatus status,
         EmailAddress       adminEmail,
+        int                queueNotificationThreshold,
         DateTimeOffset     createdAt)
     {
         Id         = id;
@@ -58,6 +60,7 @@ public class Organisation
         Type       = type;
         Status     = status;
         AdminEmail = adminEmail;
+        QueueNotificationThreshold = queueNotificationThreshold;
         CreatedAt  = createdAt;
     }
 
@@ -91,6 +94,7 @@ public class Organisation
             type:       type,
             status:     OrganisationStatus.PendingApproval,
             adminEmail: adminEmail,
+            queueNotificationThreshold: 3,
             createdAt:  DateTimeOffset.UtcNow);
     }
 
@@ -167,5 +171,13 @@ public class Organisation
             throw new DomainException("Only a suspended organisation can be reinstated.");
 
         Status = OrganisationStatus.Active;
+    }
+
+    public void SetQueueNotificationThreshold(int threshold)
+    {
+        if (threshold < 1 || threshold > 50)
+            throw new DomainException("Queue notification threshold must be between 1 and 50.");
+
+        QueueNotificationThreshold = threshold;
     }
 }

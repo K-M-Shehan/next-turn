@@ -8,6 +8,7 @@ using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
 using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 using QueueActionAuditLog = NextTurn.Domain.Queue.Entities.QueueActionAuditLog;
+using QueueTurnNotificationAuditLog = NextTurn.Domain.Queue.Entities.QueueTurnNotificationAuditLog;
 using ServiceEntity = NextTurn.Domain.Service.Entities.Service;
 using ServiceOfficeAssignment = NextTurn.Domain.Service.Entities.ServiceOfficeAssignment;
 
@@ -25,6 +26,7 @@ public interface IApplicationDbContext
     DbSet<QueueEntity>      Queues       { get; }
     DbSet<QueueEntry>       QueueEntries { get; }
     DbSet<QueueActionAuditLog> QueueActionAuditLogs { get; }
+    DbSet<QueueTurnNotificationAuditLog> QueueTurnNotificationAuditLogs { get; }
     DbSet<AppointmentEntity> Appointments { get; }
     DbSet<AppointmentProfile> AppointmentProfiles { get; }
     DbSet<AppointmentScheduleRule> AppointmentScheduleRules { get; }
