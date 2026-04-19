@@ -280,6 +280,26 @@ export function DashboardPage() {
 
   const unreadNotificationsCount = inAppNotifications.filter(n => !n.isRead).length
 
+  useEffect(() => {
+    function handleTabShortcuts(event: KeyboardEvent) {
+      if (event.defaultPrevented || isTypingTarget(event.target)) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      const nextTab = keyToDashboardTab(key)
+      if (!nextTab) {
+        return
+      }
+
+      event.preventDefault()
+      setActiveTab(nextTab)
+    }
+
+    window.addEventListener('keydown', handleTabShortcuts)
+    return () => window.removeEventListener('keydown', handleTabShortcuts)
+  }, [])
+
   return (
     <div className={styles.page}>
       <header className={styles.navbar}>
@@ -317,6 +337,7 @@ export function DashboardPage() {
                 type="button"
                 className={`${styles.navItem} ${activeTab === 'home' ? styles.navItemActive : ''}`}
                 onClick={() => setActiveTab('home')}
+                aria-keyshortcuts="1 h"
               >
                 <HomeIcon />
                 <span>Home</span>
@@ -325,6 +346,7 @@ export function DashboardPage() {
                 type="button"
                 className={`${styles.navItem} ${activeTab === 'queues' ? styles.navItemActive : ''}`}
                 onClick={() => setActiveTab('queues')}
+                aria-keyshortcuts="2 q"
               >
                 <QueueIcon />
                 <span>Queues</span>
@@ -334,6 +356,7 @@ export function DashboardPage() {
                 type="button"
                 className={`${styles.navItem} ${activeTab === 'appointments' ? styles.navItemActive : ''}`}
                 onClick={() => setActiveTab('appointments')}
+                aria-keyshortcuts="3 a"
               >
                 <CalendarIcon />
                 <span>Appointments</span>
@@ -343,12 +366,15 @@ export function DashboardPage() {
                 type="button"
                 className={`${styles.navItem} ${activeTab === 'notifications' ? styles.navItemActive : ''}`}
                 onClick={() => setActiveTab('notifications')}
+                aria-keyshortcuts="4 n"
               >
                 <BellIcon />
                 <span>Notifications</span>
                 <span className={styles.navCount}>{unreadNotificationsCount}</span>
               </button>
             </nav>
+
+            <p className={styles.shortcutHint}>Shortcuts: 1/2/3/4 or H/Q/A/N</p>
           </aside>
 
           <div className={styles.contentInner}>
@@ -366,8 +392,9 @@ export function DashboardPage() {
               </div>
             </div>
 
-            {activeTab === 'home' && (
-              <>
+            <div key={activeTab} className={styles.tabPanel}>
+              {activeTab === 'home' && (
+                <>
                 <section className={styles.quickStats} aria-label="Quick overview">
                   <article className={styles.statCard}>
                     <p className={styles.statLabel}>Active queues</p>
@@ -439,11 +466,11 @@ export function DashboardPage() {
                   </div>
                   {appointmentLinkError && <p className={styles.joinWidgetError}>{appointmentLinkError}</p>}
                 </section>
-              </>
-            )}
+                </>
+              )}
 
-            {activeTab === 'queues' && (
-              <section className={styles.queueSection} aria-label="My active queues">
+              {activeTab === 'queues' && (
+                <section className={styles.queueSection} aria-label="My active queues">
                 <div className={styles.sectionHeader}>
                   <QueueIcon />
                   <h2 className={styles.sectionTitle}>My Active Queues</h2>
@@ -478,11 +505,11 @@ export function DashboardPage() {
                     ))}
                   </ul>
                 )}
-              </section>
-            )}
+                </section>
+              )}
 
-            {activeTab === 'appointments' && (
-              <section className={styles.queueSection} aria-label="My active appointment bookings">
+              {activeTab === 'appointments' && (
+                <section className={styles.queueSection} aria-label="My active appointment bookings">
                 <div className={styles.sectionHeader}>
                   <CalendarIcon />
                   <h2 className={styles.sectionTitle}>My Active Appointment Bookings</h2>
@@ -532,11 +559,11 @@ export function DashboardPage() {
                     ))}
                   </ul>
                 )}
-              </section>
-            )}
+                </section>
+              )}
 
-            {activeTab === 'notifications' && (
-              <>
+              {activeTab === 'notifications' && (
+                <>
                 <section className={styles.settingsSection} aria-label="In-app notifications">
                   <div className={styles.sectionHeaderRow}>
                     <div className={styles.sectionHeader}>
@@ -692,8 +719,9 @@ export function DashboardPage() {
                     </>
                   )}
                 </section>
-              </>
-            )}
+                </>
+              )}
+            </div>
 
             <div className={styles.authCard} role="note">
               <CheckCircleIcon />
@@ -707,6 +735,27 @@ export function DashboardPage() {
       </main>
     </div>
   )
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  const tagName = target.tagName.toLowerCase()
+  if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+    return true
+  }
+
+  return target.isContentEditable
+}
+
+function keyToDashboardTab(key: string): DashboardTab | null {
+  if (key === '1' || key === 'h') return 'home'
+  if (key === '2' || key === 'q') return 'queues'
+  if (key === '3' || key === 'a') return 'appointments'
+  if (key === '4' || key === 'n') return 'notifications'
+  return null
 }
 
 function formatDashboardSlot(slotStart: string, slotEnd: string): string {

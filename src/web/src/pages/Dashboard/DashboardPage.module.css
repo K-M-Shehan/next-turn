@@ -140,6 +140,7 @@
   border-radius: var(--radius-xl);
   padding: var(--space-5);
   box-shadow: 0 8px 24px rgba(35, 114, 39, 0.08);
+  animation: sideIn 0.42s ease-out;
 }
 
 .sidebarHeader {
@@ -207,6 +208,20 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+  animation: contentIn 0.34s ease-out;
+}
+
+.tabPanel {
+  display: grid;
+  gap: var(--space-6);
+  animation: tabFade 0.28s ease-out;
+}
+
+.shortcutHint {
+  margin: var(--space-4) 0 0;
+  font-size: 0.72rem;
+  color: #58725f;
+  letter-spacing: 0.02em;
 }
 
 /* ============================================================
@@ -241,6 +256,18 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-3);
+}
+
+.quickStats > * {
+  animation: riseUp 0.28s ease both;
+}
+
+.quickStats > *:nth-child(2) {
+  animation-delay: 0.05s;
+}
+
+.quickStats > *:nth-child(3) {
+  animation-delay: 0.1s;
 }
 
 .statCard {
@@ -846,4 +873,57 @@
   font-size: 0.8125rem;
   color: #c62828;
   margin: 0;
+}
+
+@keyframes sideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes contentIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tabFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes riseUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .contentInner,
+  .tabPanel,
+  .quickStats > * {
+    animation: none !important;
+  }
 }

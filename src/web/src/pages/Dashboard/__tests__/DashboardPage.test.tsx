@@ -17,7 +17,7 @@
  *  7. Falls back gracefully when getTokenPayload returns null (clears token + navigates to /)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
@@ -125,6 +125,17 @@ describe('DashboardPage — sidebar layout', () => {
     expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /join queue by link/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /open appointment by link/i })).toBeInTheDocument()
+  })
+
+  it('switches tabs using keyboard shortcuts', () => {
+    renderPage()
+    expect(screen.getByRole('heading', { name: /join queue by link/i })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: '2' })
+    expect(screen.getByRole('heading', { name: /my active queues/i })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'n' })
+    expect(screen.getByRole('heading', { name: /in-app notifications/i })).toBeInTheDocument()
   })
 })
 
