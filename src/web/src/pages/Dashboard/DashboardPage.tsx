@@ -16,6 +16,9 @@ import {
 import { getMyQueues, type MyQueueEntry } from '../../api/queues'
 import { cancelAppointment, getMyAppointmentBookings, type MyAppointmentBooking } from '../../api/appointments'
 import type { ApiError } from '../../types/api'
+import { OnboardingTour } from '../../components/OnboardingTour'
+import { ROLE_TOUR_CONTENT } from '../../onboarding/roleTours'
+import { useOnboardingTour } from '../../onboarding/useOnboardingTour'
 import logoImg from '../../assets/nextTurn-logo.png'
 import styles from './DashboardPage.module.css'
 
@@ -89,6 +92,7 @@ export function DashboardPage() {
   const [appointmentLinkError, setAppointmentLinkError] = useState<string | null>(null)
 
   const tenantId = routeTenantId ?? (payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid)
+  const onboarding = useOnboardingTour(`citizen:${payload.sub}:${tenantId ?? 'global'}`)
 
   useEffect(() => {
     getMyQueues()
@@ -346,7 +350,7 @@ export function DashboardPage() {
 
       <main className={styles.main}>
         <div className={styles.workspace}>
-          <aside className={styles.sidebar} aria-label="Dashboard navigation">
+          <aside className={styles.sidebar} aria-label="Dashboard navigation" data-onboarding="citizen-sidebar">
             <div className={styles.sidebarHeader}>
               <p className={styles.sidebarTitle}>Dashboard</p>
               <p className={styles.sidebarSubtitle}>Everything in one place</p>
@@ -368,6 +372,7 @@ export function DashboardPage() {
                 className={`${styles.navItem} ${activeTab === 'queues' ? styles.navItemActive : ''}`}
                 onClick={() => setActiveTab('queues')}
                 aria-keyshortcuts="2 q"
+                data-onboarding="citizen-queues-tab"
               >
                 <QueueIcon />
                 <span>Queues</span>
@@ -378,6 +383,7 @@ export function DashboardPage() {
                 className={`${styles.navItem} ${activeTab === 'appointments' ? styles.navItemActive : ''}`}
                 onClick={() => setActiveTab('appointments')}
                 aria-keyshortcuts="3 a"
+                data-onboarding="citizen-appointments-tab"
               >
                 <CalendarIcon />
                 <span>Appointments</span>
@@ -388,6 +394,7 @@ export function DashboardPage() {
                 className={`${styles.navItem} ${activeTab === 'notifications' ? styles.navItemActive : ''}`}
                 onClick={() => setActiveTab('notifications')}
                 aria-keyshortcuts="4 n"
+                data-onboarding="citizen-notifications-tab"
               >
                 <BellIcon />
                 <span>Notifications</span>
@@ -431,7 +438,7 @@ export function DashboardPage() {
                   </article>
                 </section>
 
-                <section className={styles.joinWidget} aria-label="Join a queue by link">
+                <section className={styles.joinWidget} aria-label="Join a queue by link" data-onboarding="citizen-queue-link">
                   <div className={styles.sectionHeader}>
                     <LinkIcon />
                     <h2 className={styles.sectionTitle}>Join Queue by Link</h2>
@@ -740,6 +747,21 @@ export function DashboardPage() {
                     </>
                   )}
                 </section>
+
+                <section className={styles.settingsSection} aria-label="Profile and onboarding settings" data-onboarding="citizen-settings">
+                  <div className={styles.sectionHeader}>
+                    <CheckCircleIcon />
+                    <h2 className={styles.sectionTitle}>Profile and Onboarding</h2>
+                  </div>
+                  <p className={styles.queueEmpty}>Need a refresher? Replay the guided tour at any time.</p>
+                  <button
+                    type="button"
+                    className={styles.settingsSaveBtn}
+                    onClick={onboarding.restartTour}
+                  >
+                    Restart onboarding tour
+                  </button>
+                </section>
                 </>
               )}
             </div>
@@ -757,6 +779,13 @@ export function DashboardPage() {
                 Tip: Use 1/2/3/4 or H/Q/A/N to switch tabs faster.
               </div>
             )}
+
+            <OnboardingTour
+              isOpen={onboarding.isOpen}
+              title="Quick tour: citizen dashboard"
+              steps={ROLE_TOUR_CONTENT.citizen}
+              onClose={onboarding.completeTour}
+            />
           </div>
         </div>
       </main>

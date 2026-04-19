@@ -63,7 +63,7 @@ export function OnboardingTour({ isOpen, title, steps, onClose }: OnboardingTour
 
     updateHighlight()
     const element = document.querySelector(activeStep.target)
-    if (element instanceof HTMLElement) {
+    if (element instanceof HTMLElement && typeof element.scrollIntoView === 'function') {
       element.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
 
