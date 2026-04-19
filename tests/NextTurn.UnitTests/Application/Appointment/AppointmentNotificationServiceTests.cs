@@ -25,17 +25,24 @@ public sealed class AppointmentNotificationServiceTests
     {
         var setup = BuildSetup();
         var addedLogs = new List<AppointmentNotificationAuditLog>();
+        var addedInAppNotifications = new List<UserInAppNotification>();
 
         var auditDbSetMock = AsyncQueryableHelper.BuildMockDbSet(Array.Empty<AppointmentNotificationAuditLog>());
         auditDbSetMock
             .Setup(s => s.Add(It.IsAny<AppointmentNotificationAuditLog>()))
             .Callback<AppointmentNotificationAuditLog>(log => addedLogs.Add(log));
 
+        var inAppDbSetMock = AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>());
+        inAppDbSetMock
+            .Setup(s => s.Add(It.IsAny<UserInAppNotification>()))
+            .Callback<UserInAppNotification>(notification => addedInAppNotifications.Add(notification));
+
         _contextMock.Setup(c => c.Appointments).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.Appointment }).Object);
         _contextMock.Setup(c => c.Users).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.User }).Object);
         _contextMock.Setup(c => c.AppointmentProfiles).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.Profile }).Object);
         _contextMock.Setup(c => c.Organisations).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.Organisation }).Object);
         _contextMock.Setup(c => c.AppointmentNotificationAuditLogs).Returns(auditDbSetMock.Object);
+        _contextMock.Setup(c => c.UserInAppNotifications).Returns(inAppDbSetMock.Object);
         _contextMock.Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         var service = new AppointmentNotificationService(_contextMock.Object, _emailServiceMock.Object, _loggerMock.Object);
@@ -57,6 +64,8 @@ public sealed class AppointmentNotificationServiceTests
         addedLogs.Should().ContainSingle();
         addedLogs[0].DeliveryStatus.Should().Be("Sent");
         addedLogs[0].NotificationType.Should().Be("Booked");
+        addedInAppNotifications.Should().ContainSingle();
+        addedInAppNotifications[0].NotificationType.Should().Be("AppointmentBooked");
         _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -72,6 +81,8 @@ public sealed class AppointmentNotificationServiceTests
         _contextMock.Setup(c => c.Organisations).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.Organisation }).Object);
         _contextMock.Setup(c => c.AppointmentNotificationAuditLogs)
             .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<AppointmentNotificationAuditLog>()).Object);
+        _contextMock.Setup(c => c.UserInAppNotifications)
+            .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>()).Object);
 
         var service = new AppointmentNotificationService(_contextMock.Object, _emailServiceMock.Object, _loggerMock.Object);
 
@@ -96,17 +107,24 @@ public sealed class AppointmentNotificationServiceTests
     {
         var setup = BuildSetup();
         var addedLogs = new List<AppointmentNotificationAuditLog>();
+        var addedInAppNotifications = new List<UserInAppNotification>();
 
         var auditDbSetMock = AsyncQueryableHelper.BuildMockDbSet(Array.Empty<AppointmentNotificationAuditLog>());
         auditDbSetMock
             .Setup(s => s.Add(It.IsAny<AppointmentNotificationAuditLog>()))
             .Callback<AppointmentNotificationAuditLog>(log => addedLogs.Add(log));
 
+        var inAppDbSetMock = AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>());
+        inAppDbSetMock
+            .Setup(s => s.Add(It.IsAny<UserInAppNotification>()))
+            .Callback<UserInAppNotification>(notification => addedInAppNotifications.Add(notification));
+
         _contextMock.Setup(c => c.Appointments).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.Appointment }).Object);
         _contextMock.Setup(c => c.Users).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.User }).Object);
         _contextMock.Setup(c => c.AppointmentProfiles).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.Profile }).Object);
         _contextMock.Setup(c => c.Organisations).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { setup.Organisation }).Object);
         _contextMock.Setup(c => c.AppointmentNotificationAuditLogs).Returns(auditDbSetMock.Object);
+        _contextMock.Setup(c => c.UserInAppNotifications).Returns(inAppDbSetMock.Object);
         _contextMock.Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         _emailServiceMock
@@ -129,6 +147,8 @@ public sealed class AppointmentNotificationServiceTests
         addedLogs[0].DeliveryStatus.Should().Be("Failed");
         addedLogs[0].NotificationType.Should().Be("Rescheduled");
         addedLogs[0].ErrorMessage.Should().Contain("smtp down");
+        addedInAppNotifications.Should().ContainSingle();
+        addedInAppNotifications[0].NotificationType.Should().Be("AppointmentRescheduled");
         _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -137,6 +157,8 @@ public sealed class AppointmentNotificationServiceTests
     {
         _contextMock.Setup(c => c.Appointments)
             .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<AppointmentEntity>()).Object);
+        _contextMock.Setup(c => c.UserInAppNotifications)
+            .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>()).Object);
 
         var service = new AppointmentNotificationService(_contextMock.Object, _emailServiceMock.Object, _loggerMock.Object);
 

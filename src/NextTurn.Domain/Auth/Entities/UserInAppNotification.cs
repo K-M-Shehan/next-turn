@@ -93,6 +93,69 @@ public sealed class UserInAppNotification
             queueEntryId: queueEntryId);
     }
 
+    public static UserInAppNotification AppointmentBooked(
+        Guid organisationId,
+        Guid userId,
+        DateTimeOffset slotStart,
+        string serviceName,
+        string officeName)
+    {
+        return new UserInAppNotification(
+            id: Guid.NewGuid(),
+            organisationId: organisationId,
+            userId: userId,
+            notificationType: "AppointmentBooked",
+            title: "Appointment booked",
+            message: $"Your {serviceName} appointment at {officeName} is confirmed for {slotStart:MMM d, yyyy h:mm tt}.",
+            isRead: false,
+            createdAt: DateTimeOffset.UtcNow,
+            readAt: null,
+            queueId: null,
+            queueEntryId: null);
+    }
+
+    public static UserInAppNotification AppointmentRescheduled(
+        Guid organisationId,
+        Guid userId,
+        DateTimeOffset slotStart,
+        string serviceName,
+        string officeName)
+    {
+        return new UserInAppNotification(
+            id: Guid.NewGuid(),
+            organisationId: organisationId,
+            userId: userId,
+            notificationType: "AppointmentRescheduled",
+            title: "Appointment rescheduled",
+            message: $"Your {serviceName} appointment at {officeName} was rescheduled to {slotStart:MMM d, yyyy h:mm tt}.",
+            isRead: false,
+            createdAt: DateTimeOffset.UtcNow,
+            readAt: null,
+            queueId: null,
+            queueEntryId: null);
+    }
+
+    public static UserInAppNotification AppointmentCancelled(
+        Guid organisationId,
+        Guid userId,
+        DateTimeOffset slotStart,
+        string serviceName,
+        string officeName)
+    {
+        return new UserInAppNotification(
+            id: Guid.NewGuid(),
+            organisationId: organisationId,
+            userId: userId,
+            notificationType: "AppointmentCancelled",
+            title: "Appointment cancelled",
+            message: $"Your {serviceName} appointment at {officeName} scheduled for {slotStart:MMM d, yyyy h:mm tt} was cancelled.",
+            isRead: false,
+            createdAt: DateTimeOffset.UtcNow,
+            readAt: null,
+            queueId: null,
+            queueEntryId: null);
+    }
+
     public void MarkAsRead()
     {
         if (IsRead)
