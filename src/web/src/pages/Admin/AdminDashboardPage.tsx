@@ -1911,95 +1911,89 @@ export function AdminDashboardPage() {
               )}
             </div>
 
-            <div className={styles.staffListBlock}>
-              <h3 className={styles.sectionSubTitle}>Staff Profile Management</h3>
-              <p className={styles.sectionHint}>Edit assigned offices, counter and shift details from Staff Accounts.</p>
+            <p className={styles.emptyNote}>Click Edit Details on any account to open the staff profile editor.</p>
 
-              {staffProfilesLoading && (
-                <p className={styles.emptyNote}>Loading staff profile data...</p>
-              )}
-
-              {!staffProfilesLoading && selectedStaffProfileId && (
-                <div className={styles.profileEditorCard}>
-                  <div className={styles.formGrid}>
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-name">Name</label>
-                      <input
-                        id="staff-edit-name"
-                        className={styles.input}
-                        type="text"
-                        value={staffProfileForm.name}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-phone">Phone</label>
-                      <input
-                        id="staff-edit-phone"
-                        className={styles.input}
-                        type="tel"
-                        value={staffProfileForm.phone}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, phone: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-shift-start">Shift Start (HH:mm)</label>
-                      <input
-                        id="staff-edit-shift-start"
-                        className={styles.input}
-                        type="time"
-                        value={staffProfileForm.shiftStart}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftStart: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-shift-end">Shift End (HH:mm)</label>
-                      <input
-                        id="staff-edit-shift-end"
-                        className={styles.input}
-                        type="time"
-                        value={staffProfileForm.shiftEnd}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftEnd: e.target.value }))}
-                      />
-                    </div>
+            {selectedStaffProfileId && (
+              <div className={styles.appointmentModalOverlay} onClick={resetStaffProfileEditor} role="presentation">
+                <div className={styles.appointmentModal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="staff-editor-title">
+                  <div className={styles.appointmentModalHeader}>
+                    <h3 id="staff-editor-title" className={styles.appointmentModalTitle}>Edit Staff Details</h3>
+                    <button className={styles.copyBtn} type="button" onClick={resetStaffProfileEditor} disabled={staffProfileSaving}>Close</button>
                   </div>
 
-                  <div>
-                    <p className={styles.sectionSubTitle}>Assigned Office</p>
-                    {officeOptions.length === 0 ? (
-                      <p className={styles.emptyNote}>No active offices found.</p>
-                    ) : (
+                  <div className={styles.appointmentModalBody}>
+                    <div className={styles.formGrid}>
                       <div className={styles.formGroup}>
-                        <label className={styles.label} htmlFor="staff-edit-office">Office</label>
-                        <select
-                          id="staff-edit-office"
+                        <label className={styles.label} htmlFor="staff-edit-name">Name</label>
+                        <input
+                          id="staff-edit-name"
                           className={styles.input}
-                          value={staffProfileForm.officeId}
-                          onChange={e => setStaffProfileForm(prev => ({ ...prev, officeId: e.target.value }))}
-                        >
-                          <option value="">Select one office</option>
-                          {officeOptions.map(office => (
-                            <option key={office.officeId} value={office.officeId}>
-                              {office.name}
-                            </option>
-                          ))}
-                        </select>
+                          type="text"
+                          value={staffProfileForm.name}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                        />
                       </div>
-                    )}
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-phone">Phone</label>
+                        <input
+                          id="staff-edit-phone"
+                          className={styles.input}
+                          type="tel"
+                          value={staffProfileForm.phone}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-shift-start">Shift Start (HH:mm)</label>
+                        <input
+                          id="staff-edit-shift-start"
+                          className={styles.input}
+                          type="time"
+                          value={staffProfileForm.shiftStart}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftStart: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-shift-end">Shift End (HH:mm)</label>
+                        <input
+                          id="staff-edit-shift-end"
+                          className={styles.input}
+                          type="time"
+                          value={staffProfileForm.shiftEnd}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftEnd: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className={styles.sectionSubTitle}>Assigned Office</p>
+                      {officeOptions.length === 0 ? (
+                        <p className={styles.emptyNote}>No active offices found.</p>
+                      ) : (
+                        <div className={styles.formGroup}>
+                          <label className={styles.label} htmlFor="staff-edit-office">Office</label>
+                          <select
+                            id="staff-edit-office"
+                            className={styles.input}
+                            value={staffProfileForm.officeId}
+                            onChange={e => setStaffProfileForm(prev => ({ ...prev, officeId: e.target.value }))}
+                          >
+                            <option value="">Select one office</option>
+                            {officeOptions.map(office => (
+                              <option key={office.officeId} value={office.officeId}>
+                                {office.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className={styles.staffEditorActions}>
-                    <button
-                      type="button"
-                      className={styles.createBtn}
-                      onClick={saveStaffProfile}
-                      disabled={staffProfileSaving || !staffProfileForm.name.trim()}
-                    >
-                      {staffProfileSaving ? 'Saving...' : 'Save Staff Details'}
-                    </button>
+                  <div className={styles.appointmentModalActions}>
                     <button
                       type="button"
                       className={styles.copyBtn}
@@ -2008,14 +2002,18 @@ export function AdminDashboardPage() {
                     >
                       Cancel
                     </button>
+                    <button
+                      type="button"
+                      className={styles.createBtn}
+                      onClick={saveStaffProfile}
+                      disabled={staffProfileSaving || !staffProfileForm.name.trim()}
+                    >
+                      {staffProfileSaving ? 'Saving...' : 'Save Staff Details'}
+                    </button>
                   </div>
                 </div>
-              )}
-
-              {!staffProfilesLoading && !selectedStaffProfileId && (
-                <p className={styles.emptyNote}>Choose a staff account above and click Edit Details.</p>
-              )}
-            </div>
+              </div>
+            )}
           </section>
         )}
             </div>

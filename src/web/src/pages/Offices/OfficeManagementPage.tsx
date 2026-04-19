@@ -12,8 +12,6 @@ import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import styles from './OfficeManagementPage.module.css'
 
-type Mode = 'create' | 'edit'
-
 interface OfficeForm {
   name: string
   address: string
@@ -46,10 +44,12 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
   const [isActiveFilter, setIsActiveFilter] = useState<'all' | 'active' | 'inactive'>('active')
   const [search, setSearch] = useState('')
   const [form, setForm] = useState<OfficeForm>(defaultForm)
-  const [mode, setMode] = useState<Mode>('create')
   const [editOfficeId, setEditOfficeId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<OfficeForm>(defaultForm)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [selectedOffice, setSelectedOffice] = useState<OfficeDto | null>(null)
   const [saving, setSaving] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [success, setSuccess] = useState<string | null>(null)
 
   const activeCount = useMemo(() => offices.filter(x => x.isActive).length, [offices])
@@ -112,8 +112,6 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
 
   function resetForm() {
     setForm(defaultForm)
-    setMode('create')
-    setEditOfficeId(null)
   }
 
   function openOfficeDetails(office: OfficeDto) {
@@ -125,17 +123,23 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
   }
 
   function selectForEdit(office: OfficeDto) {
-    setMode('edit')
     setEditOfficeId(office.officeId)
-    setForm({
+    setEditForm({
       name: office.name,
       address: office.address,
       latitude: office.latitude?.toString() ?? '',
       longitude: office.longitude?.toString() ?? '',
       openingHours: office.openingHours,
     })
+    setEditModalOpen(true)
     setSuccess(null)
     setError(null)
+  }
+
+  function closeEditModal() {
+    setEditModalOpen(false)
+    setEditOfficeId(null)
+    setEditForm(defaultForm)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -155,13 +159,8 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
     }
 
     try {
-      if (mode === 'create') {
-        await createOffice(tenantId, payloadBody)
-        setSuccess('Office created successfully.')
-      } else if (editOfficeId) {
-        await updateOffice(tenantId, editOfficeId, payloadBody)
-        setSuccess('Office updated successfully.')
-      }
+      await createOffice(tenantId, payloadBody)
+      setSuccess('Office created successfully.')
 
       resetForm()
       await loadOffices(tenantId, derivedIsActive, search)
@@ -170,6 +169,35 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
       setError(apiErr.detail ?? 'Could not save office.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSaveEdit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!tenantId || !editOfficeId) return
+
+    setSavingEdit(true)
+    setError(null)
+    setSuccess(null)
+
+    const payloadBody = {
+      name: editForm.name.trim(),
+      address: editForm.address.trim(),
+      latitude: editForm.latitude.trim() ? Number(editForm.latitude) : null,
+      longitude: editForm.longitude.trim() ? Number(editForm.longitude) : null,
+      openingHours: editForm.openingHours.trim(),
+    }
+
+    try {
+      await updateOffice(tenantId, editOfficeId, payloadBody)
+      setSuccess('Office updated successfully.')
+      closeEditModal()
+      await loadOffices(tenantId, derivedIsActive, search)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setError(apiErr.detail ?? 'Could not save office updates.')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -246,7 +274,7 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
       </section>
 
       <section className={styles.formCard} data-onboarding="admin-office-create">
-        <h2>{mode === 'create' ? 'Create Office' : 'Update Office'}</h2>
+        <h2>Create Office</h2>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input
             className={styles.input}
@@ -286,36 +314,10 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
 
           <div className={styles.actions}>
             <button type="submit" className={styles.primaryBtn} disabled={saving}>
-              {saving ? 'Saving...' : mode === 'create' ? 'Create Office' : 'Update Office'}
+              {saving ? 'Saving...' : 'Create Office'}
             </button>
-            {mode === 'edit' && (
-              <button type="button" className={styles.secondaryBtn} onClick={resetForm}>
-                Cancel Edit
-              </button>
-            )}
           </div>
         </form>
-
-        {mode === 'edit' && editOfficeId && (
-          <div className={styles.staffPanel}>
-            <h3 className={styles.staffPanelTitle}>Staff In This Office</h3>
-            {(staffByOffice.get(editOfficeId)?.length ?? 0) === 0 ? (
-              <p className={styles.meta}>No staff currently assigned to this office.</p>
-            ) : (
-              <ul className={styles.staffList}>
-                {(staffByOffice.get(editOfficeId) ?? []).map(staff => (
-                  <li key={staff.staffUserId} className={styles.staffItem}>
-                    <strong>{staff.name}</strong>
-                    <span className={styles.meta}>{staff.email}</span>
-                    <span className={staff.isActive ? styles.activeBadge : styles.inactiveBadge}>
-                      {staff.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
       </section>
 
       <section className={styles.listCard} data-onboarding="admin-office-list">
@@ -447,6 +449,91 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
               >
                 Edit Office
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editModalOpen && editOfficeId && (
+        <div className={styles.modalOverlay} onClick={closeEditModal}>
+          <div
+            className={styles.modalCard}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="office-edit-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <h3 id="office-edit-title" className={styles.modalTitle}>Update Office</h3>
+              <button type="button" className={styles.secondaryBtn} onClick={closeEditModal} disabled={savingEdit}>
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className={styles.form}>
+              <input
+                className={styles.input}
+                placeholder="Office name"
+                value={editForm.name}
+                onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))}
+                required
+              />
+              <input
+                className={styles.input}
+                placeholder="Office address"
+                value={editForm.address}
+                onChange={(e) => setEditForm(f => ({ ...f, address: e.target.value }))}
+                required
+              />
+              <div className={styles.coords}>
+                <input
+                  className={styles.input}
+                  placeholder="Latitude (optional)"
+                  value={editForm.latitude}
+                  onChange={(e) => setEditForm(f => ({ ...f, latitude: e.target.value }))}
+                />
+                <input
+                  className={styles.input}
+                  placeholder="Longitude (optional)"
+                  value={editForm.longitude}
+                  onChange={(e) => setEditForm(f => ({ ...f, longitude: e.target.value }))}
+                />
+              </div>
+              <textarea
+                className={styles.textarea}
+                placeholder="Opening hours (string or JSON)"
+                value={editForm.openingHours}
+                onChange={(e) => setEditForm(f => ({ ...f, openingHours: e.target.value }))}
+                required
+              />
+
+              <div className={styles.actions}>
+                <button type="submit" className={styles.primaryBtn} disabled={savingEdit}>
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button type="button" className={styles.secondaryBtn} onClick={closeEditModal} disabled={savingEdit}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+
+            <div className={styles.staffPanel}>
+              <h3 className={styles.staffPanelTitle}>Staff In This Office</h3>
+              {(staffByOffice.get(editOfficeId)?.length ?? 0) === 0 ? (
+                <p className={styles.meta}>No staff currently assigned to this office.</p>
+              ) : (
+                <ul className={styles.staffList}>
+                  {(staffByOffice.get(editOfficeId) ?? []).map(staff => (
+                    <li key={staff.staffUserId} className={styles.staffItem}>
+                      <strong>{staff.name}</strong>
+                      <span className={styles.meta}>{staff.email}</span>
+                      <span className={staff.isActive ? styles.activeBadge : styles.inactiveBadge}>
+                        {staff.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </div>
