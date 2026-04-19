@@ -12,10 +12,9 @@
  *  2. Renders user's email in the welcome banner
  *  3. Renders the "User" role badge for a regular user
  *  4. Renders non-default role badge (Staff)
- *  5. Renders all four placeholder feature cards
- *  6. Renders the tenant ID chip
- *  7. Logout button calls clearToken and navigates to /
- *  8. Falls back gracefully when getTokenPayload returns null (clears token + navigates to /)
+ *  5. Renders the sidebar navigation and home widgets
+ *  6. Logout button calls clearToken and navigates to /
+ *  7. Falls back gracefully when getTokenPayload returns null (clears token + navigates to /)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -115,30 +114,22 @@ describe('DashboardPage — role badge', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 5: Placeholder cards
+// 5: Sidebar and home widgets
 // ---------------------------------------------------------------------------
-describe('DashboardPage — placeholder cards', () => {
-  it('renders all four Sprint 2 placeholder feature cards', () => {
+describe('DashboardPage — sidebar layout', () => {
+  it('renders sidebar tabs and home quick actions', () => {
     renderPage()
-    expect(screen.getByText('My Queue')).toBeInTheDocument()
-    expect(screen.getByText('Appointments')).toBeInTheDocument()
-    expect(screen.getByText('Notifications')).toBeInTheDocument()
-    expect(screen.getByText('Activity')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /home/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /queues/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /appointments/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /join queue by link/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /open appointment by link/i })).toBeInTheDocument()
   })
 })
 
 // ---------------------------------------------------------------------------
-// 6: Tenant chip
-// ---------------------------------------------------------------------------
-describe('DashboardPage — tenant chip', () => {
-  it('displays the tenantId from the URL in the welcome banner', () => {
-    renderPage()
-    expect(screen.getByText(TENANT_ID)).toBeInTheDocument()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 7: Logout
+// 6: Logout
 // ---------------------------------------------------------------------------
 describe('DashboardPage — logout', () => {
   it('calls clearToken when the Sign out button is clicked', async () => {
@@ -157,7 +148,7 @@ describe('DashboardPage — logout', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 8: Null payload fallback
+// 7: Null payload fallback
 // ---------------------------------------------------------------------------
 describe('DashboardPage — null token fallback', () => {
   it('clears the token and navigates to / when getTokenPayload returns null', async () => {

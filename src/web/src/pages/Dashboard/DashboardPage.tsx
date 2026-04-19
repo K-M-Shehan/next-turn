@@ -1,27 +1,6 @@
-/**
- * DashboardPage — Sprint 1 protected placeholder.
- *
- * Route: /dashboard/:tenantId  (wrapped by ProtectedRoute)
- *
- * Sprint 1 scope:
- *  - Decode the stored JWT and display the user's name and role
- *  - Provide a working logout button (clearToken + navigate to /)
- *  - Visual placeholder cards for Queue & Appointments (Sprint 2)
- *
- * This page is intentionally minimal. The real dashboard (queue lists,
- * appointment management, staff views) is built in Sprint 2+. The value
- * of this page in Sprint 1 is proving the end-to-end auth flow works:
- *  Register → Login → JWT stored → ProtectedRoute passes → Dashboard shown
- *
- * Sprint 2 additions (NT-XX):
- *  - Replace placeholder cards with real queue / appointment data
- *  - Role-based layout (staff vs user vs admin views)
- *  - Token refresh / 401 interceptor
- */
-import { useState, useEffect } from 'react'
-import { useNavigate, Link, useParams } from 'react-router-dom'
-import { clearToken } from '../../utils/authToken'
-import { getTokenPayload } from '../../utils/authToken'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { clearToken, getTokenPayload } from '../../utils/authToken'
 import {
   getAppointmentNotificationPreferences,
   getQueueNotificationPreference,
@@ -40,23 +19,26 @@ import type { ApiError } from '../../types/api'
 import logoImg from '../../assets/nextTurn-logo.png'
 import styles from './DashboardPage.module.css'
 
-/** Human-readable label for the UserRole enum string */
+type DashboardTab = 'home' | 'queues' | 'appointments' | 'notifications'
+
 function roleBadgeLabel(role: string): { label: string; className: string } {
   switch (role) {
-    case 'Staff':       return { label: 'Staff',          className: styles.roleStaff }
-    case 'OrgAdmin':    return { label: 'Org Admin',       className: styles.roleOrgAdmin }
-    case 'SystemAdmin': return { label: 'System Admin',    className: styles.roleSystemAdmin }
-    default:            return { label: 'User',            className: styles.roleUser }
+    case 'Staff':
+      return { label: 'Staff', className: styles.roleStaff }
+    case 'OrgAdmin':
+      return { label: 'Org Admin', className: styles.roleOrgAdmin }
+    case 'SystemAdmin':
+      return { label: 'System Admin', className: styles.roleSystemAdmin }
+    default:
+      return { label: 'User', className: styles.roleUser }
   }
 }
 
 export function DashboardPage() {
   const navigate = useNavigate()
   const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>()
-  const payload  = getTokenPayload()
+  const payload = getTokenPayload()
 
-  // ProtectedRoute guarantees a valid token exists before we render.
-  // If payload decoding fails for any reason, log out defensively.
   if (!payload) {
     clearToken()
     navigate('/', { replace: true })
@@ -65,7 +47,9 @@ export function DashboardPage() {
 
   const { name, email, role } = payload
   const badge = roleBadgeLabel(role)
-  // ── My active queues ──────────────────────────────────────────────────
+
+  const [activeTab, setActiveTab] = useState<DashboardTab>('home')
+
   const [queues, setQueues] = useState<MyQueueEntry[]>([])
   const [queuesLoading, setQueuesLoading] = useState(true)
   const [queuesError, setQueuesError] = useState<string | null>(null)
@@ -75,16 +59,18 @@ export function DashboardPage() {
   const [appointmentsError, setAppointmentsError] = useState<string | null>(null)
   const [appointmentsSuccess, setAppointmentsSuccess] = useState<string | null>(null)
   const [cancellingAppointmentId, setCancellingAppointmentId] = useState<string | null>(null)
+
   const [queueNotificationsEnabled, setQueueNotificationsEnabled] = useState(true)
+  const [notificationsLoading, setNotificationsLoading] = useState(true)
+  const [notificationsSaving, setNotificationsSaving] = useState(false)
+  const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null)
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
+
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([])
   const [inAppNotificationsLoading, setInAppNotificationsLoading] = useState(true)
   const [inAppNotificationsError, setInAppNotificationsError] = useState<string | null>(null)
   const [markingAllRead, setMarkingAllRead] = useState(false)
   const [markingSingleReadId, setMarkingSingleReadId] = useState<string | null>(null)
-  const [notificationsLoading, setNotificationsLoading] = useState(true)
-  const [notificationsSaving, setNotificationsSaving] = useState(false)
-  const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null)
-  const [notificationsError, setNotificationsError] = useState<string | null>(null)
 
   const [appointmentNotificationsLoading, setAppointmentNotificationsLoading] = useState(true)
   const [appointmentNotificationsSaving, setAppointmentNotificationsSaving] = useState(false)
@@ -94,18 +80,34 @@ export function DashboardPage() {
   const [appointmentRescheduledNotificationsEnabled, setAppointmentRescheduledNotificationsEnabled] = useState(true)
   const [appointmentCancelledNotificationsEnabled, setAppointmentCancelledNotificationsEnabled] = useState(true)
 
-  const tenantId =
-    routeTenantId
-    ?? (payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid)
+  const [linkInput, setLinkInput] = useState('')
+  const [linkError, setLinkError] = useState<string | null>(null)
+
+  const [appointmentLinkInput, setAppointmentLinkInput] = useState('')
+  const [appointmentLinkError, setAppointmentLinkError] = useState<string | null>(null)
+
+  const tenantId = routeTenantId ?? (payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid)
 
   useEffect(() => {
     getMyQueues()
-      .then(data => { setQueues(data); setQueuesLoading(false) })
-      .catch(() => { setQueuesError('Could not load your queues.'); setQueuesLoading(false) })
+      .then(data => {
+        setQueues(data)
+        setQueuesLoading(false)
+      })
+      .catch(() => {
+        setQueuesError('Could not load your queues.')
+        setQueuesLoading(false)
+      })
 
     getMyAppointmentBookings()
-      .then(data => { setAppointments(data); setAppointmentsLoading(false) })
-      .catch(() => { setAppointmentsError('Could not load your appointment bookings.'); setAppointmentsLoading(false) })
+      .then(data => {
+        setAppointments(data)
+        setAppointmentsLoading(false)
+      })
+      .catch(() => {
+        setAppointmentsError('Could not load your appointment bookings.')
+        setAppointmentsLoading(false)
+      })
 
     getQueueNotificationPreference(tenantId)
       .then(data => {
@@ -165,35 +167,25 @@ export function DashboardPage() {
     return () => window.clearTimeout(timer)
   }, [appointmentsSuccess])
 
-  // ── Join by link ─────────────────────────────────────────────────────
-  const [linkInput, setLinkInput] = useState('')
-  const [linkError, setLinkError] = useState<string | null>(null)
-
-  const [appointmentLinkInput, setAppointmentLinkInput] = useState('')
-  const [appointmentLinkError, setAppointmentLinkError] = useState<string | null>(null)
-
   function handleJoinByLink() {
     setLinkError(null)
     try {
-      // Accept full URLs or just the path segment /queues/:tenantId/:queueId
       const url = new URL(linkInput.includes('://') ? linkInput : `https://x.com${linkInput}`)
       const match = url.pathname.match(/\/queues\/([^/]+)\/([^/]+)/)
       if (!match) throw new Error('invalid')
       const [, linkTenant, linkQueue] = match
       navigate(`/queues/${linkTenant}/${linkQueue}`)
     } catch {
-      setLinkError('Invalid queue link. Paste the full URL or the /queues/… path.')
+      setLinkError('Invalid queue link. Paste the full URL or the /queues/... path.')
     }
   }
 
   function handleOpenAppointmentByLink() {
     setAppointmentLinkError(null)
     try {
-      // Accept full URLs or just /appointments/:tenantId/:appointmentProfileId path.
       const url = new URL(appointmentLinkInput.includes('://') ? appointmentLinkInput : `https://x.com${appointmentLinkInput}`)
       const match = url.pathname.match(/\/appointments\/([^/]+)\/([^/]+)/)
       if (!match) throw new Error('invalid')
-
       const [, linkTenant, linkProfile] = match
       navigate(`/appointments/${linkTenant}/${linkProfile}`)
     } catch {
@@ -246,7 +238,7 @@ export function DashboardPage() {
     setMarkingSingleReadId(notificationId)
     try {
       await markNotificationRead(notificationId, tenantId)
-      setInAppNotifications(prev => prev.map(n => n.notificationId === notificationId ? { ...n, isRead: true } : n))
+      setInAppNotifications(prev => prev.map(n => (n.notificationId === notificationId ? { ...n, isRead: true } : n)))
     } catch {
       setInAppNotificationsError('Could not mark notification as read.')
     } finally {
@@ -286,9 +278,10 @@ export function DashboardPage() {
     }
   }
 
+  const unreadNotificationsCount = inAppNotifications.filter(n => !n.isRead).length
+
   return (
     <div className={styles.page}>
-      {/* ── Top nav ─────────────────────────────────────────────── */}
       <header className={styles.navbar}>
         <div className={styles.navInner}>
           <div className={styles.navBrand}>
@@ -303,12 +296,7 @@ export function DashboardPage() {
               <span className={styles.userName}>{name}</span>
               <span className={`${styles.roleBadge} ${badge.className}`}>{badge.label}</span>
             </div>
-            <button
-              className={styles.logoutBtn}
-              onClick={handleLogout}
-              type="button"
-              aria-label="Sign out"
-            >
+            <button className={styles.logoutBtn} onClick={handleLogout} type="button" aria-label="Sign out">
               <LogoutIcon />
               <span>Sign out</span>
             </button>
@@ -316,346 +304,405 @@ export function DashboardPage() {
         </div>
       </header>
 
-      {/* ── Main content ────────────────────────────────────────── */}
       <main className={styles.main}>
-        <div className={styles.contentInner}>
-
-          {/* Welcome banner */}
-          <div className={styles.welcome}>
-            <div>
-              <h1 className={styles.welcomeHeading}>Welcome back, {name.split(' ')[0]}!</h1>
-              <p className={styles.welcomeSub}>{email}</p>
+        <div className={styles.workspace}>
+          <aside className={styles.sidebar} aria-label="Dashboard navigation">
+            <div className={styles.sidebarHeader}>
+              <p className={styles.sidebarTitle}>Dashboard</p>
+              <p className={styles.sidebarSubtitle}>Everything in one place</p>
             </div>
-          </div>
 
-          <section className={styles.settingsSection} aria-label="In-app notifications">
-            <div className={styles.sectionHeaderRow}
-            >
-              <div className={styles.sectionHeader}>
+            <nav className={styles.sidebarNav}>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'home' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('home')}
+              >
+                <HomeIcon />
+                <span>Home</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'queues' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('queues')}
+              >
+                <QueueIcon />
+                <span>Queues</span>
+                <span className={styles.navCount}>{queues.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'appointments' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('appointments')}
+              >
+                <CalendarIcon />
+                <span>Appointments</span>
+                <span className={styles.navCount}>{appointments.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'notifications' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('notifications')}
+              >
                 <BellIcon />
-                <h2 className={styles.sectionTitle}>In-App Notifications</h2>
-              </div>
-
-              <button
-                type="button"
-                className={styles.settingsSaveBtn}
-                onClick={handleMarkAllNotificationsRead}
-                disabled={markingAllRead || inAppNotifications.length === 0}
-              >
-                {markingAllRead ? 'Marking...' : 'Mark all as read'}
+                <span>Notifications</span>
+                <span className={styles.navCount}>{unreadNotificationsCount}</span>
               </button>
-            </div>
+            </nav>
+          </aside>
 
-            {inAppNotificationsLoading && <p className={styles.queueEmpty}>Loading notifications…</p>}
-            {!inAppNotificationsLoading && inAppNotificationsError && <p className={styles.queueError}>{inAppNotificationsError}</p>}
-
-            {!inAppNotificationsLoading && !inAppNotificationsError && inAppNotifications.length === 0 && (
-              <p className={styles.queueEmpty}>No notifications yet.</p>
-            )}
-
-            {!inAppNotificationsLoading && inAppNotifications.length > 0 && (
-              <ul className={styles.notificationsList}>
-                {inAppNotifications.map(notification => (
-                  <li
-                    key={notification.notificationId}
-                    className={`${styles.notificationCard} ${notification.isRead ? styles.notificationRead : styles.notificationUnread}`}
-                  >
-                    <div className={styles.notificationBody}>
-                      <p className={styles.notificationTitle}>{notification.title}</p>
-                      <p className={styles.notificationMessage}>{notification.message}</p>
-                      <span className={styles.notificationTime}>{formatRelativeTime(notification.createdAt)}</span>
-                    </div>
-
-                    {!notification.isRead && (
-                      <button
-                        type="button"
-                        className={styles.notificationReadBtn}
-                        onClick={() => handleMarkNotificationRead(notification.notificationId)}
-                        disabled={markingSingleReadId === notification.notificationId}
-                      >
-                        {markingSingleReadId === notification.notificationId ? 'Saving...' : 'Mark read'}
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className={styles.settingsSection} aria-label="Queue notification settings">
-            <div className={styles.sectionHeader}>
-              <BellIcon />
-              <h2 className={styles.sectionTitle}>Queue Notifications</h2>
-            </div>
-
-            {notificationsLoading && <p className={styles.queueEmpty}>Loading settings…</p>}
-
-            {!notificationsLoading && (
-              <>
-                <label className={styles.settingsToggle}>
-                  <input
-                    type="checkbox"
-                    checked={queueNotificationsEnabled}
-                    onChange={e => {
-                      setQueueNotificationsEnabled(e.target.checked)
-                      setNotificationsMessage(null)
-                      setNotificationsError(null)
-                    }}
-                  />
-                  <span>Notify me by email when my queue turn is approaching.</span>
-                </label>
-
-                <button
-                  type="button"
-                  className={styles.settingsSaveBtn}
-                  onClick={handleSaveNotificationPreference}
-                  disabled={notificationsSaving}
-                >
-                  {notificationsSaving ? 'Saving...' : 'Save preference'}
-                </button>
-
-                {notificationsMessage && <p className={styles.queueSuccess}>{notificationsMessage}</p>}
-                {notificationsError && <p className={styles.queueError}>{notificationsError}</p>}
-              </>
-            )}
-          </section>
-
-          <section className={styles.settingsSection} aria-label="Appointment notification settings">
-            <div className={styles.sectionHeader}>
-              <CalendarIcon />
-              <h2 className={styles.sectionTitle}>Appointment Notifications</h2>
-            </div>
-
-            {appointmentNotificationsLoading && <p className={styles.queueEmpty}>Loading settings…</p>}
-
-            {!appointmentNotificationsLoading && (
-              <>
-                <label className={styles.settingsToggle}>
-                  <input
-                    type="checkbox"
-                    checked={appointmentBookedNotificationsEnabled}
-                    onChange={e => {
-                      setAppointmentBookedNotificationsEnabled(e.target.checked)
-                      setAppointmentNotificationsMessage(null)
-                      setAppointmentNotificationsError(null)
-                    }}
-                  />
-                  <span>Email me booking confirmations.</span>
-                </label>
-
-                <label className={styles.settingsToggle}>
-                  <input
-                    type="checkbox"
-                    checked={appointmentRescheduledNotificationsEnabled}
-                    onChange={e => {
-                      setAppointmentRescheduledNotificationsEnabled(e.target.checked)
-                      setAppointmentNotificationsMessage(null)
-                      setAppointmentNotificationsError(null)
-                    }}
-                  />
-                  <span>Email me when appointments are rescheduled.</span>
-                </label>
-
-                <label className={styles.settingsToggle}>
-                  <input
-                    type="checkbox"
-                    checked={appointmentCancelledNotificationsEnabled}
-                    onChange={e => {
-                      setAppointmentCancelledNotificationsEnabled(e.target.checked)
-                      setAppointmentNotificationsMessage(null)
-                      setAppointmentNotificationsError(null)
-                    }}
-                  />
-                  <span>Email me when appointments are cancelled.</span>
-                </label>
-
-                <button
-                  type="button"
-                  className={styles.settingsSaveBtn}
-                  onClick={handleSaveAppointmentNotificationPreferences}
-                  disabled={appointmentNotificationsSaving}
-                >
-                  {appointmentNotificationsSaving ? 'Saving...' : 'Save preferences'}
-                </button>
-
-                {appointmentNotificationsMessage && <p className={styles.queueSuccess}>{appointmentNotificationsMessage}</p>}
-                {appointmentNotificationsError && <p className={styles.queueError}>{appointmentNotificationsError}</p>}
-              </>
-            )}
-          </section>
-
-          {/* ── My active queues ─────────────────────────────────── */}
-          <section className={styles.queueSection} aria-label="My active queues">
-            <div className={styles.sectionHeader}>
-              <QueueIcon />
-              <h2 className={styles.sectionTitle}>My Active Queues</h2>
-            </div>
-
-            {queuesLoading && (
-              <div className={styles.queuePlaceholder}>
-                <span className={styles.queueSpinner} aria-hidden="true" />
-                <span>Loading queues…</span>
+          <div className={styles.contentInner}>
+            <div className={styles.welcome}>
+              <div>
+                <h1 className={styles.welcomeHeading}>Welcome back, {name.split(' ')[0]}!</h1>
+                <p className={styles.welcomeSub}>{email}</p>
               </div>
-            )}
 
-            {!queuesLoading && queuesError && (
-              <p className={styles.queueError}>{queuesError}</p>
-            )}
+              <div className={styles.activeTabBadge}>
+                {activeTab === 'home' && 'Home'}
+                {activeTab === 'queues' && 'Queues'}
+                {activeTab === 'appointments' && 'Appointments'}
+                {activeTab === 'notifications' && 'Notifications'}
+              </div>
+            </div>
 
-            {!queuesLoading && !queuesError && queues.length === 0 && (
-              <p className={styles.queueEmpty}>You haven't joined any queues yet.</p>
-            )}
+            {activeTab === 'home' && (
+              <>
+                <section className={styles.quickStats} aria-label="Quick overview">
+                  <article className={styles.statCard}>
+                    <p className={styles.statLabel}>Active queues</p>
+                    <p className={styles.statValue}>{queues.length}</p>
+                  </article>
+                  <article className={styles.statCard}>
+                    <p className={styles.statLabel}>Active appointments</p>
+                    <p className={styles.statValue}>{appointments.length}</p>
+                  </article>
+                  <article className={styles.statCard}>
+                    <p className={styles.statLabel}>Unread notifications</p>
+                    <p className={styles.statValue}>{unreadNotificationsCount}</p>
+                  </article>
+                </section>
 
-            {!queuesLoading && queues.length > 0 && (
-              <ul className={styles.queueList}>
-                {queues.map(q => (
-                  <li key={q.queueId} className={styles.queueCard}>
-                    <div className={styles.queueCardInfo}>
-                      <span className={styles.queueCardName}>{q.queueName}</span>
-                      <QueueStatusBadge status={q.queueStatus} />
-                      <span className={styles.ticketChip}>#{q.ticketNumber}</span>
-                    </div>
-                    <Link
-                      to={`/queues/${q.organisationId}/${q.queueId}`}
-                      className={styles.queueJoinLink}
-                      aria-label={`View queue ${q.queueName}`}
+                <section className={styles.joinWidget} aria-label="Join a queue by link">
+                  <div className={styles.sectionHeader}>
+                    <LinkIcon />
+                    <h2 className={styles.sectionTitle}>Join Queue by Link</h2>
+                  </div>
+                  <p className={styles.joinWidgetDesc}>Paste a queue URL to jump in immediately.</p>
+                  <div className={styles.joinWidgetRow}>
+                    <input
+                      className={styles.joinWidgetInput}
+                      type="text"
+                      placeholder="https://... or /queues/tenant/queue"
+                      value={linkInput}
+                      onChange={e => {
+                        setLinkInput(e.target.value)
+                        setLinkError(null)
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && handleJoinByLink()}
+                      aria-label="Queue link"
+                    />
+                    <button className={styles.joinWidgetBtn} onClick={handleJoinByLink} type="button" disabled={!linkInput.trim()}>
+                      Open
+                    </button>
+                  </div>
+                  {linkError && <p className={styles.joinWidgetError}>{linkError}</p>}
+                </section>
+
+                <section className={styles.joinWidget} aria-label="Open appointment booking by link">
+                  <div className={styles.sectionHeader}>
+                    <CalendarIcon />
+                    <h2 className={styles.sectionTitle}>Open Appointment by Link</h2>
+                  </div>
+                  <p className={styles.joinWidgetDesc}>Paste an appointment booking URL to continue quickly.</p>
+                  <div className={styles.joinWidgetRow}>
+                    <input
+                      className={styles.joinWidgetInput}
+                      type="text"
+                      placeholder="https://... or /appointments/tenant/profile"
+                      value={appointmentLinkInput}
+                      onChange={e => {
+                        setAppointmentLinkInput(e.target.value)
+                        setAppointmentLinkError(null)
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && handleOpenAppointmentByLink()}
+                      aria-label="Appointment link"
+                    />
+                    <button
+                      className={styles.joinWidgetBtn}
+                      onClick={handleOpenAppointmentByLink}
+                      type="button"
+                      disabled={!appointmentLinkInput.trim()}
                     >
-                      View &rarr;
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className={styles.queueSection} aria-label="My active appointment bookings">
-            <div className={styles.sectionHeader}>
-              <CalendarIcon />
-              <h2 className={styles.sectionTitle}>My Active Appointment Bookings</h2>
-            </div>
-
-            {appointmentsLoading && (
-              <div className={styles.queuePlaceholder}>
-                <span className={styles.queueSpinner} aria-hidden="true" />
-                <span>Loading bookings…</span>
-              </div>
+                      Open
+                    </button>
+                  </div>
+                  {appointmentLinkError && <p className={styles.joinWidgetError}>{appointmentLinkError}</p>}
+                </section>
+              </>
             )}
 
-            {!appointmentsLoading && appointmentsError && (
-              <p className={styles.queueError}>{appointmentsError}</p>
+            {activeTab === 'queues' && (
+              <section className={styles.queueSection} aria-label="My active queues">
+                <div className={styles.sectionHeader}>
+                  <QueueIcon />
+                  <h2 className={styles.sectionTitle}>My Active Queues</h2>
+                </div>
+
+                {queuesLoading && (
+                  <div className={styles.queuePlaceholder}>
+                    <span className={styles.queueSpinner} aria-hidden="true" />
+                    <span>Loading queues...</span>
+                  </div>
+                )}
+
+                {!queuesLoading && queuesError && <p className={styles.queueError}>{queuesError}</p>}
+
+                {!queuesLoading && !queuesError && queues.length === 0 && (
+                  <p className={styles.queueEmpty}>You haven't joined any queues yet.</p>
+                )}
+
+                {!queuesLoading && queues.length > 0 && (
+                  <ul className={styles.queueList}>
+                    {queues.map(q => (
+                      <li key={q.queueId} className={styles.queueCard}>
+                        <div className={styles.queueCardInfo}>
+                          <span className={styles.queueCardName}>{q.queueName}</span>
+                          <QueueStatusBadge status={q.queueStatus} />
+                          <span className={styles.ticketChip}>#{q.ticketNumber}</span>
+                        </div>
+                        <Link to={`/queues/${q.organisationId}/${q.queueId}`} className={styles.queueJoinLink}>
+                          View &rarr;
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             )}
 
-            {!appointmentsLoading && !appointmentsError && appointmentsSuccess && (
-              <p className={styles.queueSuccess}>{appointmentsSuccess}</p>
+            {activeTab === 'appointments' && (
+              <section className={styles.queueSection} aria-label="My active appointment bookings">
+                <div className={styles.sectionHeader}>
+                  <CalendarIcon />
+                  <h2 className={styles.sectionTitle}>My Active Appointment Bookings</h2>
+                </div>
+
+                {appointmentsLoading && (
+                  <div className={styles.queuePlaceholder}>
+                    <span className={styles.queueSpinner} aria-hidden="true" />
+                    <span>Loading bookings...</span>
+                  </div>
+                )}
+
+                {!appointmentsLoading && appointmentsError && <p className={styles.queueError}>{appointmentsError}</p>}
+
+                {!appointmentsLoading && !appointmentsError && appointmentsSuccess && (
+                  <p className={styles.queueSuccess}>{appointmentsSuccess}</p>
+                )}
+
+                {!appointmentsLoading && !appointmentsError && appointments.length === 0 && (
+                  <p className={styles.queueEmpty}>You don't have any active appointment bookings yet.</p>
+                )}
+
+                {!appointmentsLoading && appointments.length > 0 && (
+                  <ul className={styles.queueList}>
+                    {appointments.map(a => (
+                      <li key={a.appointmentId} className={styles.appointmentCard}>
+                        <div className={styles.appointmentInfo}>
+                          <span className={styles.queueCardName}>{a.appointmentProfileName}</span>
+                          <span className={styles.appointmentMeta}>{a.organisationName}</span>
+                          <span className={styles.appointmentMeta}>{formatDashboardSlot(a.slotStart, a.slotEnd)}</span>
+                        </div>
+
+                        <div className={styles.appointmentActions}>
+                          <Link to={`/appointments/${a.organisationId}/${a.appointmentProfileId}`} className={styles.queueJoinLink}>
+                            View &rarr;
+                          </Link>
+                          <button
+                            type="button"
+                            className={styles.appointmentCancelBtn}
+                            onClick={() => handleCancelAppointment(a)}
+                            disabled={cancellingAppointmentId === a.appointmentId}
+                          >
+                            {cancellingAppointmentId === a.appointmentId ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
             )}
 
-            {!appointmentsLoading && !appointmentsError && appointments.length === 0 && (
-              <p className={styles.queueEmpty}>You don't have any active appointment bookings yet.</p>
-            )}
-
-            {!appointmentsLoading && appointments.length > 0 && (
-              <ul className={styles.queueList}>
-                {appointments.map(a => (
-                  <li key={a.appointmentId} className={styles.appointmentCard}>
-                    <div className={styles.appointmentInfo}>
-                      <span className={styles.queueCardName}>{a.appointmentProfileName}</span>
-                      <span className={styles.appointmentMeta}>{a.organisationName}</span>
-                      <span className={styles.appointmentMeta}>
-                        {formatDashboardSlot(a.slotStart, a.slotEnd)}
-                      </span>
+            {activeTab === 'notifications' && (
+              <>
+                <section className={styles.settingsSection} aria-label="In-app notifications">
+                  <div className={styles.sectionHeaderRow}>
+                    <div className={styles.sectionHeader}>
+                      <BellIcon />
+                      <h2 className={styles.sectionTitle}>In-App Notifications</h2>
                     </div>
 
-                    <div className={styles.appointmentActions}>
-                      <Link
-                        to={`/appointments/${a.organisationId}/${a.appointmentProfileId}`}
-                        className={styles.queueJoinLink}
-                        aria-label={`View appointment booking ${a.appointmentProfileName}`}
-                      >
-                        View &rarr;
-                      </Link>
+                    <button
+                      type="button"
+                      className={styles.settingsSaveBtn}
+                      onClick={handleMarkAllNotificationsRead}
+                      disabled={markingAllRead || inAppNotifications.length === 0}
+                    >
+                      {markingAllRead ? 'Marking...' : 'Mark all as read'}
+                    </button>
+                  </div>
+
+                  {inAppNotificationsLoading && <p className={styles.queueEmpty}>Loading notifications...</p>}
+                  {!inAppNotificationsLoading && inAppNotificationsError && (
+                    <p className={styles.queueError}>{inAppNotificationsError}</p>
+                  )}
+                  {!inAppNotificationsLoading && !inAppNotificationsError && inAppNotifications.length === 0 && (
+                    <p className={styles.queueEmpty}>No notifications yet.</p>
+                  )}
+
+                  {!inAppNotificationsLoading && inAppNotifications.length > 0 && (
+                    <ul className={styles.notificationsList}>
+                      {inAppNotifications.map(notification => (
+                        <li
+                          key={notification.notificationId}
+                          className={`${styles.notificationCard} ${notification.isRead ? styles.notificationRead : styles.notificationUnread}`}
+                        >
+                          <div className={styles.notificationBody}>
+                            <p className={styles.notificationTitle}>{notification.title}</p>
+                            <p className={styles.notificationMessage}>{notification.message}</p>
+                            <span className={styles.notificationTime}>{formatRelativeTime(notification.createdAt)}</span>
+                          </div>
+
+                          {!notification.isRead && (
+                            <button
+                              type="button"
+                              className={styles.notificationReadBtn}
+                              onClick={() => handleMarkNotificationRead(notification.notificationId)}
+                              disabled={markingSingleReadId === notification.notificationId}
+                            >
+                              {markingSingleReadId === notification.notificationId ? 'Saving...' : 'Mark read'}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section className={styles.settingsSection} aria-label="Queue notification settings">
+                  <div className={styles.sectionHeader}>
+                    <BellIcon />
+                    <h2 className={styles.sectionTitle}>Queue Notification Settings</h2>
+                  </div>
+
+                  {notificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!notificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={queueNotificationsEnabled}
+                          onChange={e => {
+                            setQueueNotificationsEnabled(e.target.checked)
+                            setNotificationsMessage(null)
+                            setNotificationsError(null)
+                          }}
+                        />
+                        <span>Notify me by email when my queue turn is approaching.</span>
+                      </label>
+
                       <button
                         type="button"
-                        className={styles.appointmentCancelBtn}
-                        onClick={() => handleCancelAppointment(a)}
-                        disabled={cancellingAppointmentId === a.appointmentId}
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveNotificationPreference}
+                        disabled={notificationsSaving}
                       >
-                        {cancellingAppointmentId === a.appointmentId ? 'Cancelling...' : 'Cancel'}
+                        {notificationsSaving ? 'Saving...' : 'Save preference'}
                       </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+
+                      {notificationsMessage && <p className={styles.queueSuccess}>{notificationsMessage}</p>}
+                      {notificationsError && <p className={styles.queueError}>{notificationsError}</p>}
+                    </>
+                  )}
+                </section>
+
+                <section className={styles.settingsSection} aria-label="Appointment notification settings">
+                  <div className={styles.sectionHeader}>
+                    <CalendarIcon />
+                    <h2 className={styles.sectionTitle}>Appointment Notification Settings</h2>
+                  </div>
+
+                  {appointmentNotificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!appointmentNotificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentBookedNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentBookedNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me booking confirmations.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentRescheduledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentRescheduledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are rescheduled.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentCancelledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentCancelledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are cancelled.</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveAppointmentNotificationPreferences}
+                        disabled={appointmentNotificationsSaving}
+                      >
+                        {appointmentNotificationsSaving ? 'Saving...' : 'Save preferences'}
+                      </button>
+
+                      {appointmentNotificationsMessage && <p className={styles.queueSuccess}>{appointmentNotificationsMessage}</p>}
+                      {appointmentNotificationsError && <p className={styles.queueError}>{appointmentNotificationsError}</p>}
+                    </>
+                  )}
+                </section>
+              </>
             )}
-          </section>
 
-          {/* ── Join by link ─────────────────────────────────────────── */}
-          <section className={styles.joinWidget} aria-label="Join a queue by link">
-            <div className={styles.sectionHeader}>
-              <LinkIcon />
-              <h2 className={styles.sectionTitle}>Join by Link</h2>
-            </div>
-            <p className={styles.joinWidgetDesc}>Have a queue URL? Paste it below to jump straight in.</p>
-            <div className={styles.joinWidgetRow}>
-              <input
-                className={styles.joinWidgetInput}
-                type="text"
-                placeholder="https://… or /queues/tenant/queue"
-                value={linkInput}
-                onChange={e => { setLinkInput(e.target.value); setLinkError(null) }}
-                onKeyDown={e => e.key === 'Enter' && handleJoinByLink()}
-                aria-label="Queue link"
-              />
-              <button
-                className={styles.joinWidgetBtn}
-                onClick={handleJoinByLink}
-                type="button"
-                disabled={!linkInput.trim()}
-              >
-                Go
-              </button>
-            </div>
-            {linkError && <p className={styles.joinWidgetError}>{linkError}</p>}
-          </section>
-
-          <section className={styles.joinWidget} aria-label="Open appointment booking by link">
-            <div className={styles.sectionHeader}>
-              <CalendarIcon />
-              <h2 className={styles.sectionTitle}>Open Appointment by Link</h2>
-            </div>
-            <p className={styles.joinWidgetDesc}>Have an appointment booking URL? Paste it here.</p>
-            <div className={styles.joinWidgetRow}>
-              <input
-                className={styles.joinWidgetInput}
-                type="text"
-                placeholder="https://… or /appointments/tenant/profile"
-                value={appointmentLinkInput}
-                onChange={e => { setAppointmentLinkInput(e.target.value); setAppointmentLinkError(null) }}
-                onKeyDown={e => e.key === 'Enter' && handleOpenAppointmentByLink()}
-                aria-label="Appointment link"
-              />
-              <button
-                className={styles.joinWidgetBtn}
-                onClick={handleOpenAppointmentByLink}
-                type="button"
-                disabled={!appointmentLinkInput.trim()}
-              >
-                Go
-              </button>
-            </div>
-            {appointmentLinkError && <p className={styles.joinWidgetError}>{appointmentLinkError}</p>}
-          </section>
-
-          {/* Auth flow confirmation — useful during demo / grading */}
-          <div className={styles.authCard} role="note">
-            <CheckCircleIcon />
-            <div>
-              <p className={styles.authCardTitle}>Authentication successful</p>
-              <p className={styles.authCardBody}>
-                JWT verified · Role: <strong>{role}</strong> · Token stored in localStorage
-              </p>
+            <div className={styles.authCard} role="note">
+              <CheckCircleIcon />
+              <div>
+                <p className={styles.authCardTitle}>You're signed in securely</p>
+                <p className={styles.authCardBody}>Role: <strong>{role}</strong> - Use the left sidebar to switch between features.</p>
+              </div>
             </div>
           </div>
-
         </div>
       </main>
     </div>
@@ -670,7 +717,7 @@ function formatDashboardSlot(slotStart: string, slotEnd: string): string {
   const from = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const to = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-  return `${date} · ${from} - ${to}`
+  return `${date} - ${from} to ${to}`
 }
 
 function formatRelativeTime(input: string): string {
@@ -689,84 +736,93 @@ function formatRelativeTime(input: string): string {
   return `${days}d ago`
 }
 
-/* ------------------------------------------------------------------ */
-/* Queue status badge                                                   */
-/* ------------------------------------------------------------------ */
 function QueueStatusBadge({ status }: { status: string }) {
   const cls =
-    status === 'Active'  ? styles.queueStatusActive :
-    status === 'Paused'  ? styles.queueStatusPaused :
-                           styles.queueStatusClosed
+    status === 'Active'
+      ? styles.queueStatusActive
+      : status === 'Paused'
+        ? styles.queueStatusPaused
+        : styles.queueStatusClosed
   return <span className={`${styles.queueStatusBadge} ${cls}`}>{status}</span>
 }
 
-/* ------------------------------------------------------------------ */
-/* SVG icons                                                            */
-/* ------------------------------------------------------------------ */
 function LogoutIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-      <polyline points="16 17 21 12 16 7"/>
-      <line x1="21" y1="12" x2="9" y2="12"/>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
+function HomeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+      <path d="M10 21v-6h4v6" />
     </svg>
   )
 }
 
 function QueueIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6"/>
-      <line x1="8" y1="12" x2="21" y2="12"/>
-      <line x1="8" y1="18" x2="21" y2="18"/>
-      <line x1="3" y1="6" x2="3.01" y2="6"/>
-      <line x1="3" y1="12" x2="3.01" y2="12"/>
-      <line x1="3" y1="18" x2="3.01" y2="18"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
     </svg>
   )
 }
 
 function LinkIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
-      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
     </svg>
   )
 }
 
 function CalendarIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   )
 }
 
 function CheckCircleIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={{ flexShrink: 0, color: 'var(--color-primary)' }}>
-      <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-      <polyline points="22 4 12 14.01 9 11.01"/>
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flexShrink: 0, color: 'var(--color-primary)' }}
+    >
+      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
     </svg>
   )
 }
 
 function BellIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
-      <path d="M13.73 21a2 2 0 01-3.46 0"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 01-3.46 0" />
     </svg>
   )
 }
