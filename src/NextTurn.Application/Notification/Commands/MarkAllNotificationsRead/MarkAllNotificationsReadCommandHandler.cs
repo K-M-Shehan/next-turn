@@ -16,6 +16,9 @@ public sealed class MarkAllNotificationsReadCommandHandler : IRequestHandler<Mar
     public async Task<Unit> Handle(MarkAllNotificationsReadCommand request, CancellationToken cancellationToken)
     {
         var unread = await _context.UserInAppNotifications
+            // Consumer users can have unread notifications from multiple orgs.
+            // Query by user ID across tenants.
+            .IgnoreQueryFilters()
             .Where(n => n.UserId == request.UserId && !n.IsRead)
             .ToListAsync(cancellationToken);
 

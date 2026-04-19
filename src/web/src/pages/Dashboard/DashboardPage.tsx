@@ -19,7 +19,7 @@
  *  - Token refresh / 401 interceptor
  */
 import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useParams } from 'react-router-dom'
 import { clearToken } from '../../utils/authToken'
 import { getTokenPayload } from '../../utils/authToken'
 import {
@@ -52,6 +52,7 @@ function roleBadgeLabel(role: string): { label: string; className: string } {
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>()
   const payload  = getTokenPayload()
 
   // ProtectedRoute guarantees a valid token exists before we render.
@@ -93,7 +94,9 @@ export function DashboardPage() {
   const [appointmentRescheduledNotificationsEnabled, setAppointmentRescheduledNotificationsEnabled] = useState(true)
   const [appointmentCancelledNotificationsEnabled, setAppointmentCancelledNotificationsEnabled] = useState(true)
 
-  const tenantId = payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid
+  const tenantId =
+    routeTenantId
+    ?? (payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid)
 
   useEffect(() => {
     getMyQueues()

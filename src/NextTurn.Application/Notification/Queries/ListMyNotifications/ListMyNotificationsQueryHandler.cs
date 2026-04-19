@@ -20,6 +20,9 @@ public sealed class ListMyNotificationsQueryHandler
         CancellationToken cancellationToken)
     {
         var items = await _context.UserInAppNotifications
+            // Consumer users can receive notifications from multiple orgs.
+            // Bypass tenant filter and scope by authenticated user ID instead.
+            .IgnoreQueryFilters()
             .AsNoTracking()
             .Where(n => n.UserId == request.UserId)
             .OrderByDescending(n => n.CreatedAt)

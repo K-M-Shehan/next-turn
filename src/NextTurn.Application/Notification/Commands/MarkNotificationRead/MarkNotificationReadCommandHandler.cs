@@ -17,6 +17,9 @@ public sealed class MarkNotificationReadCommandHandler : IRequestHandler<MarkNot
     public async Task<Unit> Handle(MarkNotificationReadCommand request, CancellationToken cancellationToken)
     {
         var notification = await _context.UserInAppNotifications
+            // Scope by user + notification ID to keep authorization strict while
+            // allowing global users to read notifications across org tenants.
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(
                 n => n.Id == request.NotificationId && n.UserId == request.UserId,
                 cancellationToken);
