@@ -8,6 +8,7 @@ using NextTurn.Domain.Auth.Repositories;
 using NextTurn.Domain.Auth.ValueObjects;
 using NextTurn.Domain.Common;
 using NextTurn.Domain.Queue.Repositories;
+using NextTurn.UnitTests.Helpers;
 using QueueEntity = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry  = NextTurn.Domain.Queue.Entities.QueueEntry;
 
@@ -74,6 +75,10 @@ public sealed class JoinQueueCommandHandlerTests
         _contextMock
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
+
+        _contextMock
+            .Setup(c => c.UserInAppNotifications)
+            .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>()).Object);
 
         var user = User.Create(
             tenantId: OrgId,

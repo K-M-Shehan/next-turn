@@ -6,6 +6,7 @@ using AppointmentProfile = NextTurn.Domain.Appointment.Entities.AppointmentProfi
 using AppointmentProfileStaffAssignment = NextTurn.Domain.Appointment.Entities.AppointmentProfileStaffAssignment;
 using AppointmentScheduleRule = NextTurn.Domain.Appointment.Entities.AppointmentScheduleRule;
 using NextTurn.Domain.Auth.Entities;
+using UserInAppNotification = NextTurn.Domain.Auth.Entities.UserInAppNotification;
 using StaffOfficeAssignment = NextTurn.Domain.Auth.Entities.StaffOfficeAssignment;
 using NextTurn.Infrastructure.Persistence.Configurations.Auth;
 using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
@@ -44,6 +45,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     // ── DbSets (one per aggregate root) ──────────────────────────────────────
 
     public DbSet<User>             Users        => Set<User>();
+    public DbSet<UserInAppNotification> UserInAppNotifications => Set<UserInAppNotification>();
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
     public DbSet<OfficeEntity> Offices => Set<OfficeEntity>();
 
@@ -82,6 +84,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         // Users: direct TenantId column on the entity.
         modelBuilder.Entity<User>()
             .HasQueryFilter(u => u.TenantId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<UserInAppNotification>()
+            .HasQueryFilter(n => n.OrganisationId == _tenantContext.TenantId);
 
         // Queues: OrganisationId IS the tenant identifier for this module.
         // Every queue belongs to exactly one organisation (= one tenant).

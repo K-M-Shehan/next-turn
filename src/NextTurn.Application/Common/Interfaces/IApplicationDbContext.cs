@@ -4,6 +4,7 @@ using AppointmentNotificationAuditLog = NextTurn.Domain.Appointment.Entities.App
 using AppointmentProfile = NextTurn.Domain.Appointment.Entities.AppointmentProfile;
 using AppointmentScheduleRule = NextTurn.Domain.Appointment.Entities.AppointmentScheduleRule;
 using NextTurn.Domain.Auth.Entities;
+using UserInAppNotification = NextTurn.Domain.Auth.Entities.UserInAppNotification;
 using StaffOfficeAssignment = NextTurn.Domain.Auth.Entities.StaffOfficeAssignment;
 using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
 using OfficeEntity = NextTurn.Domain.Office.Entities.Office;
@@ -24,6 +25,7 @@ namespace NextTurn.Application.Common.Interfaces;
 public interface IApplicationDbContext
 {
     DbSet<User>             Users        { get; }
+    DbSet<UserInAppNotification> UserInAppNotifications { get; }
     DbSet<OrganisationEntity> Organisations { get; }
     DbSet<OfficeEntity> Offices { get; }
     DbSet<QueueEntity>      Queues       { get; }

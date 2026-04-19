@@ -28,6 +28,12 @@ import {
   updateAppointmentNotificationPreferences,
   updateQueueNotificationPreference,
 } from '../../api/auth'
+import {
+  listMyNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type InAppNotification,
+} from '../../api/notifications'
 import { getMyQueues, type MyQueueEntry } from '../../api/queues'
 import { cancelAppointment, getMyAppointmentBookings, type MyAppointmentBooking } from '../../api/appointments'
 import type { ApiError } from '../../types/api'
@@ -69,6 +75,11 @@ export function DashboardPage() {
   const [appointmentsSuccess, setAppointmentsSuccess] = useState<string | null>(null)
   const [cancellingAppointmentId, setCancellingAppointmentId] = useState<string | null>(null)
   const [queueNotificationsEnabled, setQueueNotificationsEnabled] = useState(true)
+  const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([])
+  const [inAppNotificationsLoading, setInAppNotificationsLoading] = useState(true)
+  const [inAppNotificationsError, setInAppNotificationsError] = useState<string | null>(null)
+  const [markingAllRead, setMarkingAllRead] = useState(false)
+  const [markingSingleReadId, setMarkingSingleReadId] = useState<string | null>(null)
   const [notificationsLoading, setNotificationsLoading] = useState(true)
   const [notificationsSaving, setNotificationsSaving] = useState(false)
   const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null)
@@ -114,7 +125,32 @@ export function DashboardPage() {
         setAppointmentNotificationsError('Could not load your appointment notification settings.')
         setAppointmentNotificationsLoading(false)
       })
+
+    listMyNotifications(25)
+      .then(data => {
+        setInAppNotifications(data)
+        setInAppNotificationsLoading(false)
+      })
+      .catch(() => {
+        setInAppNotificationsError('Could not load in-app notifications.')
+        setInAppNotificationsLoading(false)
+      })
   }, [tenantId])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      listMyNotifications(25)
+        .then(data => {
+          setInAppNotifications(data)
+          setInAppNotificationsError(null)
+        })
+        .catch(() => {
+          setInAppNotificationsError('Could not refresh in-app notifications.')
+        })
+    }, 30000)
+
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!appointmentsSuccess) return
@@ -203,6 +239,30 @@ export function DashboardPage() {
     }
   }
 
+  async function handleMarkNotificationRead(notificationId: string) {
+    setMarkingSingleReadId(notificationId)
+    try {
+      await markNotificationRead(notificationId)
+      setInAppNotifications(prev => prev.map(n => n.notificationId === notificationId ? { ...n, isRead: true } : n))
+    } catch {
+      setInAppNotificationsError('Could not mark notification as read.')
+    } finally {
+      setMarkingSingleReadId(null)
+    }
+  }
+
+  async function handleMarkAllNotificationsRead() {
+    setMarkingAllRead(true)
+    try {
+      await markAllNotificationsRead()
+      setInAppNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+    } catch {
+      setInAppNotificationsError('Could not mark all notifications as read.')
+    } finally {
+      setMarkingAllRead(false)
+    }
+  }
+
   async function handleCancelAppointment(appointment: MyAppointmentBooking) {
     const shouldCancel = window.confirm('Cancel this appointment booking?')
     if (!shouldCancel) return
@@ -264,6 +324,60 @@ export function DashboardPage() {
               <p className={styles.welcomeSub}>{email}</p>
             </div>
           </div>
+
+          <section className={styles.settingsSection} aria-label="In-app notifications">
+            <div className={styles.sectionHeaderRow}
+            >
+              <div className={styles.sectionHeader}>
+                <BellIcon />
+                <h2 className={styles.sectionTitle}>In-App Notifications</h2>
+              </div>
+
+              <button
+                type="button"
+                className={styles.settingsSaveBtn}
+                onClick={handleMarkAllNotificationsRead}
+                disabled={markingAllRead || inAppNotifications.length === 0}
+              >
+                {markingAllRead ? 'Marking...' : 'Mark all as read'}
+              </button>
+            </div>
+
+            {inAppNotificationsLoading && <p className={styles.queueEmpty}>Loading notifications…</p>}
+            {!inAppNotificationsLoading && inAppNotificationsError && <p className={styles.queueError}>{inAppNotificationsError}</p>}
+
+            {!inAppNotificationsLoading && !inAppNotificationsError && inAppNotifications.length === 0 && (
+              <p className={styles.queueEmpty}>No notifications yet.</p>
+            )}
+
+            {!inAppNotificationsLoading && inAppNotifications.length > 0 && (
+              <ul className={styles.notificationsList}>
+                {inAppNotifications.map(notification => (
+                  <li
+                    key={notification.notificationId}
+                    className={`${styles.notificationCard} ${notification.isRead ? styles.notificationRead : styles.notificationUnread}`}
+                  >
+                    <div className={styles.notificationBody}>
+                      <p className={styles.notificationTitle}>{notification.title}</p>
+                      <p className={styles.notificationMessage}>{notification.message}</p>
+                      <span className={styles.notificationTime}>{formatRelativeTime(notification.createdAt)}</span>
+                    </div>
+
+                    {!notification.isRead && (
+                      <button
+                        type="button"
+                        className={styles.notificationReadBtn}
+                        onClick={() => handleMarkNotificationRead(notification.notificationId)}
+                        disabled={markingSingleReadId === notification.notificationId}
+                      >
+                        {markingSingleReadId === notification.notificationId ? 'Saving...' : 'Mark read'}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <section className={styles.settingsSection} aria-label="Queue notification settings">
             <div className={styles.sectionHeader}>
@@ -554,6 +668,22 @@ function formatDashboardSlot(slotStart: string, slotEnd: string): string {
   const to = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
   return `${date} · ${from} - ${to}`
+}
+
+function formatRelativeTime(input: string): string {
+  const value = new Date(input).getTime()
+  const now = Date.now()
+  const diffMs = now - value
+
+  const minutes = Math.floor(diffMs / 60000)
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }
 
 /* ------------------------------------------------------------------ */

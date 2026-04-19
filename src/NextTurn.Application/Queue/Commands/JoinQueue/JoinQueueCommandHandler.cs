@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.Extensions.Logging;
 using NextTurn.Application.Common.Interfaces;
 using NextTurn.Domain.Auth.Repositories;
+using NextTurn.Domain.Auth.Entities;
 using NextTurn.Domain.Common;
 using NextTurn.Domain.Queue.Repositories;
 using QueueEntry = NextTurn.Domain.Queue.Entities.QueueEntry;
@@ -81,15 +82,22 @@ public class JoinQueueCommandHandler : IRequestHandler<JoinQueueCommand, JoinQue
         // Step 5 — create the domain entity
         var entry = QueueEntry.Create(command.QueueId, command.UserId, ticketNumber);
 
+        // Pre-compute for both response and in-app notification.
+        int position = activeCount + 1;
+        int estimatedWaitSecs = queue.CalculateEtaSeconds(position);
+
         // Step 6 — persist
         await _queueRepository.AddEntryAsync(entry, cancellationToken);
+        _context.UserInAppNotifications.Add(
+            UserInAppNotification.QueueJoined(
+                organisationId: queue.OrganisationId,
+                userId: command.UserId,
+                queueId: queue.Id,
+                queueEntryId: entry.Id,
+                queueName: queue.Name,
+                ticketNumber: ticketNumber,
+                positionInQueue: position));
         await _context.SaveChangesAsync(cancellationToken);
-
-        // Step 7 — compute position and ETA
-        // The user joins at the back; their position is one behind the previous count.
-        // activeCount was fetched before adding the new entry, so position = activeCount + 1.
-        int position          = activeCount + 1;
-        int estimatedWaitSecs = queue.CalculateEtaSeconds(position);
 
         await TrySendJoinNotificationAsync(
             command.UserId,
