@@ -76,7 +76,7 @@ function renderPage(tenantId: string = TENANT_ID) {
 beforeEach(() => {
   mockNavigate.mockReset()
   mockClearToken.mockReset()
-  // Default: valid session token
+  window.localStorage.clear()
   mockGetTokenPayload.mockReturnValue(SAMPLE_PAYLOAD)
 })
 
@@ -139,6 +139,27 @@ describe('DashboardPage — sidebar layout', () => {
     fireEvent.keyDown(window, { key: 'n' })
     expect(screen.getByRole('heading', { name: /in-app notifications/i })).toBeInTheDocument()
   })
+  
+    it('shows onboarding on first load and allows skipping', async () => {
+      renderPage()
+      expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: /skip tour/i }))
+      await waitFor(() => {
+        expect(screen.queryByTestId('onboarding-tour')).not.toBeInTheDocument()
+      })
+    })
+
+    it('restarts onboarding from profile and onboarding settings', async () => {
+      const user = userEvent.setup()
+      renderPage()
+
+      await user.click(await screen.findByRole('button', { name: /skip tour/i }))
+      fireEvent.keyDown(window, { key: 'n' })
+
+      await user.click(screen.getByRole('button', { name: /restart onboarding tour/i }))
+      expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+    })
 })
 
 // ---------------------------------------------------------------------------

@@ -54,6 +54,7 @@ beforeEach(() => {
   mockGetQueueDashboard.mockReset()
   mockServeNext.mockReset()
   mockSkipQueueEntry.mockReset()
+  window.localStorage.clear()
 
   vi.spyOn(window, 'prompt').mockReturnValue('No-show')
 
@@ -97,6 +98,20 @@ beforeEach(() => {
 })
 
 describe('StaffDashboardPage', () => {
+  it('shows onboarding on first load and can restart from settings', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /skip tour/i }))
+    await waitFor(() => {
+      expect(screen.queryByTestId('onboarding-tour')).not.toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /restart onboarding tour/i }))
+    expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+  })
+
   it('loads queues and dashboard for selected queue', async () => {
     renderPage()
 

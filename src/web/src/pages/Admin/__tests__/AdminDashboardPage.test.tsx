@@ -129,9 +129,27 @@ beforeEach(() => {
   mockGetOrgQueues.mockReset()
   mockDeleteQueue.mockReset()
   mockListQueueStaffAssignments.mockReset()
+  window.localStorage.clear()
   // Default: empty queue list; most tests override as needed.
   mockGetOrgQueues.mockResolvedValue([])
   mockListQueueStaffAssignments.mockResolvedValue([])
+})
+
+describe('AdminDashboardPage — onboarding', () => {
+  it('shows onboarding tour on first load', async () => {
+    renderPage()
+    expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+  })
+
+  it('restarts onboarding from profile and settings card', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /skip tour/i }))
+    await user.click(screen.getByRole('button', { name: /restart onboarding tour/i }))
+
+    expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------
