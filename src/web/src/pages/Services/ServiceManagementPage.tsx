@@ -21,8 +21,6 @@ import type { ApiError } from '../../types/api'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import styles from './ServiceManagementPage.module.css'
 
-type Mode = 'create' | 'edit'
-
 interface ServiceForm {
   name: string
   code: string
@@ -59,9 +57,11 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [form, setForm] = useState<ServiceForm>(defaultForm)
-  const [mode, setMode] = useState<Mode>('create')
-  const [editServiceId, setEditServiceId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [editServiceId, setEditServiceId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<ServiceForm>(defaultForm)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
   const [activeOnly, setActiveOnly] = useState(true)
 
   const [assignmentServiceId, setAssignmentServiceId] = useState<string>('')
@@ -132,6 +132,19 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
     setSelectedOperationOfficeIds(selectedOperationService.assignedOfficeIds)
   }, [selectedOperationService])
 
+  useEffect(() => {
+    if (!editModalOpen) return
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !savingEdit) {
+        closeEditModal()
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [editModalOpen, savingEdit])
+
   async function loadData(currentTenantId: string, activeOnlyFilter: boolean) {
     setLoading(true)
     setError(null)
@@ -161,23 +174,27 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
   }
 
   function resetForm() {
-    setMode('create')
-    setEditServiceId(null)
     setForm(defaultForm)
   }
 
   function beginEdit(service: ServiceDto) {
-    setMode('edit')
     setEditServiceId(service.serviceId)
-    setForm({
+    setEditForm({
       name: service.name,
       code: service.code,
       description: service.description,
       estimatedDurationMinutes: String(service.estimatedDurationMinutes),
       isActive: service.isActive,
     })
+    setEditModalOpen(true)
     setError(null)
     setSuccess(null)
+  }
+
+  function closeEditModal() {
+    setEditModalOpen(false)
+    setEditServiceId(null)
+    setEditForm(defaultForm)
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -189,23 +206,14 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
     setSuccess(null)
 
     try {
-      if (mode === 'create') {
-        await createService(tenantId, {
-          name: form.name.trim(),
-          code: form.code.trim(),
-          description: form.description.trim(),
-          estimatedDurationMinutes: Number(form.estimatedDurationMinutes),
-          isActive: form.isActive,
-        })
-        setSuccess('Service created successfully.')
-      } else if (editServiceId) {
-        await updateService(tenantId, editServiceId, {
-          name: form.name.trim(),
-          description: form.description.trim(),
-          estimatedDurationMinutes: Number(form.estimatedDurationMinutes),
-        })
-        setSuccess('Service updated successfully.')
-      }
+      await createService(tenantId, {
+        name: form.name.trim(),
+        code: form.code.trim(),
+        description: form.description.trim(),
+        estimatedDurationMinutes: Number(form.estimatedDurationMinutes),
+        isActive: form.isActive,
+      })
+      setSuccess('Service created successfully.')
 
       resetForm()
       await loadData(tenantId, activeOnly)
@@ -214,6 +222,31 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
       setError(apiErr.detail ?? 'Could not save service.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleSaveEdit(event: React.FormEvent) {
+    event.preventDefault()
+    if (!tenantId || !editServiceId) return
+
+    setSavingEdit(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      await updateService(tenantId, editServiceId, {
+        name: editForm.name.trim(),
+        description: editForm.description.trim(),
+        estimatedDurationMinutes: Number(editForm.estimatedDurationMinutes),
+      })
+      setSuccess('Service updated successfully.')
+      closeEditModal()
+      await loadData(tenantId, activeOnly)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setError(apiErr.detail ?? 'Could not save service updates.')
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -461,8 +494,8 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         </p>
       </section>
 
-      <section className={styles.formCard}>
-        <h2>{mode === 'create' ? 'Create Service Definition' : 'Update Service Definition'}</h2>
+      <section className={styles.formCard} data-onboarding="admin-service-create">
+        <h2>Create Service Definition</h2>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input
             className={styles.input}
@@ -476,7 +509,6 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
             placeholder="Service code"
             value={form.code}
             onChange={(event) => setForm(prev => ({ ...prev, code: event.target.value }))}
-            disabled={mode === 'edit'}
             required
           />
           <textarea
@@ -496,31 +528,24 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
             onChange={(event) => setForm(prev => ({ ...prev, estimatedDurationMinutes: event.target.value }))}
             required
           />
-          {mode === 'create' && (
-            <label className={styles.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(event) => setForm(prev => ({ ...prev, isActive: event.target.checked }))}
-              />
-              Active at creation
-            </label>
-          )}
+          <label className={styles.checkboxRow}>
+            <input
+              type="checkbox"
+              checked={form.isActive}
+              onChange={(event) => setForm(prev => ({ ...prev, isActive: event.target.checked }))}
+            />
+            Active at creation
+          </label>
 
           <div className={styles.actions}>
             <button type="submit" className={styles.primaryBtn} disabled={saving}>
-              {saving ? 'Saving...' : mode === 'create' ? 'Create Service' : 'Update Service'}
+              {saving ? 'Saving...' : 'Create Service'}
             </button>
-            {mode === 'edit' && (
-              <button type="button" className={styles.secondaryBtn} onClick={resetForm}>
-                Cancel Edit
-              </button>
-            )}
           </div>
         </form>
       </section>
 
-      <section className={styles.listCard}>
+      <section className={styles.listCard} data-onboarding="admin-service-definitions">
         <h2>Service Definitions</h2>
         {loading ? (
           <p>Loading services...</p>
@@ -564,7 +589,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         )}
       </section>
 
-      <section className={styles.assignmentsCard}>
+      <section className={styles.assignmentsCard} data-onboarding="admin-service-availability">
         <h2>Office Availability (Now)</h2>
         <p className={styles.helperText}>Choose which active offices can deliver each service.</p>
         {services.length === 0 ? (
@@ -608,7 +633,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         )}
       </section>
 
-      <section className={styles.operationsCard}>
+      <section className={styles.operationsCard} data-onboarding="admin-service-operations">
         <h2>Create Operational Flows from Service</h2>
         <p className={styles.helperText}>
           Choose the exact service and offices to target. The system creates one queue and one appointment profile per selected office, and skips duplicates.
@@ -703,6 +728,68 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
           </>
         )}
       </section>
+
+      {editModalOpen && editServiceId && (
+        <div className={`${styles.modalOverlay} ${styles.modalOverlayEnter}`} onClick={closeEditModal}>
+          <div
+            className={`${styles.modalCard} ${styles.modalCardEnter}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="service-edit-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <h3 id="service-edit-title" className={styles.modalTitle}>Edit Service Definition</h3>
+              <button type="button" className={styles.secondaryBtn} onClick={closeEditModal} disabled={savingEdit}>
+                Close
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className={styles.form}>
+              <input
+                className={styles.input}
+                placeholder="Service name"
+                value={editForm.name}
+                onChange={(event) => setEditForm(prev => ({ ...prev, name: event.target.value }))}
+                required
+              />
+              <input
+                className={styles.input}
+                placeholder="Service code"
+                value={editForm.code}
+                disabled
+                aria-label="Service code"
+              />
+              <textarea
+                className={styles.textarea}
+                placeholder="Description"
+                value={editForm.description}
+                onChange={(event) => setEditForm(prev => ({ ...prev, description: event.target.value }))}
+                required
+              />
+              <input
+                className={styles.input}
+                type="number"
+                min={1}
+                max={1440}
+                placeholder="Estimated duration (minutes)"
+                value={editForm.estimatedDurationMinutes}
+                onChange={(event) => setEditForm(prev => ({ ...prev, estimatedDurationMinutes: event.target.value }))}
+                required
+              />
+
+              <div className={styles.actions}>
+                <button type="submit" className={styles.primaryBtn} disabled={savingEdit}>
+                  {savingEdit ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button type="button" className={styles.secondaryBtn} onClick={closeEditModal} disabled={savingEdit}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

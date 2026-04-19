@@ -123,12 +123,124 @@
   padding: var(--space-10) var(--space-6);
 }
 
-.contentInner {
-  max-width: 1200px;
+.workspace {
+  max-width: 1280px;
   margin: 0 auto;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 84px;
+  background: linear-gradient(180deg, #f7fbf8 0%, #eef6ef 100%);
+  border: 1px solid #d8e7d9;
+  border-radius: var(--radius-xl);
+  padding: var(--space-5);
+  box-shadow: 0 8px 24px rgba(35, 114, 39, 0.08);
+  animation: sideIn 0.42s ease-out;
+}
+
+.sidebarHeader {
+  margin-bottom: var(--space-4);
+}
+
+.sidebarTitle {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1f4f26;
+}
+
+.sidebarSubtitle {
+  margin: 3px 0 0;
+  font-size: 0.8rem;
+  color: #4c6d52;
+}
+
+.sidebarNav {
+  --active-index: 0;
+  --nav-item-height: 46px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.navIndicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--nav-item-height);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1f5f2a 0%, #2b7a37 100%);
+  transform: translateY(calc(var(--active-index) * (var(--nav-item-height) + 8px)));
+  transition: transform 0.26s ease;
+  box-shadow: 0 6px 14px rgba(31, 95, 42, 0.2);
+  z-index: 0;
+}
+
+.navItem {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 12px;
+  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #2e5f35;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  position: relative;
+  z-index: 1;
+}
+
+.navItem:hover {
+  background: rgba(35, 114, 39, 0.08);
+}
+
+.navItemActive {
+  background: #1f5f2a;
+  color: #fff;
+  border-color: #1f5f2a;
+}
+
+.navCount {
+  margin-left: auto;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.23);
+}
+
+.contentInner {
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+  animation: contentIn 0.34s ease-out;
+}
+
+.tabPanel {
+  display: grid;
+  gap: var(--space-6);
+  animation: tabFade 0.28s ease-out;
+}
+
+.shortcutHint {
+  margin: var(--space-4) 0 0;
+  font-size: 0.72rem;
+  color: #58725f;
+  letter-spacing: 0.02em;
 }
 
 /* ============================================================
@@ -144,6 +256,58 @@
   background: linear-gradient(135deg, #1a5c1e 0%, #237227 60%, #2b8630 100%);
   border-radius: var(--radius-xl);
   box-shadow: 0 4px 20px rgba(35, 114, 39, 0.18);
+}
+
+.activeTabBadge {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.77rem;
+  letter-spacing: 0.04em;
+  font-weight: 800;
+  text-transform: uppercase;
+  align-self: center;
+}
+
+.quickStats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.quickStats > * {
+  animation: riseUp 0.28s ease both;
+}
+
+.quickStats > *:nth-child(2) {
+  animation-delay: 0.05s;
+}
+
+.quickStats > *:nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+.statCard {
+  background: #fff;
+  border: 1px solid #e2e7e4;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: 0 2px 8px rgba(15, 25, 20, 0.04);
+}
+
+.statLabel {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #607467;
+}
+
+.statValue {
+  margin: 4px 0 0;
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #1f5f2a;
 }
 
 .welcomeHeading {
@@ -291,6 +455,21 @@
   line-height: 1.5;
 }
 
+.shortcutToast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 140;
+  background: #1f5f2a;
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 12px 24px rgba(18, 53, 26, 0.26);
+  animation: toastIn 0.2s ease-out;
+}
+
 /* ============================================================
    Responsive
    ============================================================ */
@@ -305,6 +484,28 @@
 
   .main {
     padding: var(--space-6) var(--space-4);
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    padding: var(--space-4);
+  }
+
+  .sidebarNav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .navItem {
+    justify-content: flex-start;
+  }
+
+  .quickStats {
+    grid-template-columns: 1fr;
   }
 
   .welcome {
@@ -336,6 +537,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .sidebarNav {
+    grid-template-columns: 1fr;
+  }
+
+  .shortcutToast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
   }
 }
 
@@ -397,6 +608,14 @@
   align-items: center;
   gap: var(--space-2);
   color: var(--color-primary);
+}
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .sectionTitle {
@@ -574,6 +793,76 @@
   padding: var(--space-2) var(--space-3);
 }
 
+.notificationsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.notificationCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.notificationUnread {
+  border-left: 4px solid var(--color-primary);
+  background: #f6fbf6;
+}
+
+.notificationRead {
+  opacity: 0.88;
+}
+
+.notificationBody {
+  display: grid;
+  gap: 2px;
+}
+
+.notificationTitle {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.notificationMessage {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+.notificationTime {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.notificationReadBtn {
+  border: 1px solid rgba(35, 114, 39, 0.28);
+  background: #eef8ef;
+  color: var(--color-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.notificationReadBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ============================================================
    Join by link widget
    ============================================================ */
@@ -624,4 +913,73 @@
   font-size: 0.8125rem;
   color: #c62828;
   margin: 0;
+}
+
+@keyframes sideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes contentIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tabFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes riseUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .contentInner,
+  .tabPanel,
+  .quickStats > *,
+  .shortcutToast {
+    animation: none !important;
+  }
+
+  .navIndicator {
+    transition: none !important;
+  }
 }

@@ -28,6 +28,17 @@ public interface IEmailService
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Sends a confirmation when a user successfully joins a queue.
+    /// </summary>
+    Task SendQueueJoinedEmailAsync(
+        string toEmail,
+        string queueName,
+        int ticketNumber,
+        int positionInQueue,
+        int estimatedWaitSeconds,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Sends a queue turn-approaching notification when a user is close to being served.
     /// </summary>
     Task SendQueueTurnApproachingEmailAsync(

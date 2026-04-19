@@ -83,7 +83,26 @@ public static class DependencyInjection
         // ── External service stubs (Sprint 1) ─────────────────────────────────
         // Real implementations (SMTP/SendGrid, business registry API) are wired
         // in a later sprint — swap these registrations then.
-        services.AddScoped<IEmailService, StubEmailService>();
+        services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
+
+        var emailOptions = configuration
+            .GetSection(SmtpEmailOptions.SectionName)
+            .Get<SmtpEmailOptions>() ?? new SmtpEmailOptions();
+
+        var useSmtp = emailOptions.Enabled
+            && string.Equals(emailOptions.Provider, "Smtp", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(emailOptions.Host)
+            && !string.IsNullOrWhiteSpace(emailOptions.FromEmail);
+
+        if (useSmtp)
+        {
+            services.AddScoped<IEmailService, SmtpEmailService>();
+        }
+        else
+        {
+            services.AddScoped<IEmailService, StubEmailService>();
+        }
+
         services.AddScoped<IBusinessRegistryService, StubBusinessRegistryService>();
 
         // ── Queue state (Sprint 1 stub) ────────────────────────────────────────

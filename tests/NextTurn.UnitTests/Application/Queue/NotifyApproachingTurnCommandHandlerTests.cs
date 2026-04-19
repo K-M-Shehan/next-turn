@@ -13,6 +13,7 @@ using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
 using QueueEntity = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry = NextTurn.Domain.Queue.Entities.QueueEntry;
 using QueueTurnNotificationAuditLog = NextTurn.Domain.Queue.Entities.QueueTurnNotificationAuditLog;
+using UserInAppNotification = NextTurn.Domain.Auth.Entities.UserInAppNotification;
 
 namespace NextTurn.UnitTests.Application.Queue;
 
@@ -56,6 +57,8 @@ public sealed class NotifyApproachingTurnCommandHandlerTests
         _contextMock.Setup(c => c.Queues).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { queue }).Object);
         _contextMock.Setup(c => c.Organisations).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { organisation }).Object);
         _contextMock.Setup(c => c.QueueEntries).Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<QueueEntry>()).Object);
+        _contextMock.Setup(c => c.UserInAppNotifications)
+            .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>()).Object);
 
         var handler = new NotifyApproachingTurnCommandHandler(_contextMock.Object, _emailServiceMock.Object);
         var result = await handler.Handle(new NotifyApproachingTurnCommand(queue.Id), CancellationToken.None);
@@ -97,10 +100,16 @@ public sealed class NotifyApproachingTurnCommandHandlerTests
             threshold: 3);
 
         var addedLogs = new List<QueueTurnNotificationAuditLog>();
+        var addedInApp = new List<UserInAppNotification>();
         var auditDbSetMock = AsyncQueryableHelper.BuildMockDbSet(new[] { existingAudit });
         auditDbSetMock
             .Setup(s => s.Add(It.IsAny<QueueTurnNotificationAuditLog>()))
             .Callback<QueueTurnNotificationAuditLog>(log => addedLogs.Add(log));
+
+        var inAppDbSetMock = AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>());
+        inAppDbSetMock
+            .Setup(s => s.Add(It.IsAny<UserInAppNotification>()))
+            .Callback<UserInAppNotification>(log => addedInApp.Add(log));
 
         _contextMock.Setup(c => c.Queues).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { queue }).Object);
         _contextMock.Setup(c => c.Organisations).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { organisation }).Object);
@@ -109,6 +118,7 @@ public sealed class NotifyApproachingTurnCommandHandlerTests
         _contextMock.Setup(c => c.Users)
             .Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { userAlreadySent, userSuccess, userFailure }).Object);
         _contextMock.Setup(c => c.QueueTurnNotificationAuditLogs).Returns(auditDbSetMock.Object);
+        _contextMock.Setup(c => c.UserInAppNotifications).Returns(inAppDbSetMock.Object);
         _contextMock.Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         _emailServiceMock
@@ -132,6 +142,7 @@ public sealed class NotifyApproachingTurnCommandHandlerTests
         addedLogs.Should().HaveCount(2);
         addedLogs.Should().Contain(l => l.DeliveryStatus == "Sent" && l.QueueEntryId == entrySuccess.Id);
         addedLogs.Should().Contain(l => l.DeliveryStatus == "Failed" && l.QueueEntryId == entryFailure.Id);
+        addedInApp.Should().HaveCount(2);
 
         _emailServiceMock.Verify(
             s => s.SendQueueTurnApproachingEmailAsync(
@@ -162,6 +173,9 @@ public sealed class NotifyApproachingTurnCommandHandlerTests
         _contextMock.Setup(c => c.Users).Returns(AsyncQueryableHelper.BuildMockDbSet(new[] { disabledUser }).Object);
         _contextMock.Setup(c => c.QueueTurnNotificationAuditLogs)
             .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<QueueTurnNotificationAuditLog>()).Object);
+        _contextMock.Setup(c => c.UserInAppNotifications)
+            .Returns(AsyncQueryableHelper.BuildMockDbSet(Array.Empty<UserInAppNotification>()).Object);
+        _contextMock.Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         var handler = new NotifyApproachingTurnCommandHandler(_contextMock.Object, _emailServiceMock.Object);
         var result = await handler.Handle(new NotifyApproachingTurnCommand(queue.Id), CancellationToken.None);
@@ -176,7 +190,7 @@ public sealed class NotifyApproachingTurnCommandHandlerTests
                 It.IsAny<int>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
-        _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static OrganisationEntity BuildOrganisation()

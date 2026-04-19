@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NextTurn.Application.Common.Interfaces;
 using AppointmentNotificationAuditLog = NextTurn.Domain.Appointment.Entities.AppointmentNotificationAuditLog;
+using UserInAppNotification = NextTurn.Domain.Auth.Entities.UserInAppNotification;
 
 namespace NextTurn.Application.Appointment.Notifications;
 
@@ -60,9 +61,6 @@ public sealed class AppointmentNotificationService : IAppointmentNotificationSer
             return;
         }
 
-        if (!IsNotificationEnabled(user, notificationType))
-            return;
-
         var profile = await _context.AppointmentProfiles
             .IgnoreQueryFilters()
             .AsNoTracking()
@@ -75,6 +73,20 @@ public sealed class AppointmentNotificationService : IAppointmentNotificationSer
 
         var officeName = organisation?.Name ?? "Unknown office";
         var serviceName = profile?.Name ?? "General appointment";
+        var inAppNotification = CreateInAppNotification(
+            notificationType,
+            appointment.OrganisationId,
+            user.Id,
+            appointment.SlotStart,
+            serviceName,
+            officeName);
+
+        if (!IsNotificationEnabled(user, notificationType))
+        {
+            _context.UserInAppNotifications.Add(inAppNotification);
+            await _context.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
         try
         {
@@ -100,6 +112,8 @@ public sealed class AppointmentNotificationService : IAppointmentNotificationSer
                     officeName: officeName,
                     serviceName: serviceName));
 
+            _context.UserInAppNotifications.Add(inAppNotification);
+
             await _context.SaveChangesAsync(cancellationToken);
         }
         catch (Exception ex)
@@ -123,8 +137,47 @@ public sealed class AppointmentNotificationService : IAppointmentNotificationSer
                     serviceName: serviceName,
                     errorMessage: ex.Message));
 
+            _context.UserInAppNotifications.Add(inAppNotification);
+
             await _context.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private static UserInAppNotification CreateInAppNotification(
+        string notificationType,
+        Guid organisationId,
+        Guid userId,
+        DateTimeOffset slotStart,
+        string serviceName,
+        string officeName)
+    {
+        return notificationType switch
+        {
+            "Booked" => UserInAppNotification.AppointmentBooked(
+                organisationId,
+                userId,
+                slotStart,
+                serviceName,
+                officeName),
+            "Rescheduled" => UserInAppNotification.AppointmentRescheduled(
+                organisationId,
+                userId,
+                slotStart,
+                serviceName,
+                officeName),
+            "Cancelled" => UserInAppNotification.AppointmentCancelled(
+                organisationId,
+                userId,
+                slotStart,
+                serviceName,
+                officeName),
+            _ => UserInAppNotification.AppointmentBooked(
+                organisationId,
+                userId,
+                slotStart,
+                serviceName,
+                officeName),
+        };
     }
 
     private static bool IsNotificationEnabled(Domain.Auth.Entities.User user, string notificationType)

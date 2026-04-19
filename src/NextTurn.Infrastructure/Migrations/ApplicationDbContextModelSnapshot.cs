@@ -67,6 +67,71 @@ namespace NextTurn.Infrastructure.Migrations
                     b.ToTable("Appointments", (string)null);
                 });
 
+            modelBuilder.Entity("NextTurn.Domain.Appointment.Entities.AppointmentNotificationAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppointmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeliveryStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("NotificationType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("OfficeName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.Property<string>("ServiceName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset>("SlotEnd")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("SlotStart")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("OrganisationId", "CreatedAt")
+                        .HasDatabaseName("IX_AppointmentNotificationAuditLogs_Organisation_CreatedAt");
+
+                    b.HasIndex("AppointmentId", "NotificationType", "DeliveryStatus")
+                        .HasDatabaseName("IX_AppointmentNotificationAuditLogs_Appointment_Type_Status");
+
+                    b.ToTable("AppointmentNotificationAuditLogs", (string)null);
+                });
+
             modelBuilder.Entity("NextTurn.Domain.Appointment.Entities.AppointmentProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -195,6 +260,21 @@ namespace NextTurn.Infrastructure.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("AppointmentBookedNotificationsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("AppointmentCancelledNotificationsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("AppointmentRescheduledNotificationsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("CounterName")
                         .HasMaxLength(80)
                         .HasColumnType("nvarchar(80)");
@@ -234,6 +314,11 @@ namespace NextTurn.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<bool>("QueueTurnApproachingNotificationsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("Role")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -264,6 +349,60 @@ namespace NextTurn.Infrastructure.Migrations
                         .HasDatabaseName("IX_Users_StaffInviteTokenHash");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Auth.Entities.UserInAppNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("NotificationType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("QueueEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("QueueId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "IsRead", "CreatedAt")
+                        .HasDatabaseName("IX_UserInAppNotifications_UserId_IsRead_CreatedAt");
+
+                    b.HasIndex("UserId", "NotificationType", "QueueEntryId", "IsRead")
+                        .HasDatabaseName("IX_UserInAppNotifications_Dedupe");
+
+                    b.ToTable("UserInAppNotifications", (string)null);
                 });
 
             modelBuilder.Entity("NextTurn.Domain.Office.Entities.Office", b =>
@@ -334,6 +473,11 @@ namespace NextTurn.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("QueueNotificationThreshold")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(3);
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -512,6 +656,55 @@ namespace NextTurn.Infrastructure.Migrations
                     b.ToTable("QueueStaffAssignments", (string)null);
                 });
 
+            modelBuilder.Entity("NextTurn.Domain.Queue.Entities.QueueTurnNotificationAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeliveryStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("OrganisationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("PositionInQueue")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("QueueEntryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("QueueId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Threshold")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("QueueId", "CreatedAt")
+                        .HasDatabaseName("IX_QueueTurnNotificationAuditLogs_QueueId_CreatedAt");
+
+                    b.HasIndex("QueueEntryId", "UserId", "DeliveryStatus")
+                        .IsUnique()
+                        .HasDatabaseName("UX_QueueTurnNotificationAuditLogs_QueueEntry_User_Status");
+
+                    b.ToTable("QueueTurnNotificationAuditLogs", (string)null);
+                });
+
             modelBuilder.Entity("NextTurn.Domain.Service.Entities.Service", b =>
                 {
                     b.Property<Guid>("Id")
@@ -578,6 +771,21 @@ namespace NextTurn.Infrastructure.Migrations
                     b.HasIndex("OrganisationId", "OfficeId");
 
                     b.ToTable("ServiceOfficeAssignments", (string)null);
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Appointment.Entities.AppointmentNotificationAuditLog", b =>
+                {
+                    b.HasOne("NextTurn.Domain.Appointment.Entities.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Domain.Auth.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("NextTurn.Domain.Auth.Entities.StaffOfficeAssignment", b =>
@@ -723,6 +931,27 @@ namespace NextTurn.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("QueueId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("NextTurn.Domain.Queue.Entities.QueueTurnNotificationAuditLog", b =>
+                {
+                    b.HasOne("NextTurn.Domain.Queue.Entities.QueueEntry", null)
+                        .WithMany()
+                        .HasForeignKey("QueueEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Domain.Queue.Entities.Queue", null)
+                        .WithMany()
+                        .HasForeignKey("QueueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("NextTurn.Domain.Auth.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

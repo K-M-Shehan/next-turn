@@ -1,6 +1,7 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Domain.Auth.Entities;
 using NextTurn.Domain.Common;
 
 namespace NextTurn.Application.Queue.Commands.NotifyApproachingTurn;
@@ -69,6 +70,7 @@ public sealed class NotifyApproachingTurnCommandHandler
 
         int sentCount = 0;
         int failedCount = 0;
+        int inAppCreatedCount = 0;
 
         foreach (var candidate in thresholdEntries)
         {
@@ -82,7 +84,34 @@ public sealed class NotifyApproachingTurnCommandHandler
                     u => u.Id == candidate.Entry.UserId,
                     cancellationToken);
 
-            if (user is null || !user.IsActive || !user.QueueTurnApproachingNotificationsEnabled)
+            if (user is null || !user.IsActive)
+                continue;
+
+            var hasUnreadApproaching = await _context.UserInAppNotifications
+                .AsNoTracking()
+                .AnyAsync(
+                    n => n.UserId == user.Id
+                      && n.NotificationType == "QueueTurnApproaching"
+                      && n.QueueEntryId == candidate.Entry.Id
+                      && !n.IsRead,
+                    cancellationToken);
+
+            if (!hasUnreadApproaching)
+            {
+                _context.UserInAppNotifications.Add(
+                    UserInAppNotification.QueueTurnApproaching(
+                        organisationId: queue.OrganisationId,
+                        userId: user.Id,
+                        queueId: queue.Id,
+                        queueEntryId: candidate.Entry.Id,
+                        queueName: queue.Name,
+                        ticketNumber: candidate.Entry.TicketNumber,
+                        positionInQueue: candidate.PositionInQueue));
+
+                inAppCreatedCount++;
+            }
+
+            if (!user.QueueTurnApproachingNotificationsEnabled)
                 continue;
 
             try
@@ -121,7 +150,7 @@ public sealed class NotifyApproachingTurnCommandHandler
             }
         }
 
-        if (sentCount > 0 || failedCount > 0)
+        if (sentCount > 0 || failedCount > 0 || inAppCreatedCount > 0)
             await _context.SaveChangesAsync(cancellationToken);
 
         return new NotifyApproachingTurnResult(sentCount, failedCount);
