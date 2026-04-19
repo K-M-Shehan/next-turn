@@ -1,5 +1,7 @@
 using MediatR;
+using Microsoft.Extensions.Logging;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Domain.Auth.Repositories;
 using NextTurn.Domain.Common;
 using NextTurn.Domain.Queue.Repositories;
 using QueueEntry = NextTurn.Domain.Queue.Entities.QueueEntry;
@@ -30,13 +32,22 @@ public class JoinQueueCommandHandler : IRequestHandler<JoinQueueCommand, JoinQue
 {
     private readonly IQueueRepository    _queueRepository;
     private readonly IApplicationDbContext _context;
+    private readonly IUserRepository _userRepository;
+    private readonly IEmailService _emailService;
+    private readonly ILogger<JoinQueueCommandHandler> _logger;
 
     public JoinQueueCommandHandler(
         IQueueRepository     queueRepository,
-        IApplicationDbContext context)
+        IApplicationDbContext context,
+        IUserRepository userRepository,
+        IEmailService emailService,
+        ILogger<JoinQueueCommandHandler> logger)
     {
         _queueRepository = queueRepository;
         _context         = context;
+        _userRepository = userRepository;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     public async Task<JoinQueueResult> Handle(
@@ -80,9 +91,50 @@ public class JoinQueueCommandHandler : IRequestHandler<JoinQueueCommand, JoinQue
         int position          = activeCount + 1;
         int estimatedWaitSecs = queue.CalculateEtaSeconds(position);
 
+        await TrySendJoinNotificationAsync(
+            command.UserId,
+            queue.Name,
+            ticketNumber,
+            position,
+            estimatedWaitSecs,
+            cancellationToken);
+
         return new JoinQueueResult(
             TicketNumber:         ticketNumber,
             PositionInQueue:      position,
             EstimatedWaitSeconds: estimatedWaitSecs);
+    }
+
+    private async Task TrySendJoinNotificationAsync(
+        Guid userId,
+        string queueName,
+        int ticketNumber,
+        int position,
+        int estimatedWaitSeconds,
+        CancellationToken cancellationToken)
+    {
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+
+        if (user is null || !user.IsActive)
+            return;
+
+        try
+        {
+            await _emailService.SendQueueJoinedEmailAsync(
+                toEmail: user.Email.Value,
+                queueName: queueName,
+                ticketNumber: ticketNumber,
+                positionInQueue: position,
+                estimatedWaitSeconds: estimatedWaitSeconds,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Queue join notification failed for user {UserId} in queue '{QueueName}'.",
+                userId,
+                queueName);
+        }
     }
 }

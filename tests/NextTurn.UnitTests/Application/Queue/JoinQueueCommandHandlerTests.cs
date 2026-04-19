@@ -1,7 +1,11 @@
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Moq;
 using NextTurn.Application.Common.Interfaces;
 using NextTurn.Application.Queue.Commands.JoinQueue;
+using NextTurn.Domain.Auth.Entities;
+using NextTurn.Domain.Auth.Repositories;
+using NextTurn.Domain.Auth.ValueObjects;
 using NextTurn.Domain.Common;
 using NextTurn.Domain.Queue.Repositories;
 using QueueEntity = NextTurn.Domain.Queue.Entities.Queue;
@@ -29,6 +33,9 @@ public sealed class JoinQueueCommandHandlerTests
 
     private readonly Mock<IQueueRepository>    _queueRepositoryMock = new();
     private readonly Mock<IApplicationDbContext> _contextMock       = new();
+    private readonly Mock<IUserRepository> _userRepositoryMock = new();
+    private readonly Mock<IEmailService> _emailServiceMock = new();
+    private readonly Mock<ILogger<JoinQueueCommandHandler>> _loggerMock = new();
 
     private readonly JoinQueueCommandHandler _handler;
 
@@ -68,9 +75,23 @@ public sealed class JoinQueueCommandHandlerTests
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
+        var user = User.Create(
+            tenantId: OrgId,
+            name: "Queue User",
+            email: new EmailAddress("queue.user@example.com"),
+            phone: null,
+            passwordHash: "hash");
+
+        _userRepositoryMock
+            .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(user);
+
         _handler = new JoinQueueCommandHandler(
             _queueRepositoryMock.Object,
-            _contextMock.Object);
+            _contextMock.Object,
+            _userRepositoryMock.Object,
+            _emailServiceMock.Object,
+            _loggerMock.Object);
     }
 
     // ── Happy path ────────────────────────────────────────────────────────────
@@ -157,6 +178,41 @@ public sealed class JoinQueueCommandHandlerTests
         _contextMock.Verify(
             c => c.SaveChangesAsync(It.IsAny<CancellationToken>()),
             Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_AttemptsQueueJoinNotification()
+    {
+        await _handler.Handle(ValidCommand(), CancellationToken.None);
+
+        _emailServiceMock.Verify(
+            x => x.SendQueueJoinedEmailAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task Handle_WhenJoinNotificationFails_StillReturnsResult()
+    {
+        _emailServiceMock
+            .Setup(x => x.SendQueueJoinedEmailAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<int>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new Exception("smtp unavailable"));
+
+        var result = await _handler.Handle(ValidCommand(), CancellationToken.None);
+
+        result.TicketNumber.Should().BeGreaterThan(0);
+        result.PositionInQueue.Should().BeGreaterThan(0);
     }
 
     // ── Queue not found (step 1) ──────────────────────────────────────────────
