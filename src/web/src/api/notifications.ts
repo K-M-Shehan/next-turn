@@ -1,5 +1,6 @@
 import { apiClient, parseApiError } from './client'
 import type { ApiError } from '../types/api'
+import { getToken } from '../utils/authToken'
 
 export interface InAppNotification {
   notificationId: string
@@ -13,9 +14,24 @@ export interface InAppNotification {
   queueEntryId?: string | null
 }
 
-export async function listMyNotifications(take = 20): Promise<InAppNotification[]> {
+function buildHeaders(tenantId?: string): Record<string, string> {
+  const token = getToken()
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+  }
+
+  if (tenantId) {
+    headers['X-Tenant-Id'] = tenantId
+  }
+
+  return headers
+}
+
+export async function listMyNotifications(take = 20, tenantId?: string): Promise<InAppNotification[]> {
   try {
-    const { data } = await apiClient.get<InAppNotification[]>(`/notifications?take=${take}`)
+    const { data } = await apiClient.get<InAppNotification[]>(`/notifications?take=${take}`, {
+      headers: buildHeaders(tenantId),
+    })
     return data
   } catch (err) {
     const parsed: ApiError = parseApiError(err)
@@ -23,18 +39,22 @@ export async function listMyNotifications(take = 20): Promise<InAppNotification[
   }
 }
 
-export async function markNotificationRead(notificationId: string): Promise<void> {
+export async function markNotificationRead(notificationId: string, tenantId?: string): Promise<void> {
   try {
-    await apiClient.patch(`/notifications/${notificationId}/read`)
+    await apiClient.patch(`/notifications/${notificationId}/read`, null, {
+      headers: buildHeaders(tenantId),
+    })
   } catch (err) {
     const parsed: ApiError = parseApiError(err)
     throw parsed
   }
 }
 
-export async function markAllNotificationsRead(): Promise<void> {
+export async function markAllNotificationsRead(tenantId?: string): Promise<void> {
   try {
-    await apiClient.patch('/notifications/read-all')
+    await apiClient.patch('/notifications/read-all', null, {
+      headers: buildHeaders(tenantId),
+    })
   } catch (err) {
     const parsed: ApiError = parseApiError(err)
     throw parsed

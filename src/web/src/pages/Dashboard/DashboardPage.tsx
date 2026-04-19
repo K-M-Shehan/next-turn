@@ -126,7 +126,7 @@ export function DashboardPage() {
         setAppointmentNotificationsLoading(false)
       })
 
-    listMyNotifications(25)
+    listMyNotifications(25, tenantId)
       .then(data => {
         setInAppNotifications(data)
         setInAppNotificationsLoading(false)
@@ -139,7 +139,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      listMyNotifications(25)
+      listMyNotifications(25, tenantId)
         .then(data => {
           setInAppNotifications(data)
           setInAppNotificationsError(null)
@@ -150,7 +150,7 @@ export function DashboardPage() {
     }, 30000)
 
     return () => window.clearInterval(timer)
-  }, [])
+  }, [tenantId])
 
   useEffect(() => {
     if (!appointmentsSuccess) return
@@ -242,7 +242,7 @@ export function DashboardPage() {
   async function handleMarkNotificationRead(notificationId: string) {
     setMarkingSingleReadId(notificationId)
     try {
-      await markNotificationRead(notificationId)
+      await markNotificationRead(notificationId, tenantId)
       setInAppNotifications(prev => prev.map(n => n.notificationId === notificationId ? { ...n, isRead: true } : n))
     } catch {
       setInAppNotificationsError('Could not mark notification as read.')
@@ -254,7 +254,7 @@ export function DashboardPage() {
   async function handleMarkAllNotificationsRead() {
     setMarkingAllRead(true)
     try {
-      await markAllNotificationsRead()
+      await markAllNotificationsRead(tenantId)
       setInAppNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
     } catch {
       setInAppNotificationsError('Could not mark all notifications as read.')
