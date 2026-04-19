@@ -1005,6 +1005,8 @@ export function AdminDashboardPage() {
               </div>
             </section>
 
+            <div key={activeTab} className={styles.tabPanel}>
+
             {activeTab === 'home' && (
               <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Quick Overview</h2>
@@ -1912,6 +1914,7 @@ export function AdminDashboardPage() {
             </div>
           </section>
         )}
+            </div>
           </div>
         </div>
       </main>
