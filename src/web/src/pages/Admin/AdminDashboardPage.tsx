@@ -85,6 +85,19 @@ interface StaffProfileForm {
 
 type AdminTab = 'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports' | 'profile' | 'settings'
 
+function roleBadgeLabel(role: string): { label: string; className: string } {
+  switch (role) {
+    case 'Staff':
+      return { label: 'Staff', className: styles.roleStaff }
+    case 'OrgAdmin':
+      return { label: 'Org Admin', className: styles.roleOrgAdmin }
+    case 'SystemAdmin':
+      return { label: 'System Admin', className: styles.roleSystemAdmin }
+    default:
+      return { label: 'User', className: styles.roleUser }
+  }
+}
+
 const sidebarTabOrder: AdminTab[] = [
   'home',
   'queues',
@@ -298,6 +311,8 @@ export function AdminDashboardPage() {
     navigate('/', { replace: true })
     return null
   }
+
+  const badge = roleBadgeLabel(payload.role)
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
@@ -924,15 +939,27 @@ export function AdminDashboardPage() {
 
   return (
     <div className={styles.page}>
-      <nav className={styles.topNav}>
-        <div className={styles.topNavBrand}>
-          <img src={logoImg} alt="NextTurn" className={styles.logo} />
-          <span className={styles.topNavTitle}>Admin Console</span>
+      <header className={styles.navbar}>
+        <div className={styles.navInner}>
+          <div className={styles.navBrand}>
+            <img src={logoImg} alt="NextTurn" className={styles.navLogo} />
+          </div>
+
+          <div className={styles.navUser}>
+            <div className={styles.avatarCircle} aria-hidden="true">
+              {payload.name.charAt(0).toUpperCase()}
+            </div>
+            <div className={styles.userMeta}>
+              <span className={styles.userName}>{payload.name}</span>
+              <span className={`${styles.roleBadge} ${badge.className}`}>{badge.label}</span>
+            </div>
+            <button className={styles.logoutBtn} onClick={handleLogout} type="button" aria-label="Sign out">
+              <LogoutIcon />
+              <span>Sign out</span>
+            </button>
+          </div>
         </div>
-        <button className={styles.logoutBtn} onClick={handleLogout} type="button" aria-label="Sign out">
-          Sign out
-        </button>
-      </nav>
+      </header>
 
       <main className={styles.main}>
         <div className={styles.workspace}>
@@ -2018,4 +2045,14 @@ function keyToAdminTab(key: string): AdminTab | null {
   if (key === '8' || key === 'p') return 'profile'
   if (key === '9' || key === 'g') return 'settings'
   return null
+}
+
+function LogoutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
 }
