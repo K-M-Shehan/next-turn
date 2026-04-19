@@ -53,6 +53,9 @@ import {
   type AppointmentDayRule,
 } from '../../api/appointments'
 import { listServices } from '../../api/services'
+import { OnboardingTour } from '../../components/OnboardingTour'
+import { ROLE_TOUR_CONTENT } from '../../onboarding/roleTours'
+import { useOnboardingTour } from '../../onboarding/useOnboardingTour'
 import { OfficeManagementPage } from '../Offices'
 import { ServiceManagementPage } from '../Services'
 import type { ApiError } from '../../types/api'
@@ -186,6 +189,7 @@ export function AdminDashboardPage() {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
   const payload = getTokenPayload()
+  const onboarding = useOnboardingTour(`admin:${payload?.sub ?? 'anonymous'}:${tenantId ?? 'global'}`)
 
   const [queues, setQueues] = useState<OrgQueueSummary[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -930,7 +934,7 @@ export function AdminDashboardPage() {
 
       <main className={styles.main}>
         <div className={styles.workspace}>
-          <aside className={styles.sidebar} aria-label="Admin navigation">
+          <aside className={styles.sidebar} aria-label="Admin navigation" data-onboarding="admin-sidebar">
             <div className={styles.sidebarHeader}>
               <h1 className={styles.sidebarTitle}>Operations Hub</h1>
               <p className={styles.sidebarSubtitle}>Manage high-impact admin tasks with less clutter.</p>
@@ -950,6 +954,7 @@ export function AdminDashboardPage() {
                 className={`${styles.sideNavBtn} ${activeTab === 'queues' ? styles.sideNavBtnActive : ''}`}
                 onClick={() => setActiveTab('queues')}
                 title="Create and control queues"
+                data-onboarding="admin-queues-tab"
               >
                 Queue Management
               </button>
@@ -958,6 +963,7 @@ export function AdminDashboardPage() {
                 className={`${styles.sideNavBtn} ${activeTab === 'appointments' ? styles.sideNavBtnActive : ''}`}
                 onClick={() => setActiveTab('appointments')}
                 title="Configure appointment profiles and schedules"
+                data-onboarding="admin-appointments-tab"
               >
                 Appointment Management
               </button>
@@ -982,6 +988,7 @@ export function AdminDashboardPage() {
                 className={`${styles.sideNavBtn} ${activeTab === 'staff' ? styles.sideNavBtnActive : ''}`}
                 onClick={() => setActiveTab('staff')}
                 title="Invite and maintain staff access"
+                data-onboarding="admin-staff-tab"
               >
                 Staff Management
               </button>
@@ -990,6 +997,7 @@ export function AdminDashboardPage() {
                 className={`${styles.sideNavBtn} ${activeTab === 'reports' ? styles.sideNavBtnActive : ''}`}
                 onClick={() => setActiveTab('reports')}
                 title="Open queue and daily summary reports"
+                data-onboarding="admin-reports-tab"
               >
                 Reports
               </button>
@@ -1034,6 +1042,18 @@ export function AdminDashboardPage() {
                     <strong className={styles.summaryValue}>{staffAccounts.length}</strong>
                   </article>
                 </div>
+
+                <article className={styles.reportCard} data-onboarding="admin-settings">
+                  <h3 className={styles.sectionSubTitle}>Profile and Settings</h3>
+                  <p className={styles.sectionHint}>Replay the onboarding walkthrough whenever your team needs a refresher.</p>
+                  <button
+                    type="button"
+                    className={styles.createBtn}
+                    onClick={onboarding.restartTour}
+                  >
+                    Restart onboarding tour
+                  </button>
+                </article>
               </section>
             )}
 
@@ -1915,6 +1935,13 @@ export function AdminDashboardPage() {
           </section>
         )}
             </div>
+
+            <OnboardingTour
+              isOpen={onboarding.isOpen}
+              title="Quick tour: admin dashboard"
+              steps={ROLE_TOUR_CONTENT.admin}
+              onClose={onboarding.completeTour}
+            />
           </div>
         </div>
       </main>
