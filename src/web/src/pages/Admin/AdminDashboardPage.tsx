@@ -9,7 +9,7 @@
  *  - After create: shows the shareable link with a copy button
  *  - Per-queue: copy shareable link button
  */
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, type CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   assignStaffToQueue,
@@ -81,6 +81,16 @@ interface StaffProfileForm {
 }
 
 type AdminTab = 'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports'
+
+const sidebarTabOrder: AdminTab[] = [
+  'home',
+  'queues',
+  'appointments',
+  'services',
+  'offices',
+  'staff',
+  'reports',
+]
 
 const defaultForm: CreateForm = {
   name: '',
@@ -903,6 +913,9 @@ export function AdminDashboardPage() {
     }
   }
 
+  const activeSidebarIndex = Math.max(sidebarTabOrder.indexOf(activeTab), 0)
+  const sidebarNavStyle = { '--active-index': activeSidebarIndex } as CSSProperties
+
   return (
     <div className={styles.page}>
       <nav className={styles.topNav}>
@@ -923,7 +936,7 @@ export function AdminDashboardPage() {
               <p className={styles.sidebarSubtitle}>Manage high-impact admin tasks with less clutter.</p>
             </div>
 
-            <nav className={styles.sidebarNav}>
+            <nav className={styles.sidebarNav} style={sidebarNavStyle}>
               <button
                 type="button"
                 className={`${styles.sideNavBtn} ${activeTab === 'home' ? styles.sideNavBtnActive : ''}`}

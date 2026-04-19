@@ -93,8 +93,29 @@
 }
 
 .sidebarNav {
+  --active-index: 0;
+  --side-item-height: 42px;
+  --side-item-gap: 8px;
+  position: relative;
   display: grid;
   gap: 8px;
+  padding: 2px;
+}
+
+.sidebarNav::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 2px;
+  height: var(--side-item-height);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(35, 114, 39, 0.16) 0%, rgba(43, 134, 48, 0.22) 100%);
+  border: 1px solid rgba(35, 114, 39, 0.18);
+  box-shadow: 0 6px 14px rgba(31, 95, 35, 0.1);
+  transform: translateY(calc(var(--active-index) * (var(--side-item-height) + var(--side-item-gap))));
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
 }
 
 .sidebarHint {
@@ -104,15 +125,18 @@
 }
 
 .sideNavBtn {
+  position: relative;
+  z-index: 1;
   border: 1px solid transparent;
   background: transparent;
   color: var(--color-text-primary);
   text-align: left;
   padding: 10px 12px;
+  min-height: var(--side-item-height);
   border-radius: 10px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  transition: color 0.2s ease, background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
 
 .sideNavBtn:hover {
@@ -122,8 +146,8 @@
 }
 
 .sideNavBtnActive {
-  background: linear-gradient(135deg, #237227 0%, #2b8630 100%);
-  color: #fff;
+  background: transparent;
+  color: #16561a;
   border-color: transparent;
 }
 
@@ -841,5 +865,15 @@
   .queueCard {
     flex-direction: column;
     align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebarNav::before {
+    transition: none;
+  }
+
+  .sideNavBtn {
+    transition: none;
   }
 }
