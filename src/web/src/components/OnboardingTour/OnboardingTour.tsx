@@ -44,11 +44,20 @@ export function OnboardingTour({ isOpen, title, steps, onClose }: OnboardingTour
       return
     }
 
-    function updateHighlight() {
+    if (activeStep.activateTarget) {
+      const activationEl = document.querySelector(activeStep.activateTarget)
+      if (activationEl instanceof HTMLElement) {
+        activationEl.click()
+      }
+    }
+
+    let hasAutoScrolled = false
+
+    function updateHighlight(): boolean {
       const element = document.querySelector(activeStep.target)
       if (!(element instanceof HTMLElement)) {
         setHighlightRect(null)
-        return
+        return false
       }
 
       const rect = element.getBoundingClientRect()
@@ -59,17 +68,30 @@ export function OnboardingTour({ isOpen, title, steps, onClose }: OnboardingTour
         width: Math.min(rect.width + (padding * 2), window.innerWidth),
         height: Math.min(rect.height + (padding * 2), window.innerHeight),
       })
+
+      if (!hasAutoScrolled && typeof element.scrollIntoView === 'function') {
+        hasAutoScrolled = true
+        element.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+
+      return true
     }
 
-    updateHighlight()
-    const element = document.querySelector(activeStep.target)
-    if (element instanceof HTMLElement && typeof element.scrollIntoView === 'function') {
-      element.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }
+    let attempts = 0
+    const maxAttempts = 12
+    const initialFound = updateHighlight()
+    const settleTimer = window.setInterval(() => {
+      attempts += 1
+      const found = updateHighlight()
+      if (found || attempts >= maxAttempts) {
+        window.clearInterval(settleTimer)
+      }
+    }, initialFound ? 120 : 160)
 
     window.addEventListener('resize', updateHighlight)
     window.addEventListener('scroll', updateHighlight, true)
     return () => {
+      window.clearInterval(settleTimer)
       window.removeEventListener('resize', updateHighlight)
       window.removeEventListener('scroll', updateHighlight, true)
     }

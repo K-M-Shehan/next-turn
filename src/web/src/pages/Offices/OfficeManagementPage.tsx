@@ -210,7 +210,7 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
       {error && <div className={styles.error}>{error}</div>}
       {success && <div className={styles.success}>{success}</div>}
 
-      <section className={styles.filters}>
+      <section className={styles.filters} data-onboarding="admin-office-filters">
         <div className={styles.filterGrid}>
           <input
             type="text"
@@ -245,7 +245,7 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
         </p>
       </section>
 
-      <section className={styles.formCard}>
+      <section className={styles.formCard} data-onboarding="admin-office-create">
         <h2>{mode === 'create' ? 'Create Office' : 'Update Office'}</h2>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input
@@ -318,7 +318,7 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
         )}
       </section>
 
-      <section className={styles.listCard}>
+      <section className={styles.listCard} data-onboarding="admin-office-list">
         <h2>Offices</h2>
         {loading ? (
           <p>Loading offices...</p>

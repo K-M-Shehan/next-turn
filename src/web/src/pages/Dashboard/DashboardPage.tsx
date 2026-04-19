@@ -519,7 +519,7 @@ export function DashboardPage() {
               )}
 
               {activeTab === 'queues' && (
-                <section className={styles.queueSection} aria-label="My active queues">
+                <section className={styles.queueSection} aria-label="My active queues" data-onboarding="citizen-queues-list">
                 <div className={styles.sectionHeader}>
                   <QueueIcon />
                   <h2 className={styles.sectionTitle}>My Active Queues</h2>
@@ -558,7 +558,7 @@ export function DashboardPage() {
               )}
 
               {activeTab === 'appointments' && (
-                <section className={styles.queueSection} aria-label="My active appointment bookings">
+                <section className={styles.queueSection} aria-label="My active appointment bookings" data-onboarding="citizen-appointments-list">
                 <div className={styles.sectionHeader}>
                   <CalendarIcon />
                   <h2 className={styles.sectionTitle}>My Active Appointment Bookings</h2>
@@ -613,7 +613,7 @@ export function DashboardPage() {
 
               {activeTab === 'notifications' && (
                 <>
-                <section className={styles.settingsSection} aria-label="In-app notifications">
+                <section className={styles.settingsSection} aria-label="In-app notifications" data-onboarding="citizen-inapp-notifications">
                   <div className={styles.sectionHeaderRow}>
                     <div className={styles.sectionHeader}>
                       <BellIcon />
@@ -794,7 +794,7 @@ export function DashboardPage() {
 
               {activeTab === 'settings' && (
                 <>
-                <section className={styles.settingsSection} aria-label="Queue notification settings">
+                <section className={styles.settingsSection} aria-label="Queue notification settings" data-onboarding="citizen-queue-settings">
                   <div className={styles.sectionHeader}>
                     <BellIcon />
                     <h2 className={styles.sectionTitle}>Queue Notification Settings</h2>
@@ -832,7 +832,7 @@ export function DashboardPage() {
                   )}
                 </section>
 
-                <section className={styles.settingsSection} aria-label="Appointment notification settings">
+                <section className={styles.settingsSection} aria-label="Appointment notification settings" data-onboarding="citizen-appointment-settings">
                   <div className={styles.sectionHeader}>
                     <CalendarIcon />
                     <h2 className={styles.sectionTitle}>Appointment Notification Settings</h2>

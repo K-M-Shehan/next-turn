@@ -461,7 +461,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         </p>
       </section>
 
-      <section className={styles.formCard}>
+      <section className={styles.formCard} data-onboarding="admin-service-create">
         <h2>{mode === 'create' ? 'Create Service Definition' : 'Update Service Definition'}</h2>
         <form onSubmit={handleSubmit} className={styles.form}>
           <input
@@ -520,7 +520,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         </form>
       </section>
 
-      <section className={styles.listCard}>
+      <section className={styles.listCard} data-onboarding="admin-service-definitions">
         <h2>Service Definitions</h2>
         {loading ? (
           <p>Loading services...</p>
@@ -564,7 +564,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         )}
       </section>
 
-      <section className={styles.assignmentsCard}>
+      <section className={styles.assignmentsCard} data-onboarding="admin-service-availability">
         <h2>Office Availability (Now)</h2>
         <p className={styles.helperText}>Choose which active offices can deliver each service.</p>
         {services.length === 0 ? (
@@ -608,7 +608,7 @@ export function ServiceManagementPage({ embedded = false }: ServiceManagementPag
         )}
       </section>
 
-      <section className={styles.operationsCard}>
+      <section className={styles.operationsCard} data-onboarding="admin-service-operations">
         <h2>Create Operational Flows from Service</h2>
         <p className={styles.helperText}>
           Choose the exact service and offices to target. The system creates one queue and one appointment profile per selected office, and skips duplicates.

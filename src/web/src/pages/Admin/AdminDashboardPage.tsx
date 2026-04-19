@@ -1001,6 +1001,7 @@ export function AdminDashboardPage() {
                 className={`${styles.sideNavBtn} ${activeTab === 'services' ? styles.sideNavBtnActive : ''}`}
                 onClick={() => setActiveTab('services')}
                 title="Manage service catalog and availability"
+                data-onboarding="admin-services-tab"
               >
                 Service Management
               </button>
@@ -1009,6 +1010,7 @@ export function AdminDashboardPage() {
                 className={`${styles.sideNavBtn} ${activeTab === 'offices' ? styles.sideNavBtnActive : ''}`}
                 onClick={() => setActiveTab('offices')}
                 title="Manage office locations and status"
+                data-onboarding="admin-offices-tab"
               >
                 Office Management
               </button>
@@ -1119,7 +1121,7 @@ export function AdminDashboardPage() {
                 <h2 className={styles.sectionTitle}>Settings</h2>
                 <p className={styles.sectionHint}>Update workspace preferences and replay guided onboarding.</p>
 
-                <div className={styles.reportCard}>
+                <div className={styles.reportCard} data-onboarding="admin-settings-panel">
                   <h3 className={styles.sectionSubTitle}>Onboarding</h3>
                   <p className={styles.sectionHint}>Replay the onboarding walkthrough whenever your team needs a refresher.</p>
                   <button
@@ -1138,7 +1140,7 @@ export function AdminDashboardPage() {
                 <h2 className={styles.sectionTitle}>Reports</h2>
                 <p className={styles.sectionHint}>Generate both report types directly here without leaving the dashboard.</p>
 
-                <div className={styles.reportCard}>
+                <div className={styles.reportCard} data-onboarding="admin-report-performance">
                   <h3 className={styles.sectionSubTitle}>Queue Performance Report</h3>
                   <p className={styles.sectionHint}>Analyze served volumes, average wait times, and peak-hour demand.</p>
 
@@ -1195,7 +1197,7 @@ export function AdminDashboardPage() {
                   )}
                 </div>
 
-                <div className={styles.reportCard}>
+                <div className={styles.reportCard} data-onboarding="admin-report-daily">
                   <h3 className={styles.sectionSubTitle}>Daily Summary Report</h3>
                   <p className={styles.sectionHint}>Track served, skipped, and no-show counts with trend context.</p>
 
@@ -1274,16 +1276,20 @@ export function AdminDashboardPage() {
             )}
 
         {activeTab === 'offices' && (
-          <OfficeManagementPage embedded />
+          <div data-onboarding="admin-offices-panel">
+            <OfficeManagementPage embedded />
+          </div>
         )}
 
         {activeTab === 'services' && (
-          <ServiceManagementPage embedded />
+          <div data-onboarding="admin-services-panel">
+            <ServiceManagementPage embedded />
+          </div>
         )}
 
         {activeTab === 'queues' && (
           <>
-            <section className={styles.section}>
+            <section className={styles.section} data-onboarding="admin-queue-create-form">
               <h2 className={styles.sectionTitle}>Create a New Queue</h2>
               <p className={styles.sectionHint}>Create and share queue links for customers to join in seconds.</p>
 
@@ -1505,7 +1511,7 @@ export function AdminDashboardPage() {
 
         {activeTab === 'appointments' && (
           <>
-            <section className={styles.section}>
+            <section className={styles.section} data-onboarding="admin-appointment-panel">
               <h2 className={styles.sectionTitle}>Create Appointment Profile</h2>
               <p className={styles.sectionHint}>
                 Create a dedicated appointment link for each service stream.
@@ -1754,7 +1760,7 @@ export function AdminDashboardPage() {
         )}
 
         {activeTab === 'staff' && (
-          <section className={styles.section}>
+          <section className={styles.section} data-onboarding="admin-staff-panel">
             <h2 className={styles.sectionTitle}>Create Staff Account</h2>
             <p className={styles.sectionHint}>
               Staff users are restricted to queue-operations for this organisation.
@@ -1768,7 +1774,7 @@ export function AdminDashboardPage() {
               <div className={styles.successBanner} role="status">{staffSuccess}</div>
             )}
 
-            <form className={styles.createForm} onSubmit={handleCreateStaff} noValidate>
+            <form className={styles.createForm} onSubmit={handleCreateStaff} noValidate data-onboarding="admin-staff-create">
               <div className={styles.formGrid}>
                 <div className={styles.formGroup}>
                   <label className={styles.label} htmlFor="staff-name">Full Name</label>
@@ -1835,7 +1841,7 @@ export function AdminDashboardPage() {
               </div>
             )}
 
-            <div className={styles.staffListBlock}>
+            <div className={styles.staffListBlock} data-onboarding="admin-staff-list">
               <h3 className={styles.sectionSubTitle}>Existing Staff Accounts</h3>
 
               {staffAccountsLoading && (
@@ -1880,6 +1886,7 @@ export function AdminDashboardPage() {
                                 className={styles.copyBtn}
                                 disabled={staffActionUserId === user.userId}
                                 onClick={() => handleStaffStatusToggle(user)}
+                                data-onboarding="admin-staff-toggle-button"
                               >
                                 {staffActionUserId === user.userId
                                   ? 'Updating...'
@@ -1890,6 +1897,7 @@ export function AdminDashboardPage() {
                                 className={styles.copyBtn}
                                 onClick={() => profile && beginEditStaffProfile(profile)}
                                 disabled={!profile}
+                                data-onboarding="admin-staff-edit-button"
                               >
                                 Edit Details
                               </button>
