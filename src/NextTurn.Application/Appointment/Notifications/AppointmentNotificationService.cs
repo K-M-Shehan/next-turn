@@ -61,9 +61,6 @@ public sealed class AppointmentNotificationService : IAppointmentNotificationSer
             return;
         }
 
-        if (!IsNotificationEnabled(user, notificationType))
-            return;
-
         var profile = await _context.AppointmentProfiles
             .IgnoreQueryFilters()
             .AsNoTracking()
@@ -83,6 +80,13 @@ public sealed class AppointmentNotificationService : IAppointmentNotificationSer
             appointment.SlotStart,
             serviceName,
             officeName);
+
+        if (!IsNotificationEnabled(user, notificationType))
+        {
+            _context.UserInAppNotifications.Add(inAppNotification);
+            await _context.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
         try
         {
@@ -108,7 +112,7 @@ public sealed class AppointmentNotificationService : IAppointmentNotificationSer
                     officeName: officeName,
                     serviceName: serviceName));
 
-                    _context.UserInAppNotifications.Add(inAppNotification);
+            _context.UserInAppNotifications.Add(inAppNotification);
 
             await _context.SaveChangesAsync(cancellationToken);
         }
