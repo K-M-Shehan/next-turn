@@ -161,9 +161,26 @@
 }
 
 .sidebarNav {
+  --active-index: 0;
+  --nav-item-height: 46px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
+}
+
+.navIndicator {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: var(--nav-item-height);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1f5f2a 0%, #2b7a37 100%);
+  transform: translateY(calc(var(--active-index) * (var(--nav-item-height) + 8px)));
+  transition: transform 0.26s ease;
+  box-shadow: 0 6px 14px rgba(31, 95, 42, 0.2);
+  z-index: 0;
 }
 
 .navItem {
@@ -180,6 +197,8 @@
   cursor: pointer;
   text-align: left;
   transition: all 0.15s ease;
+  position: relative;
+  z-index: 1;
 }
 
 .navItem:hover {
@@ -436,6 +455,21 @@
   line-height: 1.5;
 }
 
+.shortcutToast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 140;
+  background: #1f5f2a;
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  box-shadow: 0 12px 24px rgba(18, 53, 26, 0.26);
+  animation: toastIn 0.2s ease-out;
+}
+
 /* ============================================================
    Responsive
    ============================================================ */
@@ -507,6 +541,12 @@
 
   .sidebarNav {
     grid-template-columns: 1fr;
+  }
+
+  .shortcutToast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
   }
 }
 
@@ -919,11 +959,27 @@
   }
 }
 
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sidebar,
   .contentInner,
   .tabPanel,
-  .quickStats > * {
+  .quickStats > *,
+  .shortcutToast {
     animation: none !important;
+  }
+
+  .navIndicator {
+    transition: none !important;
   }
 }

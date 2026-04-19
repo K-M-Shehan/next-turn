@@ -130,9 +130,11 @@ describe('DashboardPage — sidebar layout', () => {
   it('switches tabs using keyboard shortcuts', () => {
     renderPage()
     expect(screen.getByRole('heading', { name: /join queue by link/i })).toBeInTheDocument()
+    expect(screen.queryByText(/switch tabs faster/i)).not.toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: '2' })
     expect(screen.getByRole('heading', { name: /my active queues/i })).toBeInTheDocument()
+    expect(screen.getByText(/switch tabs faster/i)).toBeInTheDocument()
 
     fireEvent.keyDown(window, { key: 'n' })
     expect(screen.getByRole('heading', { name: /in-app notifications/i })).toBeInTheDocument()

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import {
@@ -49,6 +49,8 @@ export function DashboardPage() {
   const badge = roleBadgeLabel(role)
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('home')
+  const [showShortcutToast, setShowShortcutToast] = useState(false)
+  const hasShownShortcutToast = useRef(false)
 
   const [queues, setQueues] = useState<MyQueueEntry[]>([])
   const [queuesLoading, setQueuesLoading] = useState(true)
@@ -279,6 +281,7 @@ export function DashboardPage() {
   }
 
   const unreadNotificationsCount = inAppNotifications.filter(n => !n.isRead).length
+  const sidebarNavStyle = { '--active-index': tabToIndex(activeTab) } as CSSProperties
 
   useEffect(() => {
     function handleTabShortcuts(event: KeyboardEvent) {
@@ -294,11 +297,28 @@ export function DashboardPage() {
 
       event.preventDefault()
       setActiveTab(nextTab)
+
+      if (!hasShownShortcutToast.current) {
+        hasShownShortcutToast.current = true
+        setShowShortcutToast(true)
+      }
     }
 
     window.addEventListener('keydown', handleTabShortcuts)
     return () => window.removeEventListener('keydown', handleTabShortcuts)
   }, [])
+
+  useEffect(() => {
+    if (!showShortcutToast) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowShortcutToast(false)
+    }, 2600)
+
+    return () => window.clearTimeout(timer)
+  }, [showShortcutToast])
 
   return (
     <div className={styles.page}>
@@ -332,7 +352,8 @@ export function DashboardPage() {
               <p className={styles.sidebarSubtitle}>Everything in one place</p>
             </div>
 
-            <nav className={styles.sidebarNav}>
+            <nav className={styles.sidebarNav} style={sidebarNavStyle}>
+              <span className={styles.navIndicator} aria-hidden="true" />
               <button
                 type="button"
                 className={`${styles.navItem} ${activeTab === 'home' ? styles.navItemActive : ''}`}
@@ -730,6 +751,12 @@ export function DashboardPage() {
                 <p className={styles.authCardBody}>Role: <strong>{role}</strong> - Use the left sidebar to switch between features.</p>
               </div>
             </div>
+
+            {showShortcutToast && (
+              <div className={styles.shortcutToast} role="status" aria-live="polite">
+                Tip: Use 1/2/3/4 or H/Q/A/N to switch tabs faster.
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -756,6 +783,13 @@ function keyToDashboardTab(key: string): DashboardTab | null {
   if (key === '3' || key === 'a') return 'appointments'
   if (key === '4' || key === 'n') return 'notifications'
   return null
+}
+
+function tabToIndex(tab: DashboardTab): number {
+  if (tab === 'home') return 0
+  if (tab === 'queues') return 1
+  if (tab === 'appointments') return 2
+  return 3
 }
 
 function formatDashboardSlot(slotStart: string, slotEnd: string): string {
