@@ -12,16 +12,28 @@
 }
 
 .topNav {
-  max-width: 1080px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 18px 20px 0;
+  padding: 10px 20px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
+.topNavBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topNavTitle {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
 .logo {
-  width: 132px;
+  width: 102px;
   height: auto;
 }
 
@@ -31,24 +43,90 @@
   background: var(--color-white);
   color: var(--color-text-primary);
   font-weight: 700;
-  padding: 8px 14px;
+  padding: 6px 12px;
   cursor: pointer;
 }
 
 .main {
-  max-width: 1080px;
+  max-width: 1240px;
   margin: 0 auto;
-  padding: 30px 20px 50px;
+  padding: 18px 20px 40px;
+}
+
+.workspace {
   display: grid;
-  gap: 20px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.contentArea {
+  display: grid;
+  gap: 16px;
+}
+
+.sidebar {
+  position: sticky;
+  top: 76px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: linear-gradient(170deg, #ffffff 0%, #eef8f0 100%);
+  box-shadow: var(--shadow-md);
+  padding: 14px;
+}
+
+.sidebarHeader {
+  padding: 6px 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 10px;
+}
+
+.sidebarTitle {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.sidebarSubtitle {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+}
+
+.sidebarNav {
+  display: grid;
+  gap: 8px;
+}
+
+.sideNavBtn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.sideNavBtn:hover {
+  background: #ecf7ef;
+  border-color: #c9e2d0;
+  transform: translateY(-1px);
+}
+
+.sideNavBtnActive {
+  background: linear-gradient(135deg, #237227 0%, #2b8630 100%);
+  color: #fff;
+  border-color: transparent;
 }
 
 .toolbar {
-  background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 55%, var(--color-secondary) 100%);
-  border-radius: 22px;
-  padding: 22px;
-  color: var(--color-white);
-  box-shadow: var(--shadow-lg);
+  background: linear-gradient(130deg, #1b5f1f 0%, #278534 55%, #f4b000 100%);
+  border-radius: 18px;
+  padding: 16px;
+  color: #fff;
+  box-shadow: var(--shadow-md);
 }
 
 .toolbarHeader {
@@ -58,7 +136,7 @@
 
 .pageTitle {
   margin: 0;
-  font-size: clamp(1.1rem, 2.6vw, 1.6rem);
+  font-size: clamp(1.05rem, 2.2vw, 1.4rem);
   line-height: 1.2;
 }
 
@@ -93,6 +171,50 @@
   background: var(--color-accent);
   color: var(--color-accent-text);
   border-color: var(--color-accent);
+}
+
+.homeSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.summaryCard {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 12px;
+  background: linear-gradient(160deg, #f8fcf8 0%, #ffffff 70%);
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.summaryCard:hover {
+  transform: translateY(-1px);
+  border-color: #b9d8c2;
+}
+
+.summaryLabel {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
+.summaryValue {
+  font-size: 1.5rem;
+  color: #1f6a25;
+}
+
+.reportSwitch {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reportCard {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 10px;
+  background: linear-gradient(165deg, #f7fbf7, #fff);
 }
 
 .section {
@@ -641,15 +763,27 @@
 
 @media (max-width: 640px) {
   .topNav {
-    padding: 14px 14px 0;
+    padding: 10px 14px 0;
   }
 
   .logo {
-    width: 110px;
+    width: 92px;
   }
 
   .main {
-    padding: 18px 14px 32px;
+    padding: 14px 14px 28px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+  }
+
+  .sidebarNav {
+    grid-template-columns: 1fr;
   }
 
   .toolbar {

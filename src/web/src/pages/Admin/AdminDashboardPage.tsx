@@ -47,6 +47,7 @@ import {
   type AppointmentProfileSummary,
   type AppointmentDayRule,
 } from '../../api/appointments'
+import { listServices } from '../../api/services'
 import { OfficeManagementPage } from '../Offices'
 import { ServiceManagementPage } from '../Services'
 import type { ApiError } from '../../types/api'
@@ -157,7 +158,8 @@ export function AdminDashboardPage() {
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null)
   const [copiedAppointmentLink, setCopiedAppointmentLink] = useState(false)
-  const [activeTab, setActiveTab] = useState<'offices' | 'services' | 'queues' | 'appointments' | 'staff'>('queues')
+  const [activeTab, setActiveTab] = useState<'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports'>('home')
+  const [reportsTab, setReportsTab] = useState<'performance' | 'daily'>('performance')
   const [appointmentEditorOpen, setAppointmentEditorOpen] = useState(false)
   const [editingAppointmentProfile, setEditingAppointmentProfile] = useState<AppointmentProfileSummary | null>(null)
   const [editorRules, setEditorRules] = useState<AppointmentDayRule[]>([])
@@ -186,6 +188,8 @@ export function AdminDashboardPage() {
   const [queueDeleteBusyId, setQueueDeleteBusyId] = useState<string | null>(null)
   const [queueAssignmentError, setQueueAssignmentError] = useState<string | null>(null)
   const [queueAssignmentSuccess, setQueueAssignmentSuccess] = useState<string | null>(null)
+  const [homeOfficeCount, setHomeOfficeCount] = useState(0)
+  const [homeServiceCount, setHomeServiceCount] = useState(0)
 
   const appointmentSummary = useMemo(() => {
     const enabledDays = editorRules.filter(r => r.isEnabled).length
@@ -259,14 +263,25 @@ export function AdminDashboardPage() {
       .finally(() => setProfileLoading(false))
   }, [tenantId])
 
+  useEffect(() => {
+    if (!tenantId) return
+
+    listOffices(tenantId, { isActive: true, pageNumber: 1, pageSize: 200 })
+      .then(result => setHomeOfficeCount(result.totalCount))
+      .catch(() => setHomeOfficeCount(0))
+
+    listStaffUsers(tenantId)
+      .then(result => setStaffAccounts(result))
+      .catch(() => setStaffAccounts([]))
+
+    listServices(tenantId, { activeOnly: true, pageNumber: 1, pageSize: 200 })
+      .then(result => setHomeServiceCount(result.totalCount))
+      .catch(() => setHomeServiceCount(0))
+  }, [tenantId])
+
   function handleLogout() {
     clearToken()
     navigate('/', { replace: true })
-  }
-
-  function openQueueReports() {
-    if (!tenantId) return
-    navigate(`/admin/${tenantId}/reports`)
   }
 
   function validate(): boolean {
@@ -773,73 +788,164 @@ export function AdminDashboardPage() {
   return (
     <div className={styles.page}>
       <nav className={styles.topNav}>
-        <img src={logoImg} alt="NextTurn" className={styles.logo} />
-        <button className={styles.logoutBtn} onClick={handleLogout} type="button">
-          Logout
+        <div className={styles.topNavBrand}>
+          <img src={logoImg} alt="NextTurn" className={styles.logo} />
+          <span className={styles.topNavTitle}>Admin Console</span>
+        </div>
+        <button className={styles.logoutBtn} onClick={handleLogout} type="button" aria-label="Sign out">
+          Sign out
         </button>
       </nav>
 
       <main className={styles.main}>
-        <section className={styles.toolbar}>
-          <div className={styles.toolbarHeader}>
-            <h1 className={styles.pageTitle}>Operations Control Center</h1>
-            <p className={styles.pageSubtitle}>Manage queues and appointment capacity from one place.</p>
-            <button
-              type="button"
-              className={styles.createBtn}
-              onClick={openQueueReports}
-            >
-              View Queue Performance Reports
-            </button>
-          </div>
-          <div className={styles.tabs} role="tablist" aria-label="Admin sections">
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'offices' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('offices')}
-              role="tab"
-              aria-selected={activeTab === 'offices'}
-            >
-              Offices
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'services' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('services')}
-              role="tab"
-              aria-selected={activeTab === 'services'}
-            >
-              Services
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'queues' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('queues')}
-              role="tab"
-              aria-selected={activeTab === 'queues'}
-            >
-              Queue Management
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'appointments' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('appointments')}
-              role="tab"
-              aria-selected={activeTab === 'appointments'}
-            >
-              Appointment Settings
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'staff' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('staff')}
-              role="tab"
-              aria-selected={activeTab === 'staff'}
-            >
-              Staff Accounts
-            </button>
-          </div>
-        </section>
+        <div className={styles.workspace}>
+          <aside className={styles.sidebar} aria-label="Admin navigation">
+            <div className={styles.sidebarHeader}>
+              <h1 className={styles.sidebarTitle}>Operations Hub</h1>
+              <p className={styles.sidebarSubtitle}>Manage high-impact admin tasks with less clutter.</p>
+            </div>
+
+            <nav className={styles.sidebarNav}>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'home' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('home')}
+                title="Quick overview of your operations"
+              >
+                Home
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'queues' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('queues')}
+                title="Create and control queues"
+              >
+                Queue Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'appointments' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('appointments')}
+                title="Configure appointment profiles and schedules"
+              >
+                Appointment Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'services' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('services')}
+                title="Manage service catalog and availability"
+              >
+                Service Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'offices' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('offices')}
+                title="Manage office locations and status"
+              >
+                Office Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'staff' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('staff')}
+                title="Invite and maintain staff access"
+              >
+                Staff Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'reports' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('reports')}
+                title="Open queue and daily summary reports"
+              >
+                Reports
+              </button>
+            </nav>
+          </aside>
+
+          <div className={styles.contentArea}>
+            <section className={styles.toolbar}>
+              <div className={styles.toolbarHeader}>
+                <h2 className={styles.pageTitle}>Operations Control Center</h2>
+                <p className={styles.pageSubtitle}>Manage queues, appointments, people, and operations from one place.</p>
+              </div>
+            </section>
+
+            {activeTab === 'home' && (
+              <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>Quick Overview</h2>
+                <p className={styles.sectionHint}>A clean snapshot of your operations. Use the sidebar to dive deeper into each area.</p>
+
+                <div className={styles.homeSummaryGrid}>
+                  <article className={styles.summaryCard} title="Total queues configured for this organisation">
+                    <span className={styles.summaryLabel}>Queues</span>
+                    <strong className={styles.summaryValue}>{queues.length}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Appointment profiles available to end users">
+                    <span className={styles.summaryLabel}>Appointment Profiles</span>
+                    <strong className={styles.summaryValue}>{appointmentProfiles.length}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Active office locations currently configured">
+                    <span className={styles.summaryLabel}>Active Offices</span>
+                    <strong className={styles.summaryValue}>{homeOfficeCount}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Active service offerings available for routing">
+                    <span className={styles.summaryLabel}>Active Services</span>
+                    <strong className={styles.summaryValue}>{homeServiceCount}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Total staff users in your organisation">
+                    <span className={styles.summaryLabel}>Staff Accounts</span>
+                    <strong className={styles.summaryValue}>{staffAccounts.length}</strong>
+                  </article>
+                </div>
+              </section>
+            )}
+
+            {activeTab === 'reports' && (
+              <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>Reports</h2>
+                <p className={styles.sectionHint}>Switch report types below, then open the full report page.</p>
+
+                <div className={styles.reportSwitch}>
+                  <button
+                    type="button"
+                    className={`${styles.tabBtn} ${reportsTab === 'performance' ? styles.tabBtnActive : ''}`}
+                    onClick={() => setReportsTab('performance')}
+                  >
+                    Queue Performance
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.tabBtn} ${reportsTab === 'daily' ? styles.tabBtnActive : ''}`}
+                    onClick={() => setReportsTab('daily')}
+                  >
+                    Daily Summary
+                  </button>
+                </div>
+
+                {reportsTab === 'performance' && (
+                  <div className={styles.reportCard}>
+                    <h3 className={styles.sectionSubTitle}>Queue Performance Report</h3>
+                    <p className={styles.sectionHint}>Analyze served volumes, average wait times, and peak hours.</p>
+                    <button type="button" className={styles.createBtn} onClick={() => tenantId && navigate(`/admin/${tenantId}/reports`)}>
+                      Open Queue Performance
+                    </button>
+                  </div>
+                )}
+
+                {reportsTab === 'daily' && (
+                  <div className={styles.reportCard}>
+                    <h3 className={styles.sectionSubTitle}>Daily Summary Report</h3>
+                    <p className={styles.sectionHint}>Review served, skipped, and no-show trends per office/service.</p>
+                    <button type="button" className={styles.createBtn} onClick={() => tenantId && navigate(`/admin/${tenantId}/reports/daily-summary`)}>
+                      Open Daily Summary
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
 
         {activeTab === 'offices' && (
           <OfficeManagementPage embedded />
@@ -1578,6 +1684,8 @@ export function AdminDashboardPage() {
             </div>
           </section>
         )}
+          </div>
+        </div>
       </main>
     </div>
   )
