@@ -73,6 +73,19 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
   }, [staffMembers])
 
   useEffect(() => {
+    if (!editModalOpen) return
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !savingEdit) {
+        closeEditModal()
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [editModalOpen, savingEdit])
+
+  useEffect(() => {
     if (!payload) {
       clearToken()
       navigate('/', { replace: true })
@@ -455,9 +468,9 @@ export function OfficeManagementPage({ embedded = false }: OfficeManagementPageP
       )}
 
       {editModalOpen && editOfficeId && (
-        <div className={styles.modalOverlay} onClick={closeEditModal}>
+        <div className={`${styles.modalOverlay} ${styles.modalOverlayEnter}`} onClick={closeEditModal}>
           <div
-            className={styles.modalCard}
+            className={`${styles.modalCard} ${styles.modalCardEnter}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby="office-edit-title"
