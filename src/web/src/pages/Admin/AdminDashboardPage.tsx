@@ -15,10 +15,15 @@ import {
   assignStaffToQueue,
   createQueue,
   deleteQueue,
+  getDailyQueueSummaryReport,
   getOrgQueues,
+  getQueuePerformanceReport,
   listQueueStaffAssignments,
   unassignStaffFromQueue,
+  type DailyQueueMetricTrend,
+  type DailyQueueSummaryReportResult,
   type OrgQueueSummary,
+  type QueuePerformanceReportResult,
   type QueueStaffAssignment,
 } from '../../api/queues'
 import {
@@ -74,6 +79,8 @@ interface StaffProfileForm {
   shiftEnd: string
   officeId: string
 }
+
+type AdminTab = 'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports'
 
 const defaultForm: CreateForm = {
   name: '',
@@ -134,6 +141,37 @@ function getFirstValidationMessage(apiError: ApiError): string | undefined {
   return undefined
 }
 
+function formatDate(value: Date): string {
+  const year = value.getFullYear()
+  const month = `${value.getMonth() + 1}`.padStart(2, '0')
+  const day = `${value.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function defaultStartDate(): string {
+  const date = new Date()
+  date.setDate(date.getDate() - 7)
+  return formatDate(date)
+}
+
+function defaultEndDate(): string {
+  return formatDate(new Date())
+}
+
+function trendClass(value: number): 'up' | 'down' | 'neutral' {
+  if (value > 0) return 'up'
+  if (value < 0) return 'down'
+  return 'neutral'
+}
+
+function renderTrend(trend: DailyQueueMetricTrend): string {
+  const day = trend.deltaFromPreviousDay
+  const week = trend.deltaFromPreviousWeek
+  const dayLabel = day > 0 ? `+${day}` : `${day}`
+  const weekLabel = week > 0 ? `+${week}` : `${week}`
+  return `D ${dayLabel} | W ${weekLabel}`
+}
+
 export function AdminDashboardPage() {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
@@ -158,8 +196,7 @@ export function AdminDashboardPage() {
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null)
   const [copiedAppointmentLink, setCopiedAppointmentLink] = useState(false)
-  const [activeTab, setActiveTab] = useState<'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports'>('home')
-  const [reportsTab, setReportsTab] = useState<'performance' | 'daily'>('performance')
+  const [activeTab, setActiveTab] = useState<AdminTab>('home')
   const [appointmentEditorOpen, setAppointmentEditorOpen] = useState(false)
   const [editingAppointmentProfile, setEditingAppointmentProfile] = useState<AppointmentProfileSummary | null>(null)
   const [editorRules, setEditorRules] = useState<AppointmentDayRule[]>([])
@@ -190,6 +227,19 @@ export function AdminDashboardPage() {
   const [queueAssignmentSuccess, setQueueAssignmentSuccess] = useState<string | null>(null)
   const [homeOfficeCount, setHomeOfficeCount] = useState(0)
   const [homeServiceCount, setHomeServiceCount] = useState(0)
+  const [reportOfficeOptions, setReportOfficeOptions] = useState<OfficeDto[]>([])
+  const [reportServiceOptions, setReportServiceOptions] = useState<Array<{ serviceId: string; name: string }>>([])
+  const [reportStartDate, setReportStartDate] = useState(defaultStartDate)
+  const [reportEndDate, setReportEndDate] = useState(defaultEndDate)
+  const [reportOfficeId, setReportOfficeId] = useState('')
+  const [reportServiceId, setReportServiceId] = useState('')
+  const [queueReportLoading, setQueueReportLoading] = useState(false)
+  const [queueReportError, setQueueReportError] = useState<string | null>(null)
+  const [queueReport, setQueueReport] = useState<QueuePerformanceReportResult | null>(null)
+  const [dailyReportDate, setDailyReportDate] = useState(defaultEndDate)
+  const [dailyReportLoading, setDailyReportLoading] = useState(false)
+  const [dailyReportError, setDailyReportError] = useState<string | null>(null)
+  const [dailyReport, setDailyReport] = useState<DailyQueueSummaryReportResult | null>(null)
 
   const appointmentSummary = useMemo(() => {
     const enabledDays = editorRules.filter(r => r.isEnabled).length
@@ -267,17 +317,44 @@ export function AdminDashboardPage() {
     if (!tenantId) return
 
     listOffices(tenantId, { isActive: true, pageNumber: 1, pageSize: 200 })
-      .then(result => setHomeOfficeCount(result.totalCount))
-      .catch(() => setHomeOfficeCount(0))
+      .then(result => {
+        setHomeOfficeCount(result.totalCount)
+        setReportOfficeOptions(result.items)
+      })
+      .catch(() => {
+        setHomeOfficeCount(0)
+        setReportOfficeOptions([])
+      })
 
     listStaffUsers(tenantId)
       .then(result => setStaffAccounts(result))
       .catch(() => setStaffAccounts([]))
 
     listServices(tenantId, { activeOnly: true, pageNumber: 1, pageSize: 200 })
-      .then(result => setHomeServiceCount(result.totalCount))
-      .catch(() => setHomeServiceCount(0))
+      .then(result => {
+        setHomeServiceCount(result.totalCount)
+        setReportServiceOptions(result.items.map(item => ({ serviceId: item.serviceId, name: item.name })))
+      })
+      .catch(() => {
+        setHomeServiceCount(0)
+        setReportServiceOptions([])
+      })
   }, [tenantId])
+
+  useEffect(() => {
+    function onAdminShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented || isTypingTarget(event.target)) return
+
+      const mapped = keyToAdminTab(event.key.toLowerCase())
+      if (!mapped) return
+
+      event.preventDefault()
+      setActiveTab(mapped)
+    }
+
+    window.addEventListener('keydown', onAdminShortcut)
+    return () => window.removeEventListener('keydown', onAdminShortcut)
+  }, [])
 
   function handleLogout() {
     clearToken()
@@ -785,6 +862,47 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function loadQueuePerformanceReportInline() {
+    if (!tenantId) return
+
+    setQueueReportLoading(true)
+    setQueueReportError(null)
+
+    try {
+      const result = await getQueuePerformanceReport(tenantId, {
+        startDate: reportStartDate,
+        endDate: reportEndDate,
+        officeId: reportOfficeId || undefined,
+        serviceId: reportServiceId || undefined,
+      })
+      setQueueReport(result)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setQueueReportError(apiErr.detail ?? 'Could not load queue performance report.')
+      setQueueReport(null)
+    } finally {
+      setQueueReportLoading(false)
+    }
+  }
+
+  async function loadDailySummaryInline() {
+    if (!tenantId) return
+
+    setDailyReportLoading(true)
+    setDailyReportError(null)
+
+    try {
+      const result = await getDailyQueueSummaryReport(tenantId, dailyReportDate)
+      setDailyReport(result)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setDailyReportError(apiErr.detail ?? 'Could not load daily summary report.')
+      setDailyReport(null)
+    } finally {
+      setDailyReportLoading(false)
+    }
+  }
+
   return (
     <div className={styles.page}>
       <nav className={styles.topNav}>
@@ -863,6 +981,7 @@ export function AdminDashboardPage() {
                 Reports
               </button>
             </nav>
+            <p className={styles.sidebarHint}>Shortcuts: 1-7 or H/Q/A/S/O/T/R</p>
           </aside>
 
           <div className={styles.contentArea}>
@@ -906,44 +1025,140 @@ export function AdminDashboardPage() {
             {activeTab === 'reports' && (
               <section className={styles.section}>
                 <h2 className={styles.sectionTitle}>Reports</h2>
-                <p className={styles.sectionHint}>Switch report types below, then open the full report page.</p>
+                <p className={styles.sectionHint}>Generate both report types directly here without leaving the dashboard.</p>
 
-                <div className={styles.reportSwitch}>
-                  <button
-                    type="button"
-                    className={`${styles.tabBtn} ${reportsTab === 'performance' ? styles.tabBtnActive : ''}`}
-                    onClick={() => setReportsTab('performance')}
-                  >
-                    Queue Performance
+                <div className={styles.reportCard}>
+                  <h3 className={styles.sectionSubTitle}>Queue Performance Report</h3>
+                  <p className={styles.sectionHint}>Analyze served volumes, average wait times, and peak-hour demand.</p>
+
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-start-date">Start date</label>
+                      <input id="report-start-date" className={styles.input} type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-end-date">End date</label>
+                      <input id="report-end-date" className={styles.input} type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-service">Service</label>
+                      <select id="report-service" className={styles.input} value={reportServiceId} onChange={e => setReportServiceId(e.target.value)}>
+                        <option value="">All services</option>
+                        {reportServiceOptions.map(service => (
+                          <option key={service.serviceId} value={service.serviceId}>{service.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-office">Office</label>
+                      <select id="report-office" className={styles.input} value={reportOfficeId} onChange={e => setReportOfficeId(e.target.value)}>
+                        <option value="">All offices</option>
+                        {reportOfficeOptions.map(office => (
+                          <option key={office.officeId} value={office.officeId}>{office.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button type="button" className={styles.createBtn} onClick={loadQueuePerformanceReportInline} disabled={queueReportLoading}>
+                    {queueReportLoading ? 'Generating...' : 'Generate Queue Performance Report'}
                   </button>
-                  <button
-                    type="button"
-                    className={`${styles.tabBtn} ${reportsTab === 'daily' ? styles.tabBtnActive : ''}`}
-                    onClick={() => setReportsTab('daily')}
-                  >
-                    Daily Summary
-                  </button>
+
+                  {queueReportError && <div className={styles.errorBanner} role="alert">{queueReportError}</div>}
+
+                  {queueReport && (
+                    <div className={styles.reportMetrics}>
+                      <article className={styles.summaryCard}>
+                        <span className={styles.summaryLabel}>Total Served</span>
+                        <strong className={styles.summaryValue}>{queueReport.totalServed}</strong>
+                      </article>
+                      <article className={styles.summaryCard}>
+                        <span className={styles.summaryLabel}>Average Wait</span>
+                        <strong className={styles.summaryValue}>{queueReport.averageWaitMinutes.toFixed(2)} min</strong>
+                      </article>
+                      <article className={styles.summaryCard}>
+                        <span className={styles.summaryLabel}>Peak Hours</span>
+                        <strong className={styles.summaryValue}>{queueReport.peakHours.length}</strong>
+                      </article>
+                    </div>
+                  )}
                 </div>
 
-                {reportsTab === 'performance' && (
-                  <div className={styles.reportCard}>
-                    <h3 className={styles.sectionSubTitle}>Queue Performance Report</h3>
-                    <p className={styles.sectionHint}>Analyze served volumes, average wait times, and peak hours.</p>
-                    <button type="button" className={styles.createBtn} onClick={() => tenantId && navigate(`/admin/${tenantId}/reports`)}>
-                      Open Queue Performance
-                    </button>
-                  </div>
-                )}
+                <div className={styles.reportCard}>
+                  <h3 className={styles.sectionSubTitle}>Daily Summary Report</h3>
+                  <p className={styles.sectionHint}>Track served, skipped, and no-show counts with trend context.</p>
 
-                {reportsTab === 'daily' && (
-                  <div className={styles.reportCard}>
-                    <h3 className={styles.sectionSubTitle}>Daily Summary Report</h3>
-                    <p className={styles.sectionHint}>Review served, skipped, and no-show trends per office/service.</p>
-                    <button type="button" className={styles.createBtn} onClick={() => tenantId && navigate(`/admin/${tenantId}/reports/daily-summary`)}>
-                      Open Daily Summary
-                    </button>
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="daily-report-date">Summary date</label>
+                      <input id="daily-report-date" className={styles.input} type="date" value={dailyReportDate} onChange={e => setDailyReportDate(e.target.value)} />
+                    </div>
                   </div>
-                )}
+
+                  <button type="button" className={styles.createBtn} onClick={loadDailySummaryInline} disabled={dailyReportLoading}>
+                    {dailyReportLoading ? 'Generating...' : 'Generate Daily Summary'}
+                  </button>
+
+                  {dailyReportError && <div className={styles.errorBanner} role="alert">{dailyReportError}</div>}
+
+                  {dailyReport && (
+                    <>
+                      <div className={styles.reportMetrics}>
+                        <article className={styles.summaryCard}>
+                          <span className={styles.summaryLabel}>Served</span>
+                          <strong className={styles.summaryValue}>{dailyReport.totalServed}</strong>
+                          <span className={styles.sectionHint}>{renderTrend(dailyReport.totalServedTrend)}</span>
+                        </article>
+                        <article className={styles.summaryCard}>
+                          <span className={styles.summaryLabel}>Skipped</span>
+                          <strong className={styles.summaryValue}>{dailyReport.totalSkipped}</strong>
+                          <span className={styles.sectionHint}>{renderTrend(dailyReport.totalSkippedTrend)}</span>
+                        </article>
+                        <article className={styles.summaryCard}>
+                          <span className={styles.summaryLabel}>No-shows</span>
+                          <strong className={styles.summaryValue}>{dailyReport.totalNoShows}</strong>
+                          <span className={styles.sectionHint}>{renderTrend(dailyReport.totalNoShowsTrend)}</span>
+                        </article>
+                      </div>
+
+                      {dailyReport.rows.length > 0 && (
+                        <div className={styles.reportTableWrap}>
+                          <table className={styles.reportTable}>
+                            <thead>
+                              <tr>
+                                <th>Office</th>
+                                <th>Service</th>
+                                <th>Served</th>
+                                <th>Skipped</th>
+                                <th>No-shows</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dailyReport.rows.map(row => (
+                                <tr key={`${row.officeId}:${row.serviceId}`}>
+                                  <td>{row.officeName}</td>
+                                  <td>{row.serviceName}</td>
+                                  <td>
+                                    {row.served}
+                                    <span className={styles.rowTrend}> {renderTrend(row.servedTrend)}</span>
+                                  </td>
+                                  <td>
+                                    {row.skipped}
+                                    <span className={styles.rowTrend}> {renderTrend(row.skippedTrend)}</span>
+                                  </td>
+                                  <td>
+                                    {row.noShows}
+                                    <span className={styles.rowTrend}> {renderTrend(row.noShowsTrend)}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               </section>
             )}
 
@@ -1689,4 +1904,24 @@ export function AdminDashboardPage() {
       </main>
     </div>
   )
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+
+  const tag = target.tagName.toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+
+  return target.isContentEditable
+}
+
+function keyToAdminTab(key: string): AdminTab | null {
+  if (key === '1' || key === 'h') return 'home'
+  if (key === '2' || key === 'q') return 'queues'
+  if (key === '3' || key === 'a') return 'appointments'
+  if (key === '4' || key === 's') return 'services'
+  if (key === '5' || key === 'o') return 'offices'
+  if (key === '6' || key === 't') return 'staff'
+  if (key === '7' || key === 'r') return 'reports'
+  return null
 }
