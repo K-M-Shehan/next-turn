@@ -146,6 +146,7 @@ describe('AdminDashboardPage — onboarding', () => {
     renderPage()
 
     await user.click(await screen.findByRole('button', { name: /skip tour/i }))
+    await user.click(screen.getByRole('button', { name: /settings/i }))
     await user.click(screen.getByRole('button', { name: /restart onboarding tour/i }))
 
     expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()

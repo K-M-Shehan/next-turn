@@ -22,7 +22,7 @@ import { useOnboardingTour } from '../../onboarding/useOnboardingTour'
 import logoImg from '../../assets/nextTurn-logo.png'
 import styles from './DashboardPage.module.css'
 
-type DashboardTab = 'home' | 'queues' | 'appointments' | 'notifications'
+type DashboardTab = 'home' | 'queues' | 'appointments' | 'notifications' | 'profile' | 'settings'
 
 function roleBadgeLabel(role: string): { label: string; className: string } {
   switch (role) {
@@ -400,9 +400,28 @@ export function DashboardPage() {
                 <span>Notifications</span>
                 <span className={styles.navCount}>{unreadNotificationsCount}</span>
               </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'profile' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('profile')}
+                aria-keyshortcuts="5 p"
+              >
+                <UserIcon />
+                <span>Profile</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'settings' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('settings')}
+                aria-keyshortcuts="6 s"
+                data-onboarding="citizen-settings-tab"
+              >
+                <CogIcon />
+                <span>Settings</span>
+              </button>
             </nav>
 
-            <p className={styles.shortcutHint}>Shortcuts: 1/2/3/4 or H/Q/A/N</p>
+            <p className={styles.shortcutHint}>Shortcuts: 1/2/3/4/5/6 or H/Q/A/N/P/S</p>
           </aside>
 
           <div className={styles.contentInner}>
@@ -417,6 +436,8 @@ export function DashboardPage() {
                 {activeTab === 'queues' && 'Queues'}
                 {activeTab === 'appointments' && 'Appointments'}
                 {activeTab === 'notifications' && 'Notifications'}
+                {activeTab === 'profile' && 'Profile'}
+                {activeTab === 'settings' && 'Settings'}
               </div>
             </div>
 
@@ -748,6 +769,133 @@ export function DashboardPage() {
                   )}
                 </section>
 
+                </>
+              )}
+
+              {activeTab === 'profile' && (
+                <section className={styles.settingsSection} aria-label="User profile details">
+                  <div className={styles.sectionHeader}>
+                    <UserIcon />
+                    <h2 className={styles.sectionTitle}>Profile</h2>
+                  </div>
+                  <p className={styles.queueEmpty}>Name: <strong>{name}</strong></p>
+                  <p className={styles.queueEmpty}>Email: <strong>{email}</strong></p>
+                  <p className={styles.queueEmpty}>Role: <strong>{role}</strong></p>
+
+                  <div className={styles.authCard} role="note">
+                    <CheckCircleIcon />
+                    <div>
+                      <p className={styles.authCardTitle}>You're signed in securely</p>
+                      <p className={styles.authCardBody}>Use the left sidebar to switch between features.</p>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {activeTab === 'settings' && (
+                <>
+                <section className={styles.settingsSection} aria-label="Queue notification settings">
+                  <div className={styles.sectionHeader}>
+                    <BellIcon />
+                    <h2 className={styles.sectionTitle}>Queue Notification Settings</h2>
+                  </div>
+
+                  {notificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!notificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={queueNotificationsEnabled}
+                          onChange={e => {
+                            setQueueNotificationsEnabled(e.target.checked)
+                            setNotificationsMessage(null)
+                            setNotificationsError(null)
+                          }}
+                        />
+                        <span>Notify me by email when my queue turn is approaching.</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveNotificationPreference}
+                        disabled={notificationsSaving}
+                      >
+                        {notificationsSaving ? 'Saving...' : 'Save preference'}
+                      </button>
+
+                      {notificationsMessage && <p className={styles.queueSuccess}>{notificationsMessage}</p>}
+                      {notificationsError && <p className={styles.queueError}>{notificationsError}</p>}
+                    </>
+                  )}
+                </section>
+
+                <section className={styles.settingsSection} aria-label="Appointment notification settings">
+                  <div className={styles.sectionHeader}>
+                    <CalendarIcon />
+                    <h2 className={styles.sectionTitle}>Appointment Notification Settings</h2>
+                  </div>
+
+                  {appointmentNotificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!appointmentNotificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentBookedNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentBookedNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me booking confirmations.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentRescheduledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentRescheduledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are rescheduled.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentCancelledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentCancelledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are cancelled.</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveAppointmentNotificationPreferences}
+                        disabled={appointmentNotificationsSaving}
+                      >
+                        {appointmentNotificationsSaving ? 'Saving...' : 'Save preferences'}
+                      </button>
+
+                      {appointmentNotificationsMessage && <p className={styles.queueSuccess}>{appointmentNotificationsMessage}</p>}
+                      {appointmentNotificationsError && <p className={styles.queueError}>{appointmentNotificationsError}</p>}
+                    </>
+                  )}
+                </section>
+
                 <section className={styles.settingsSection} aria-label="Profile and onboarding settings" data-onboarding="citizen-settings">
                   <div className={styles.sectionHeader}>
                     <CheckCircleIcon />
@@ -766,17 +914,9 @@ export function DashboardPage() {
               )}
             </div>
 
-            <div className={styles.authCard} role="note">
-              <CheckCircleIcon />
-              <div>
-                <p className={styles.authCardTitle}>You're signed in securely</p>
-                <p className={styles.authCardBody}>Role: <strong>{role}</strong> - Use the left sidebar to switch between features.</p>
-              </div>
-            </div>
-
             {showShortcutToast && (
               <div className={styles.shortcutToast} role="status" aria-live="polite">
-                Tip: Use 1/2/3/4 or H/Q/A/N to switch tabs faster.
+                Tip: Use 1/2/3/4/5/6 or H/Q/A/N/P/S to switch tabs faster.
               </div>
             )}
 
@@ -811,6 +951,8 @@ function keyToDashboardTab(key: string): DashboardTab | null {
   if (key === '2' || key === 'q') return 'queues'
   if (key === '3' || key === 'a') return 'appointments'
   if (key === '4' || key === 'n') return 'notifications'
+  if (key === '5' || key === 'p') return 'profile'
+  if (key === '6' || key === 's') return 'settings'
   return null
 }
 
@@ -818,7 +960,9 @@ function tabToIndex(tab: DashboardTab): number {
   if (tab === 'home') return 0
   if (tab === 'queues') return 1
   if (tab === 'appointments') return 2
-  return 3
+  if (tab === 'notifications') return 3
+  if (tab === 'profile') return 4
+  return 5
 }
 
 function formatDashboardSlot(slotStart: string, slotEnd: string): string {
@@ -935,6 +1079,24 @@ function BellIcon() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
       <path d="M13.73 21a2 2 0 01-3.46 0" />
+    </svg>
+  )
+}
+
+function UserIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  )
+}
+
+function CogIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
 }

@@ -123,6 +123,8 @@ describe('DashboardPage — sidebar layout', () => {
     expect(screen.getByRole('button', { name: /queues/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /appointments/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /notifications/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /profile/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /join queue by link/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /open appointment by link/i })).toBeInTheDocument()
   })
@@ -155,7 +157,7 @@ describe('DashboardPage — sidebar layout', () => {
       renderPage()
 
       await user.click(await screen.findByRole('button', { name: /skip tour/i }))
-      fireEvent.keyDown(window, { key: 'n' })
+      fireEvent.keyDown(window, { key: 's' })
 
       await user.click(screen.getByRole('button', { name: /restart onboarding tour/i }))
       expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()

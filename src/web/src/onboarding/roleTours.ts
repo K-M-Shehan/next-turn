@@ -83,7 +83,7 @@ export const ROLE_TOUR_CONTENT: Record<OnboardingRole, OnboardingStep[]> = {
       description: 'Generate queue performance and daily summaries without leaving the dashboard.',
     },
     {
-      target: '[data-onboarding="admin-settings"]',
+      target: '[data-onboarding="admin-settings-tab"]',
       title: 'Profile and settings',
       description: 'Restart onboarding from settings whenever you need a walkthrough again.',
     },

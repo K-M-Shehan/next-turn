@@ -83,7 +83,7 @@ interface StaffProfileForm {
   officeId: string
 }
 
-type AdminTab = 'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports'
+type AdminTab = 'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports' | 'profile' | 'settings'
 
 const sidebarTabOrder: AdminTab[] = [
   'home',
@@ -93,6 +93,8 @@ const sidebarTabOrder: AdminTab[] = [
   'offices',
   'staff',
   'reports',
+  'profile',
+  'settings',
 ]
 
 const defaultForm: CreateForm = {
@@ -1001,8 +1003,25 @@ export function AdminDashboardPage() {
               >
                 Reports
               </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'profile' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('profile')}
+                title="View account details"
+              >
+                Profile
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'settings' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('settings')}
+                title="Open preferences and onboarding settings"
+                data-onboarding="admin-settings-tab"
+              >
+                Settings
+              </button>
             </nav>
-            <p className={styles.sidebarHint}>Shortcuts: 1-7 or H/Q/A/S/O/T/R</p>
+            <p className={styles.sidebarHint}>Shortcuts: 1-9 or H/Q/A/S/O/T/R/P/G</p>
           </aside>
 
           <div className={styles.contentArea}>
@@ -1043,8 +1062,38 @@ export function AdminDashboardPage() {
                   </article>
                 </div>
 
-                <article className={styles.reportCard} data-onboarding="admin-settings">
-                  <h3 className={styles.sectionSubTitle}>Profile and Settings</h3>
+              </section>
+            )}
+
+            {activeTab === 'profile' && (
+              <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>Profile</h2>
+                <p className={styles.sectionHint}>Your admin account details for this workspace.</p>
+
+                <div className={styles.homeSummaryGrid}>
+                  <article className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>Name</span>
+                    <strong className={styles.summaryValue}>{payload?.name ?? 'Unknown'}</strong>
+                  </article>
+                  <article className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>Email</span>
+                    <strong className={styles.summaryValue}>{payload?.email ?? 'Unknown'}</strong>
+                  </article>
+                  <article className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>Role</span>
+                    <strong className={styles.summaryValue}>{payload?.role ?? 'Unknown'}</strong>
+                  </article>
+                </div>
+              </section>
+            )}
+
+            {activeTab === 'settings' && (
+              <section className={styles.section} data-onboarding="admin-settings">
+                <h2 className={styles.sectionTitle}>Settings</h2>
+                <p className={styles.sectionHint}>Update workspace preferences and replay guided onboarding.</p>
+
+                <div className={styles.reportCard}>
+                  <h3 className={styles.sectionSubTitle}>Onboarding</h3>
                   <p className={styles.sectionHint}>Replay the onboarding walkthrough whenever your team needs a refresher.</p>
                   <button
                     type="button"
@@ -1053,7 +1102,7 @@ export function AdminDashboardPage() {
                   >
                     Restart onboarding tour
                   </button>
-                </article>
+                </div>
               </section>
             )}
 
@@ -1966,5 +2015,7 @@ function keyToAdminTab(key: string): AdminTab | null {
   if (key === '5' || key === 'o') return 'offices'
   if (key === '6' || key === 't') return 'staff'
   if (key === '7' || key === 'r') return 'reports'
+  if (key === '8' || key === 'p') return 'profile'
+  if (key === '9' || key === 'g') return 'settings'
   return null
 }
