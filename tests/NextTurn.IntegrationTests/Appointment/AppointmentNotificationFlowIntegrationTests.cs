@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using NextTurn.Domain.Appointment.Entities;
 using NextTurn.Domain.Auth;
+using NextTurn.Domain.Auth.Entities;
+using NextTurn.Domain.Auth.ValueObjects;
 using NextTurn.Infrastructure.Persistence;
 
 namespace NextTurn.IntegrationTests.Appointment;
@@ -47,7 +49,7 @@ public sealed class AppointmentNotificationFlowIntegrationTests
     [Fact]
     public async Task BookAppointment_WritesBookedNotificationAuditLog()
     {
-        var userId = Guid.NewGuid();
+        var userId = await CreateUserAsync("Appointment User 1");
         var client = AuthenticatedClient(UserRole.User, userId, _tenantId);
         var (slotStart, slotEnd) = SlotForTomorrow(9, 0);
 
@@ -80,7 +82,7 @@ public sealed class AppointmentNotificationFlowIntegrationTests
     [Fact]
     public async Task RescheduleAppointment_WritesRescheduledNotificationAuditLog()
     {
-        var userId = Guid.NewGuid();
+        var userId = await CreateUserAsync("Appointment User 2");
         var client = AuthenticatedClient(UserRole.User, userId, _tenantId);
 
         var (oldStart, oldEnd) = SlotForTomorrow(10, 0);
@@ -125,7 +127,7 @@ public sealed class AppointmentNotificationFlowIntegrationTests
     [Fact]
     public async Task CancelAppointment_WritesCancelledNotificationAuditLog()
     {
-        var userId = Guid.NewGuid();
+        var userId = await CreateUserAsync("Appointment User 3");
         var client = AuthenticatedClient(UserRole.User, userId, _tenantId);
         var (slotStart, slotEnd) = SlotForTomorrow(12, 0);
 
@@ -161,7 +163,7 @@ public sealed class AppointmentNotificationFlowIntegrationTests
     [Fact]
     public async Task BookAppointment_WhenBookedPreferenceDisabled_DoesNotWriteAuditLog()
     {
-        var userId = Guid.NewGuid();
+        var userId = await CreateUserAsync("Appointment User 4");
         var client = AuthenticatedClient(UserRole.User, userId, _tenantId);
 
         var preferencesUpdate = await client.PutAsJsonAsync("/api/auth/appointment-notification-preferences", new
@@ -207,6 +209,24 @@ public sealed class AppointmentNotificationFlowIntegrationTests
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
         return client;
+    }
+
+    private async Task<Guid> CreateUserAsync(string name)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        var user = User.Create(
+            tenantId: _tenantId,
+            name: name,
+            email: new EmailAddress($"appointment-{Guid.NewGuid():N}@nextturn.dev"),
+            phone: null,
+            passwordHash: "integration-password-hash",
+            role: UserRole.User);
+
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        return user.Id;
     }
 
     private static (DateTimeOffset SlotStart, DateTimeOffset SlotEnd) SlotForTomorrow(int hour, int minute)

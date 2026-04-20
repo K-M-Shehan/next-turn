@@ -36,9 +36,8 @@ public sealed class StaffQueueDashboardIntegrationTests
     private Guid _tenantId;
     private Guid _queueId;
     private Guid _staffUserId;
-
-    private static readonly Guid UserAId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
-    private static readonly Guid UserBId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
+    private Guid _userAId;
+    private Guid _userBId;
 
     public StaffQueueDashboardIntegrationTests(NextTurnWebApplicationFactory factory)
     {
@@ -64,6 +63,23 @@ public sealed class StaffQueueDashboardIntegrationTests
         staffUser.Activate();
 
         db.Users.Add(staffUser);
+        var userA = User.Create(
+            tenantId: _tenantId,
+            name: "Queue User A",
+            email: new EmailAddress("queue-user-a.integration@nextturn.dev"),
+            phone: null,
+            passwordHash: "integration-password-hash",
+            role: UserRole.User);
+
+        var userB = User.Create(
+            tenantId: _tenantId,
+            name: "Queue User B",
+            email: new EmailAddress("queue-user-b.integration@nextturn.dev"),
+            phone: null,
+            passwordHash: "integration-password-hash",
+            role: UserRole.User);
+
+        db.Users.AddRange(userA, userB);
         db.QueueStaffAssignments.Add(NextTurn.Domain.Queue.Entities.QueueStaffAssignment.Create(
             _tenantId,
             _queueId,
@@ -71,6 +87,8 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         await db.SaveChangesAsync();
         _staffUserId = staffUser.Id;
+        _userAId = userA.Id;
+        _userBId = userB.Id;
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -78,8 +96,8 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task GetDashboard_WithWaitingEntries_ReturnsCurrentAndWaitingData()
     {
-        await JoinQueueAsync(UserAId);
-        await JoinQueueAsync(UserBId);
+        await JoinQueueAsync(_userAId);
+        await JoinQueueAsync(_userBId);
 
         var response = await StaffClient().GetAsync($"/api/queues/{_queueId}/dashboard");
         var body = await ReadBodyAsync(response);
@@ -97,8 +115,8 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task CallNext_WithWaitingEntries_SetsFirstTicketAsServing()
     {
-        await JoinQueueAsync(UserAId);
-        await JoinQueueAsync(UserBId);
+        await JoinQueueAsync(_userAId);
+        await JoinQueueAsync(_userBId);
 
         var callResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/call-next", null);
         var callBody = await ReadBodyAsync(callResponse);
@@ -117,7 +135,7 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task MarkServed_WithServingEntry_ClearsCurrentServing()
     {
-        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(_userAId);
         await StaffClient().PostAsync($"/api/queues/{_queueId}/call-next", null);
 
         var servedResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/served", null);
@@ -137,7 +155,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         var servedEntry = await db.QueueEntries
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+            .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == _userAId);
 
         servedEntry.Should().NotBeNull();
         servedEntry!.Status.Should().Be(QueueEntryStatus.Served);
@@ -146,7 +164,7 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task CallNext_ThenMarkServed_PersistsServingToServedTransitionInDatabase()
     {
-        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(_userAId);
 
         var callResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/call-next", null);
         callResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -157,7 +175,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
             var servingEntry = await db.QueueEntries
                 .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+                .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == _userAId);
 
             servingEntry.Should().NotBeNull();
             servingEntry!.Status.Should().Be(QueueEntryStatus.Serving);
@@ -171,7 +189,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         var servedEntryAfterTransition = await servedDb.QueueEntries
             .IgnoreQueryFilters()
-            .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+            .FirstOrDefaultAsync(e => e.QueueId == _queueId && e.UserId == _userAId);
 
         servedEntryAfterTransition.Should().NotBeNull();
         servedEntryAfterTransition!.Status.Should().Be(QueueEntryStatus.Served);
@@ -180,7 +198,7 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task MarkNoShow_WithServingEntry_ClearsCurrentServing()
     {
-        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(_userAId);
         await StaffClient().PostAsync($"/api/queues/{_queueId}/call-next", null);
 
         var noShowResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/no-show", null);
@@ -199,9 +217,9 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task CallNext_WithUserRole_Returns403Forbidden()
     {
-        await JoinQueueAsync(UserAId);
+        await JoinQueueAsync(_userAId);
 
-        var response = await UserClient(UserBId).PostAsync($"/api/queues/{_queueId}/call-next", null);
+        var response = await UserClient(_userBId).PostAsync($"/api/queues/{_queueId}/call-next", null);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -209,8 +227,8 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task ServeNext_WithWaitingEntries_MarksQueueHeadServed_AndWritesAuditLog()
     {
-        await JoinQueueAsync(UserAId);
-        await JoinQueueAsync(UserBId);
+        await JoinQueueAsync(_userAId);
+        await JoinQueueAsync(_userBId);
 
         var serveResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/serve-next", null);
         var serveBody = await ReadBodyAsync(serveResponse);
@@ -232,7 +250,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         var servedEntry = await db.QueueEntries
             .IgnoreQueryFilters()
-            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == _userAId);
 
         servedEntry.Status.Should().Be(QueueEntryStatus.Served);
 
@@ -251,8 +269,8 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task Skip_WithReason_MarksQueueHeadNoShow_AndWritesAuditLog()
     {
-        await JoinQueueAsync(UserAId);
-        await JoinQueueAsync(UserBId);
+        await JoinQueueAsync(_userAId);
+        await JoinQueueAsync(_userBId);
 
         var content = new StringContent(
             JsonSerializer.Serialize(new { reason = "Citizen did not arrive" }),
@@ -275,7 +293,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         var skippedEntry = await db.QueueEntries
             .IgnoreQueryFilters()
-            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserAId);
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == _userAId);
 
         skippedEntry.Status.Should().Be(QueueEntryStatus.NoShow);
 
@@ -294,8 +312,8 @@ public sealed class StaffQueueDashboardIntegrationTests
     [Fact]
     public async Task ServeNext_WhenNextUserWithinThreshold_WritesNotificationAuditLog()
     {
-        await JoinQueueAsync(UserAId);
-        await JoinQueueAsync(UserBId);
+        await JoinQueueAsync(_userAId);
+        await JoinQueueAsync(_userBId);
 
         var serveResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/serve-next", null);
         serveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -305,14 +323,14 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         var waitingEntryForUserB = await db.QueueEntries
             .IgnoreQueryFilters()
-            .FirstAsync(e => e.QueueId == _queueId && e.UserId == UserBId);
+            .FirstAsync(e => e.QueueId == _queueId && e.UserId == _userBId);
 
         var notificationAudit = await db.QueueTurnNotificationAuditLogs
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(a =>
                 a.QueueId == _queueId &&
                 a.QueueEntryId == waitingEntryForUserB.Id &&
-                a.UserId == UserBId &&
+                a.UserId == _userBId &&
                 a.DeliveryStatus == "Sent");
 
         notificationAudit.Should().NotBeNull();
@@ -325,13 +343,13 @@ public sealed class StaffQueueDashboardIntegrationTests
         await using (var setupScope = _factory.Services.CreateAsyncScope())
         {
             var db = setupScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-            var userB = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Id == UserBId);
+            var userB = await db.Users.IgnoreQueryFilters().FirstAsync(u => u.Id == _userBId);
             userB.SetQueueTurnApproachingNotificationsEnabled(false);
             await db.SaveChangesAsync();
         }
 
-        await JoinQueueAsync(UserAId);
-        await JoinQueueAsync(UserBId);
+        await JoinQueueAsync(_userAId);
+        await JoinQueueAsync(_userBId);
 
         var serveResponse = await StaffClient().PostAsync($"/api/queues/{_queueId}/serve-next", null);
         serveResponse.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -341,7 +359,7 @@ public sealed class StaffQueueDashboardIntegrationTests
 
         var exists = await assertDb.QueueTurnNotificationAuditLogs
             .IgnoreQueryFilters()
-            .AnyAsync(a => a.QueueId == _queueId && a.UserId == UserBId);
+            .AnyAsync(a => a.QueueId == _queueId && a.UserId == _userBId);
 
         exists.Should().BeFalse();
     }
