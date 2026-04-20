@@ -13,9 +13,15 @@ export const defaults = {
   staffDuration: "5m",
   appointmentVus: "100",
   appointmentDuration: "5m",
+  stressStartVus: "150",
+  stressPeakVus: "320",
+  stressDuration: "8m",
   p95Ms: "2000",
+  stressP95Ms: "4000",
   errorRate: "0.01",
+  stressErrorRate: "0.03",
   minReqRatePerSec: "10",
+  stressMinReqRatePerSec: "20",
   skipReason: "Skipped due to no-show",
 };
 
@@ -40,9 +46,15 @@ export function env() {
     staffDuration: readEnv("NT_STAFF_DURATION", defaults.staffDuration),
     appointmentVus: Number(readEnv("NT_APPOINTMENT_VUS", defaults.appointmentVus)),
     appointmentDuration: readEnv("NT_APPOINTMENT_DURATION", defaults.appointmentDuration),
+    stressStartVus: Number(readEnv("NT_STRESS_START_VUS", defaults.stressStartVus)),
+    stressPeakVus: Number(readEnv("NT_STRESS_PEAK_VUS", defaults.stressPeakVus)),
+    stressDuration: readEnv("NT_STRESS_DURATION", defaults.stressDuration),
     p95Ms: Number(readEnv("NT_P95_MS", defaults.p95Ms)),
+    stressP95Ms: Number(readEnv("NT_STRESS_P95_MS", defaults.stressP95Ms)),
     errorRate: Number(readEnv("NT_MAX_ERROR_RATE", defaults.errorRate)),
+    stressErrorRate: Number(readEnv("NT_STRESS_MAX_ERROR_RATE", defaults.stressErrorRate)),
     minReqRatePerSec: Number(readEnv("NT_MIN_REQ_RATE", defaults.minReqRatePerSec)),
+    stressMinReqRatePerSec: Number(readEnv("NT_STRESS_MIN_REQ_RATE", defaults.stressMinReqRatePerSec)),
     skipReason: readEnv("NT_SKIP_REASON", defaults.skipReason),
   };
 }
