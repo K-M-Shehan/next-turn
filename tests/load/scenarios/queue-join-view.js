@@ -38,6 +38,7 @@ export default function (data) {
     {
       headers,
       tags: { endpoint: "queue_join" },
+      responseCallback: http.expectedStatuses(200, 409),
     },
   );
 
@@ -51,6 +52,7 @@ export default function (data) {
     {
       headers,
       tags: { endpoint: "queue_status" },
+      responseCallback: http.expectedStatuses(200),
     },
   );
 

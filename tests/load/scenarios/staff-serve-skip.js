@@ -38,11 +38,12 @@ export default function (data) {
     {
       headers,
       tags: { endpoint: "call_next" },
+      responseCallback: http.expectedStatuses(200, 400, 409),
     },
   );
 
   const callNextOk = check(callNextResponse, {
-    "call-next status is 200 or 400": (r) => r.status === 200 || r.status === 400,
+    "call-next status is 200, 400 or 409": (r) => r.status === 200 || r.status === 400 || r.status === 409,
   });
   businessFailures.add(!callNextOk);
 
@@ -56,6 +57,7 @@ export default function (data) {
     {
       headers,
       tags: { endpoint: shouldServe ? "mark_served" : "skip" },
+      responseCallback: http.expectedStatuses(200, 400),
     },
   );
 

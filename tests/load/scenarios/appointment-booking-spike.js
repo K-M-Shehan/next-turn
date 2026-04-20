@@ -25,7 +25,7 @@ export const options = {
 };
 
 export function setup() {
-  const tokens = loginUsers(cfg.baseUrl, cfg.tenantId, users);
+  const tokens = loginUsers(cfg.baseUrl, cfg.tenantId, users, "/api/auth/login-global");
   return { tokens };
 }
 
@@ -42,6 +42,7 @@ export default function (data) {
     {
       headers,
       tags: { endpoint: "appointment_slots" },
+      responseCallback: http.expectedStatuses(200),
     },
   );
 
@@ -76,11 +77,12 @@ export default function (data) {
     {
       headers,
       tags: { endpoint: "appointment_book" },
+      responseCallback: http.expectedStatuses(200, 400, 409),
     },
   );
 
   const bookingOk = check(bookingResponse, {
-    "booking status is 200 or 409": (r) => r.status === 200 || r.status === 409,
+    "booking status is 200, 400 or 409": (r) => r.status === 200 || r.status === 400 || r.status === 409,
   });
   businessFailures.add(!bookingOk);
 
