@@ -116,6 +116,10 @@ function renderPage() {
   )
 }
 
+async function openQueueManagementTab(user = userEvent.setup()) {
+  await user.click(screen.getByRole('button', { name: /queue management/i }))
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -125,9 +129,28 @@ beforeEach(() => {
   mockGetOrgQueues.mockReset()
   mockDeleteQueue.mockReset()
   mockListQueueStaffAssignments.mockReset()
+  window.localStorage.clear()
   // Default: empty queue list; most tests override as needed.
   mockGetOrgQueues.mockResolvedValue([])
   mockListQueueStaffAssignments.mockResolvedValue([])
+})
+
+describe('AdminDashboardPage — onboarding', () => {
+  it('shows onboarding tour on first load', async () => {
+    renderPage()
+    expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+  })
+
+  it('restarts onboarding from profile and settings card', async () => {
+    const user = userEvent.setup()
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: /skip tour/i }))
+    await user.click(screen.getByRole('button', { name: /settings/i }))
+    await user.click(screen.getByRole('button', { name: /restart onboarding tour/i }))
+
+    expect(await screen.findByTestId('onboarding-tour')).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -135,23 +158,27 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('AdminDashboardPage — form', () => {
-  it('renders the Queue Name field', () => {
+  it('renders the Queue Name field', async () => {
     renderPage()
+    await openQueueManagementTab()
     expect(screen.getByLabelText(/queue name/i)).toBeInTheDocument()
   })
 
-  it('renders the Max Capacity field', () => {
+  it('renders the Max Capacity field', async () => {
     renderPage()
+    await openQueueManagementTab()
     expect(screen.getByLabelText(/max capacity/i)).toBeInTheDocument()
   })
 
-  it('renders the Avg. Service Time field', () => {
+  it('renders the Avg. Service Time field', async () => {
     renderPage()
+    await openQueueManagementTab()
     expect(screen.getByLabelText(/avg\. service time/i)).toBeInTheDocument()
   })
 
-  it('renders the Create Queue submit button', () => {
+  it('renders the Create Queue submit button', async () => {
     renderPage()
+    await openQueueManagementTab()
     expect(screen.getByTestId('create-queue-btn')).toBeInTheDocument()
   })
 })
@@ -172,6 +199,7 @@ describe('AdminDashboardPage — loading queues on mount', () => {
     mockGetOrgQueues.mockResolvedValue([])
 
     renderPage()
+    await openQueueManagementTab()
 
     expect(
       await screen.findByText(/no queues yet/i)
@@ -182,6 +210,7 @@ describe('AdminDashboardPage — loading queues on mount', () => {
     mockGetOrgQueues.mockResolvedValue([SAMPLE_QUEUE])
 
     renderPage()
+    await openQueueManagementTab()
 
     expect(await screen.findByTestId('queue-list')).toBeInTheDocument()
     expect(screen.getByText('Main Counter')).toBeInTheDocument()
@@ -192,6 +221,7 @@ describe('AdminDashboardPage — loading queues on mount', () => {
     mockGetOrgQueues.mockResolvedValue([SAMPLE_QUEUE, second])
 
     renderPage()
+    await openQueueManagementTab()
 
     const cards = await screen.findAllByTestId('queue-card')
     expect(cards).toHaveLength(2)
@@ -201,6 +231,7 @@ describe('AdminDashboardPage — loading queues on mount', () => {
     mockGetOrgQueues.mockRejectedValue(new Error('network error'))
 
     renderPage()
+    await openQueueManagementTab()
 
     expect(
       await screen.findByText(/could not load queues/i)
@@ -216,6 +247,7 @@ describe('AdminDashboardPage — form validation', () => {
   it('shows a field error when name is empty on submit', async () => {
     const user = userEvent.setup()
     renderPage()
+    await openQueueManagementTab(user)
 
     // Clear the name field (it starts empty) and submit
     const nameInput = screen.getByLabelText(/queue name/i)
@@ -228,6 +260,7 @@ describe('AdminDashboardPage — form validation', () => {
   it('does not call createQueue when validation fails', async () => {
     const user = userEvent.setup()
     renderPage()
+    await openQueueManagementTab(user)
 
     await user.clear(screen.getByLabelText(/queue name/i))
     await user.click(screen.getByTestId('create-queue-btn'))
@@ -249,6 +282,7 @@ describe('AdminDashboardPage — successful queue creation', () => {
   it('shows the shareable link banner after successful creation', async () => {
     const user = userEvent.setup()
     renderPage()
+    await openQueueManagementTab(user)
 
     await user.type(screen.getByLabelText(/queue name/i), 'Main Counter')
     await user.click(screen.getByTestId('create-queue-btn'))
@@ -259,6 +293,7 @@ describe('AdminDashboardPage — successful queue creation', () => {
   it('displays the shareable link in the success banner', async () => {
     const user = userEvent.setup()
     renderPage()
+    await openQueueManagementTab(user)
 
     await user.type(screen.getByLabelText(/queue name/i), 'Main Counter')
     await user.click(screen.getByTestId('create-queue-btn'))
@@ -273,6 +308,7 @@ describe('AdminDashboardPage — successful queue creation', () => {
   it('adds the new queue to the queue list after creation', async () => {
     const user = userEvent.setup()
     renderPage()
+    await openQueueManagementTab(user)
 
     await user.type(screen.getByLabelText(/queue name/i), 'Main Counter')
     await user.click(screen.getByTestId('create-queue-btn'))
@@ -287,6 +323,7 @@ describe('AdminDashboardPage — successful queue creation', () => {
   it('resets the form name field after successful creation', async () => {
     const user = userEvent.setup()
     renderPage()
+    await openQueueManagementTab(user)
 
     const nameInput = screen.getByLabelText(/queue name/i) as HTMLInputElement
     await user.type(nameInput, 'Main Counter')
@@ -299,6 +336,7 @@ describe('AdminDashboardPage — successful queue creation', () => {
   it('calls createQueue with the correct tenant ID and body', async () => {
     const user = userEvent.setup()
     renderPage()
+    await openQueueManagementTab(user)
 
     // Clear capacity and set known values for precise assertion
     const capacityInput = screen.getByLabelText(/max capacity/i)
@@ -334,6 +372,7 @@ describe('AdminDashboardPage — create queue errors', () => {
     )
 
     renderPage()
+    await openQueueManagementTab(user)
 
     await user.type(screen.getByLabelText(/queue name/i), 'Counter')
     await user.click(screen.getByTestId('create-queue-btn'))
@@ -350,6 +389,7 @@ describe('AdminDashboardPage — create queue errors', () => {
     )
 
     renderPage()
+    await openQueueManagementTab(user)
 
     await user.type(screen.getByLabelText(/queue name/i), 'Counter')
     await user.click(screen.getByTestId('create-queue-btn'))
@@ -366,6 +406,7 @@ describe('AdminDashboardPage — delete queue', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
 
     renderPage()
+    await openQueueManagementTab(user)
 
     const deleteButton = await screen.findByTestId(`delete-btn-${QUEUE_ID}`)
     await user.click(deleteButton)
@@ -383,6 +424,7 @@ describe('AdminDashboardPage — delete queue', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     renderPage()
+    await openQueueManagementTab(user)
 
     const deleteButton = await screen.findByTestId(`delete-btn-${QUEUE_ID}`)
     await user.click(deleteButton)

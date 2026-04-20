@@ -50,4 +50,63 @@ public sealed class StubEmailService : IEmailService
 
         return Task.CompletedTask;
     }
+
+    public Task SendQueueTurnApproachingEmailAsync(
+        string toEmail,
+        string queueName,
+        int ticketNumber,
+        int positionInQueue,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[STUB] Queue approaching notification would be sent to {Email}. Queue: {QueueName}, Ticket: {TicketNumber}, Position: {PositionInQueue}",
+            toEmail,
+            queueName,
+            ticketNumber,
+            positionInQueue);
+
+        return Task.CompletedTask;
+    }
+
+    public Task SendQueueJoinedEmailAsync(
+        string toEmail,
+        string queueName,
+        int ticketNumber,
+        int positionInQueue,
+        int estimatedWaitSeconds,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[STUB] Queue joined notification would be sent to {Email}. Queue: {QueueName}, Ticket: {TicketNumber}, Position: {PositionInQueue}, ETA: {EstimatedWaitSeconds}s",
+            toEmail,
+            queueName,
+            ticketNumber,
+            positionInQueue,
+            estimatedWaitSeconds);
+
+        return Task.CompletedTask;
+    }
+
+    public Task SendAppointmentStatusEmailAsync(
+        string toEmail,
+        string userName,
+        string notificationType,
+        DateTimeOffset slotStart,
+        DateTimeOffset slotEnd,
+        string officeName,
+        string serviceName,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation(
+            "[STUB] Appointment {NotificationType} email would be sent to {Email} ({UserName}). Slot: {SlotStart}->{SlotEnd}, Office: {OfficeName}, Service: {ServiceName}",
+            notificationType,
+            toEmail,
+            userName,
+            slotStart,
+            slotEnd,
+            officeName,
+            serviceName);
+
+        return Task.CompletedTask;
+    }
 }

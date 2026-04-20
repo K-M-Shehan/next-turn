@@ -16,6 +16,23 @@ import type { AxiosError } from 'axios'
 import type { ApiError, ProblemDetails } from '../types/api'
 import { clearToken, getTokenPayload } from '../utils/authToken'
 
+const GLOBAL_TENANT_ID = '00000000-0000-0000-0000-000000000000'
+
+function requestHasAuthorizationHeader(error: AxiosError): boolean {
+  const headers = error.config?.headers
+  if (!headers) return false
+
+  if (typeof headers.get === 'function') {
+    const auth = headers.get('Authorization') ?? headers.get('authorization')
+    return Boolean(auth)
+  }
+
+  const auth = (headers as Record<string, unknown>).Authorization
+    ?? (headers as Record<string, unknown>).authorization
+
+  return typeof auth === 'string' ? auth.trim().length > 0 : Boolean(auth)
+}
+
 // In production (Vercel), VITE_API_URL is set to the full Azure API base URL
 // e.g. https://nextturn.azurewebsites.net/api
 // In development, it is undefined and falls back to '/api' which the Vite
@@ -37,6 +54,13 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
+      // Ignore 401s for unauthenticated requests (e.g. login form submits).
+      // Session-expired redirect should only happen when an authenticated
+      // request fails with an expired/invalid token.
+      if (!requestHasAuthorizationHeader(error)) {
+        return Promise.reject(error)
+      }
+
       // Try to get the tenant from the (now-invalid) token so we redirect to
       // the right organisation's login page. Fall back to '/' if not available.
       const payload = getTokenPayload()
@@ -44,9 +68,9 @@ apiClient.interceptors.response.use(
 
       clearToken()
 
-      const loginPath = tid
+      const loginPath = tid && tid !== GLOBAL_TENANT_ID
         ? `/login/${tid}?reason=session_expired`
-        : `/?reason=session_expired`
+        : `/login?reason=session_expired`
 
       // Hard navigation — clears React state, ensures a clean login mount.
       window.location.replace(loginPath)

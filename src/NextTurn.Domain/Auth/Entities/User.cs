@@ -32,6 +32,10 @@ public class User {
   /// Stored on the entity now so the column exists in the DB schema before we need it.
   /// </summary>
   public bool MfaEnabled { get; private set; }
+  public bool QueueTurnApproachingNotificationsEnabled { get; private set; }
+  public bool AppointmentBookedNotificationsEnabled { get; private set; }
+  public bool AppointmentRescheduledNotificationsEnabled { get; private set; }
+  public bool AppointmentCancelledNotificationsEnabled { get; private set; }
 
   // ── Staff invite onboarding ──────────────────────────────────────────────
   public string? StaffInviteTokenHash { get; private set; }
@@ -63,6 +67,10 @@ public class User {
     FailedLoginAttempts = 0;
     LockoutUntil = null;
     MfaEnabled = false;
+    QueueTurnApproachingNotificationsEnabled = true;
+    AppointmentBookedNotificationsEnabled = true;
+    AppointmentRescheduledNotificationsEnabled = true;
+    AppointmentCancelledNotificationsEnabled = true;
   }
 
   public static User Create(Guid tenantId, string name, EmailAddress email, string? phone, string passwordHash, UserRole role = UserRole.User)
@@ -213,6 +221,21 @@ public class User {
     return StaffInviteTokenHash == tokenHash
       && StaffInviteExpiresAt.HasValue
       && StaffInviteExpiresAt.Value > DateTimeOffset.UtcNow;
+  }
+
+  public void SetQueueTurnApproachingNotificationsEnabled(bool enabled)
+  {
+    QueueTurnApproachingNotificationsEnabled = enabled;
+  }
+
+  public void SetAppointmentNotificationPreferences(
+    bool bookedEnabled,
+    bool rescheduledEnabled,
+    bool cancelledEnabled)
+  {
+    AppointmentBookedNotificationsEnabled = bookedEnabled;
+    AppointmentRescheduledNotificationsEnabled = rescheduledEnabled;
+    AppointmentCancelledNotificationsEnabled = cancelledEnabled;
   }
   
 }

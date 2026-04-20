@@ -21,7 +21,7 @@ on:
       frontend_artifact_name:
         description: "Frontend artifact name"
         required: false
-        default: "frontend-dist"
+        default: "frontend-prebuilt"
         type: string
 
 permissions:
@@ -71,7 +71,7 @@ jobs:
           path: publish.zip
 
   build-frontend-artifact:
-    name: Build Frontend Artifact
+    name: Build Frontend Prebuilt Artifact
     if: github.event_name == 'push'
     needs: regression-gate
     runs-on: ubuntu-latest
@@ -95,11 +95,25 @@ jobs:
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
+      - name: Build Vercel prebuilt output
+        working-directory: src/web
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+        run: |
+          npx --yes vercel@latest pull --yes --environment=production --token "$VERCEL_TOKEN"
+          npx --yes vercel@latest build --prod --token "$VERCEL_TOKEN"
+
+      - name: Archive Vercel prebuilt output
+        run: tar -czf frontend-prebuilt.tgz -C src/web .vercel/output
+
       - name: Upload frontend artifact
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-dist
-          path: src/web/dist
+          name: frontend-prebuilt
+          path: frontend-prebuilt.tgz
 
   deploy-backend:
     name: Backend → Azure App Service
@@ -123,6 +137,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+
+      - name: Restore projects for EF metadata
+        run: |
+          dotnet restore src/NextTurn.Infrastructure/NextTurn.Infrastructure.csproj
+          dotnet restore src/NextTurn.API/NextTurn.API.csproj
 
       - name: Install EF Tools
         run: dotnet tool install --global dotnet-ef
@@ -163,17 +182,21 @@ jobs:
       - name: Download frontend artifact
         uses: actions/download-artifact@v4
         with:
-          name: frontend-dist
-          path: frontend-dist
+          name: frontend-prebuilt
+          path: .
+
+      - name: Extract frontend prebuilt artifact
+        run: |
+          mkdir -p frontend-prebuilt
+          tar -xzf frontend-prebuilt.tgz -C frontend-prebuilt
 
       - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: frontend-dist
-          vercel-args: "--prod"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel@latest deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN" frontend-prebuilt
 
   rollback-backend:
     name: Rollback Backend (Artifact Redeploy)
@@ -210,13 +233,17 @@ jobs:
         with:
           run_id: ${{ inputs.frontend_artifact_run_id }}
           name: ${{ inputs.frontend_artifact_name }}
-          path: frontend-dist
+          path: .
+
+      - name: Extract frontend prebuilt artifact
+        run: |
+          mkdir -p frontend-prebuilt
+          tar -xzf frontend-prebuilt.tgz -C frontend-prebuilt
 
       - name: Deploy frontend artifact to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          working-directory: frontend-dist
-          vercel-args: "--prod"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          npx --yes vercel@latest deploy --prebuilt --prod --yes --token "$VERCEL_TOKEN" frontend-prebuilt

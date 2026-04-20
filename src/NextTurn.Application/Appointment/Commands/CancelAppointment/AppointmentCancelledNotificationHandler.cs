@@ -1,5 +1,5 @@
 using MediatR;
-using Microsoft.Extensions.Logging;
+using NextTurn.Application.Appointment.Notifications;
 
 namespace NextTurn.Application.Appointment.Commands.CancelAppointment;
 
@@ -9,27 +9,20 @@ namespace NextTurn.Application.Appointment.Commands.CancelAppointment;
 public sealed class AppointmentCancelledNotificationHandler
     : INotificationHandler<AppointmentCancelledNotification>
 {
-    private readonly ILogger<AppointmentCancelledNotificationHandler> _logger;
+    private readonly IAppointmentNotificationService _appointmentNotificationService;
 
     public AppointmentCancelledNotificationHandler(
-        ILogger<AppointmentCancelledNotificationHandler> logger)
+        IAppointmentNotificationService appointmentNotificationService)
     {
-        _logger = logger;
+        _appointmentNotificationService = appointmentNotificationService;
     }
 
     public Task Handle(
         AppointmentCancelledNotification notification,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation(
-            "Appointment cancelled. AppointmentId: {AppointmentId}, UserId: {UserId}, OrgId: {OrgId}, Slot: {SlotStart}->{SlotEnd}, LateCancellation: {LateCancellation}.",
+        return _appointmentNotificationService.SendCancellationUpdateAsync(
             notification.AppointmentId,
-            notification.UserId,
-            notification.OrganisationId,
-            notification.SlotStart,
-            notification.SlotEnd,
-            notification.LateCancellation);
-
-        return Task.CompletedTask;
+            cancellationToken);
     }
 }

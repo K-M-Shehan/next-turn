@@ -148,6 +148,49 @@ public sealed class OrganisationTests
         org.Slug.Length.Should().BeGreaterThanOrEqualTo(3);
     }
 
+    [Fact]
+    public void Create_SetsDefaultQueueNotificationThresholdToThree()
+    {
+        var org = OrganisationEntity.Create(
+            ValidName,
+            ValidAddress,
+            OrganisationType.Healthcare,
+            ValidAdminEmail);
+
+        org.QueueNotificationThreshold.Should().Be(3);
+    }
+
+    [Fact]
+    public void SetQueueNotificationThreshold_WithValidValue_UpdatesThreshold()
+    {
+        var org = OrganisationEntity.Create(
+            ValidName,
+            ValidAddress,
+            OrganisationType.Healthcare,
+            ValidAdminEmail);
+
+        org.SetQueueNotificationThreshold(5);
+
+        org.QueueNotificationThreshold.Should().Be(5);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(51)]
+    public void SetQueueNotificationThreshold_OutOfRange_ThrowsDomainException(int threshold)
+    {
+        var org = OrganisationEntity.Create(
+            ValidName,
+            ValidAddress,
+            OrganisationType.Healthcare,
+            ValidAdminEmail);
+
+        var act = () => org.SetQueueNotificationThreshold(threshold);
+
+        act.Should().Throw<DomainException>()
+            .WithMessage("Queue notification threshold must be between 1 and 50.");
+    }
+
     // ── Organisation.Create — validation failures ─────────────────────────────
 
     [Theory]

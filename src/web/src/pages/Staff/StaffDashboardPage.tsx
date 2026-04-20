@@ -9,6 +9,9 @@ import {
   type QueueDashboardResult,
 } from '../../api/queues'
 import type { ApiError } from '../../types/api'
+import { OnboardingTour } from '../../components/OnboardingTour'
+import { ROLE_TOUR_CONTENT } from '../../onboarding/roleTours'
+import { useOnboardingTour } from '../../onboarding/useOnboardingTour'
 import { clearToken, getTokenPayload } from '../../utils/authToken'
 import logoImg from '../../assets/nextTurn-logo.png'
 import styles from './StaffDashboardPage.module.css'
@@ -27,6 +30,7 @@ export function StaffDashboardPage() {
   const [actionBusy, setActionBusy] = useState<'serve-next' | 'skip' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const onboarding = useOnboardingTour(`staff:${payload.sub}:${tenantId ?? 'global'}`)
 
   if (!payload) {
     clearToken()
@@ -183,6 +187,7 @@ export function StaffDashboardPage() {
             <select
               id="queue-selector"
               data-testid="queue-selector"
+              data-onboarding="staff-queue-selector"
               className={styles.selector}
               value={selectedQueueId ?? ''}
               onChange={(e) => setSelectedQueueId(e.target.value || null)}
@@ -200,6 +205,18 @@ export function StaffDashboardPage() {
                 Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · refreshes every 30s
               </p>
             )}
+          </section>
+
+          <section className={styles.settingsCard} data-onboarding="staff-settings">
+            <h2 className={styles.panelTitle}>Profile and Settings</h2>
+            <p className={styles.muted}>Replay onboarding whenever you want a quick refresher.</p>
+            <button
+              type="button"
+              className={styles.ghostBtn}
+              onClick={onboarding.restartTour}
+            >
+              Restart onboarding tour
+            </button>
           </section>
 
           {!loadingQueues && queues.length === 0 && (
@@ -225,7 +242,7 @@ export function StaffDashboardPage() {
                   <p className={styles.heroMeta}>Status: {dashboard.queueStatus} · Waiting: {dashboard.waitingCount}</p>
                 </div>
 
-                <div className={styles.controls}>
+                <div className={styles.controls} data-onboarding="staff-actions">
                   <button
                     type="button"
                     className={styles.primaryBtn}
@@ -265,7 +282,7 @@ export function StaffDashboardPage() {
                   {dashboard.waitingEntries.length === 0 ? (
                     <p className={styles.muted}>Nobody is waiting.</p>
                   ) : (
-                    <ol className={styles.waitingList} data-testid="waiting-list">
+                    <ol className={styles.waitingList} data-testid="waiting-list" data-onboarding="staff-waiting-list">
                       {dashboard.waitingEntries.map(entry => (
                         <li key={entry.entryId} className={styles.waitingItem}>
                           <span className={styles.waitingTicket}>#{String(entry.ticketNumber).padStart(3, '0')}</span>
@@ -281,6 +298,13 @@ export function StaffDashboardPage() {
             </>
           )}
         </div>
+
+        <OnboardingTour
+          isOpen={onboarding.isOpen}
+          title="Quick tour: staff dashboard"
+          steps={ROLE_TOUR_CONTENT.staff}
+          onClose={onboarding.completeTour}
+        />
       </main>
     </div>
   )

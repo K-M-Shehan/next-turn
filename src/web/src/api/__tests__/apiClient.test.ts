@@ -10,7 +10,7 @@
  * Coverage:
  *  1. 401 response → clearToken() is called
  *  2. 401 with tid in token → redirects to /login/:tid?reason=session_expired
- *  3. 401 with no token payload → redirects to /?reason=session_expired
+ *  3. 401 with no token payload → redirects to /login?reason=session_expired
  *  4. 403 response → NOT redirected, error propagates
  *  5. 200 response → passes through, no redirect
  */
@@ -38,6 +38,8 @@ const BASE_PAYLOAD: TokenPayload = {
   sub: 'user-1', email: 'alice@example.com', name: 'Alice Smith',
   role: 'User', tid: TENANT, exp: 9999999999, iat: 0,
 }
+
+const AUTH_HEADERS = { Authorization: 'Bearer token' }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,26 +102,43 @@ afterEach(() => {
 describe('apiClient — 401 interceptor', () => {
   it('calls clearToken when a 401 response is received', async () => {
     fakeAdapter(401)
-    await apiClient.get('/test').catch(() => {})
+    await apiClient.get('/test', { headers: AUTH_HEADERS }).catch(() => {})
     expect(mockClearToken).toHaveBeenCalledOnce()
   })
 
   it('redirects to /login/:tid?reason=session_expired when tid is in the token', async () => {
     fakeAdapter(401)
-    await apiClient.get('/test').catch(() => {})
+    await apiClient.get('/test', { headers: AUTH_HEADERS }).catch(() => {})
     expect(replaceSpy).toHaveBeenCalledWith(`/login/${TENANT}?reason=session_expired`)
   })
 
-  it('redirects to /?reason=session_expired when token payload is null', async () => {
+  it('redirects to /login?reason=session_expired when token payload is null', async () => {
     mockGetTokenPayload.mockReturnValue(null)
     fakeAdapter(401)
+    await apiClient.get('/test', { headers: AUTH_HEADERS }).catch(() => {})
+    expect(replaceSpy).toHaveBeenCalledWith('/login?reason=session_expired')
+  })
+
+  it('redirects to /login?reason=session_expired for global consumer token tid', async () => {
+    mockGetTokenPayload.mockReturnValue({
+      ...BASE_PAYLOAD,
+      tid: '00000000-0000-0000-0000-000000000000',
+    })
+    fakeAdapter(401)
+    await apiClient.get('/test', { headers: AUTH_HEADERS }).catch(() => {})
+    expect(replaceSpy).toHaveBeenCalledWith('/login?reason=session_expired')
+  })
+
+  it('does NOT redirect for unauthenticated 401 responses (e.g. login failures)', async () => {
+    fakeAdapter(401)
     await apiClient.get('/test').catch(() => {})
-    expect(replaceSpy).toHaveBeenCalledWith('/?reason=session_expired')
+    expect(mockClearToken).not.toHaveBeenCalled()
+    expect(replaceSpy).not.toHaveBeenCalled()
   })
 
   it('still rejects the promise after redirecting', async () => {
     fakeAdapter(401)
-    await expect(apiClient.get('/test')).rejects.toThrow()
+    await expect(apiClient.get('/test', { headers: AUTH_HEADERS })).rejects.toThrow()
   })
 })
 

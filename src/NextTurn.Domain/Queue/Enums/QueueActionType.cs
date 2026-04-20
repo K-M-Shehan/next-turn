@@ -7,4 +7,5 @@ public enum QueueActionType
 {
     Serve,
     Skip,
+    NoShow,
 }

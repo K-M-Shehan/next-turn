@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using NextTurn.Application.Common.Interfaces;
 using AppointmentEntity  = NextTurn.Domain.Appointment.Entities.Appointment;
+using AppointmentNotificationAuditLog = NextTurn.Domain.Appointment.Entities.AppointmentNotificationAuditLog;
 using AppointmentProfile = NextTurn.Domain.Appointment.Entities.AppointmentProfile;
 using AppointmentProfileStaffAssignment = NextTurn.Domain.Appointment.Entities.AppointmentProfileStaffAssignment;
 using AppointmentScheduleRule = NextTurn.Domain.Appointment.Entities.AppointmentScheduleRule;
 using NextTurn.Domain.Auth.Entities;
+using UserInAppNotification = NextTurn.Domain.Auth.Entities.UserInAppNotification;
 using StaffOfficeAssignment = NextTurn.Domain.Auth.Entities.StaffOfficeAssignment;
 using NextTurn.Infrastructure.Persistence.Configurations.Auth;
 using OrganisationEntity = NextTurn.Domain.Organisation.Entities.Organisation;
@@ -12,6 +14,7 @@ using QueueEntity        = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry         = NextTurn.Domain.Queue.Entities.QueueEntry;
 using QueueStaffAssignment = NextTurn.Domain.Queue.Entities.QueueStaffAssignment;
 using QueueActionAuditLog = NextTurn.Domain.Queue.Entities.QueueActionAuditLog;
+using QueueTurnNotificationAuditLog = NextTurn.Domain.Queue.Entities.QueueTurnNotificationAuditLog;
 using OfficeEntity = NextTurn.Domain.Office.Entities.Office;
 using ServiceEntity = NextTurn.Domain.Service.Entities.Service;
 using ServiceOfficeAssignment = NextTurn.Domain.Service.Entities.ServiceOfficeAssignment;
@@ -42,6 +45,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     // ── DbSets (one per aggregate root) ──────────────────────────────────────
 
     public DbSet<User>             Users        => Set<User>();
+    public DbSet<UserInAppNotification> UserInAppNotifications => Set<UserInAppNotification>();
     public DbSet<OrganisationEntity> Organisations => Set<OrganisationEntity>();
     public DbSet<OfficeEntity> Offices => Set<OfficeEntity>();
 
@@ -50,9 +54,11 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<QueueEntry>  QueueEntries => Set<QueueEntry>();
     public DbSet<QueueStaffAssignment> QueueStaffAssignments => Set<QueueStaffAssignment>();
     public DbSet<QueueActionAuditLog> QueueActionAuditLogs => Set<QueueActionAuditLog>();
+    public DbSet<QueueTurnNotificationAuditLog> QueueTurnNotificationAuditLogs => Set<QueueTurnNotificationAuditLog>();
 
     // Appointment module (NT-19).
     public DbSet<AppointmentEntity> Appointments => Set<AppointmentEntity>();
+    public DbSet<AppointmentNotificationAuditLog> AppointmentNotificationAuditLogs => Set<AppointmentNotificationAuditLog>();
     public DbSet<AppointmentProfile> AppointmentProfiles => Set<AppointmentProfile>();
     public DbSet<AppointmentProfileStaffAssignment> AppointmentProfileStaffAssignments => Set<AppointmentProfileStaffAssignment>();
     public DbSet<AppointmentScheduleRule> AppointmentScheduleRules => Set<AppointmentScheduleRule>();
@@ -79,6 +85,9 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<User>()
             .HasQueryFilter(u => u.TenantId == _tenantContext.TenantId);
 
+        modelBuilder.Entity<UserInAppNotification>()
+            .HasQueryFilter(n => n.OrganisationId == _tenantContext.TenantId);
+
         // Queues: OrganisationId IS the tenant identifier for this module.
         // Every queue belongs to exactly one organisation (= one tenant).
         modelBuilder.Entity<QueueEntity>()
@@ -102,11 +111,17 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<QueueActionAuditLog>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
+        modelBuilder.Entity<QueueTurnNotificationAuditLog>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
         modelBuilder.Entity<OfficeEntity>()
             .HasQueryFilter(o => o.OrganisationId == _tenantContext.TenantId);
 
         // Appointments: scoped by organisation (tenant).
         modelBuilder.Entity<AppointmentEntity>()
+            .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
+
+        modelBuilder.Entity<AppointmentNotificationAuditLog>()
             .HasQueryFilter(a => a.OrganisationId == _tenantContext.TenantId);
 
         modelBuilder.Entity<AppointmentProfile>()

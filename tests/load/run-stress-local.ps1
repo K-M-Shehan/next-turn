@@ -1,0 +1,14 @@
+$ErrorActionPreference = 'Stop'
+$b = Get-Content 'D:\CSP Project\next-turn\tests\load\results\local-bootstrap-values.json' -Raw | ConvertFrom-Json
+$firstQueueUser = @($b.queueUsers)[0]
+$env:NT_BASE_URL = $b.baseUrl
+$env:NT_TENANT_ID = $b.tenantId
+$env:NT_QUEUE_ID = $b.queueId
+$env:NT_QUEUE_USERS_JSON = '[{"email":"' + $firstQueueUser.email + '","password":"' + $firstQueueUser.password + '"}]'
+$env:NT_STRESS_START_VUS = '120'
+$env:NT_STRESS_PEAK_VUS = '260'
+$env:NT_STRESS_DURATION = '4m'
+$env:NT_STRESS_P95_MS = '4000'
+$env:NT_STRESS_MAX_ERROR_RATE = '0.05'
+$env:NT_STRESS_MIN_REQ_RATE = '20'
+& 'C:\Program Files\k6\k6.exe' run 'D:\CSP Project\next-turn\tests\load\scenarios\queue-graceful-degradation.js' --summary-export='D:\CSP Project\next-turn\tests\load\results\stress-summary.json'
