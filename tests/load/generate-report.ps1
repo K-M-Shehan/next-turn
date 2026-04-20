@@ -20,12 +20,17 @@ function Get-MetricValue {
     return $DefaultValue
   }
 
-  if ($null -ne $Metric.$Key) {
-    return [double]$Metric.$Key
+  $directProperty = $Metric.PSObject.Properties[$Key]
+  if ($null -ne $directProperty -and $null -ne $directProperty.Value) {
+    return [double]$directProperty.Value
   }
 
-  if ($null -ne $Metric.values -and $null -ne $Metric.values.$Key) {
-    return [double]$Metric.values.$Key
+  $valuesProperty = $Metric.PSObject.Properties["values"]
+  if ($null -ne $valuesProperty -and $null -ne $valuesProperty.Value) {
+    $nested = $valuesProperty.Value.PSObject.Properties[$Key]
+    if ($null -ne $nested -and $null -ne $nested.Value) {
+      return [double]$nested.Value
+    }
   }
 
   return $DefaultValue
@@ -45,6 +50,9 @@ function Get-ScenarioMetrics {
 
   $p95 = Get-MetricValue -Metric $json.metrics.http_req_duration -Key 'p(95)'
   $errorRate = Get-MetricValue -Metric $json.metrics.http_req_failed -Key 'rate'
+  if ($errorRate -eq 0) {
+    $errorRate = Get-MetricValue -Metric $json.metrics.http_req_failed -Key 'value'
+  }
   $reqRate = Get-MetricValue -Metric $json.metrics.http_reqs -Key 'rate'
 
   return [pscustomobject]@{
