@@ -34,6 +34,26 @@ function Write-Step($message) {
   Write-Host "==> $message"
 }
 
+function Resolve-CommandPath {
+  param(
+    [Parameter(Mandatory = $true)] [string]$CommandName,
+    [string[]]$CandidatePaths = @()
+  )
+
+  $command = Get-Command $CommandName -ErrorAction SilentlyContinue
+  if ($null -ne $command) {
+    return $command.Source
+  }
+
+  foreach ($path in $CandidatePaths) {
+    if (Test-Path $path) {
+      return $path
+    }
+  }
+
+  throw "Command not found: $CommandName"
+}
+
 function Invoke-Json {
   param(
     [Parameter(Mandatory = $true)] [string]$Method,
@@ -164,8 +184,15 @@ function Get-ScenarioMetrics {
 $apiProcess = $null
 
 try {
+  $sqlcmdExe = Resolve-CommandPath -CommandName "sqlcmd" -CandidatePaths @(
+    "C:\Program Files\SqlCmd\sqlcmd.exe"
+  )
+  $k6Exe = Resolve-CommandPath -CommandName "k6" -CandidatePaths @(
+    "C:\Program Files\k6\k6.exe"
+  )
+
   Write-Step "Ensuring SQL database exists"
-  sqlcmd -S "$sqlHost,$sqlPort" -U $sqlUser -P $sqlPassword -Q "IF DB_ID('$sqlDb') IS NULL CREATE DATABASE [$sqlDb];" | Out-Host
+  & $sqlcmdExe -S "$sqlHost,$sqlPort" -U $sqlUser -P $sqlPassword -Q "IF DB_ID('$sqlDb') IS NULL CREATE DATABASE [$sqlDb];" | Out-Host
 
   Write-Step "Applying EF migrations"
   dotnet ef database update --project src/NextTurn.Infrastructure --startup-project src/NextTurn.API | Out-Host
@@ -302,13 +329,13 @@ try {
   $env:NT_MIN_REQ_RATE = "5"
 
   Write-Step "Running queue scenario"
-  k6 run tests/load/scenarios/queue-join-view.js --summary-export=tests/load/results/queue-summary.json | Out-Host
+  & $k6Exe run tests/load/scenarios/queue-join-view.js --summary-export=tests/load/results/queue-summary.json | Out-Host
 
   Write-Step "Running staff scenario"
-  k6 run tests/load/scenarios/staff-serve-skip.js --summary-export=tests/load/results/staff-summary.json | Out-Host
+  & $k6Exe run tests/load/scenarios/staff-serve-skip.js --summary-export=tests/load/results/staff-summary.json | Out-Host
 
   Write-Step "Running appointment scenario"
-  k6 run tests/load/scenarios/appointment-booking-spike.js --summary-export=tests/load/results/appointment-summary.json | Out-Host
+  & $k6Exe run tests/load/scenarios/appointment-booking-spike.js --summary-export=tests/load/results/appointment-summary.json | Out-Host
 
   $queueMetrics = Get-ScenarioMetrics -SummaryPath (Join-Path $resultsDir "queue-summary.json")
   $staffMetrics = Get-ScenarioMetrics -SummaryPath (Join-Path $resultsDir "staff-summary.json")
