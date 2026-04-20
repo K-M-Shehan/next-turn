@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Application.Queue.DailySummary;
+using NextTurn.Application.Queue.Reports;
 using NextTurn.Domain.Appointment.Repositories;
 using NextTurn.Domain.Auth.Repositories;
 using NextTurn.Domain.Organisation.Repositories;
@@ -81,13 +83,35 @@ public static class DependencyInjection
         // ── External service stubs (Sprint 1) ─────────────────────────────────
         // Real implementations (SMTP/SendGrid, business registry API) are wired
         // in a later sprint — swap these registrations then.
-        services.AddScoped<IEmailService, StubEmailService>();
+        services.Configure<SmtpEmailOptions>(configuration.GetSection(SmtpEmailOptions.SectionName));
+
+        var emailOptions = configuration
+            .GetSection(SmtpEmailOptions.SectionName)
+            .Get<SmtpEmailOptions>() ?? new SmtpEmailOptions();
+
+        var useSmtp = emailOptions.Enabled
+            && string.Equals(emailOptions.Provider, "Smtp", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(emailOptions.Host)
+            && !string.IsNullOrWhiteSpace(emailOptions.FromEmail);
+
+        if (useSmtp)
+        {
+            services.AddScoped<IEmailService, SmtpEmailService>();
+        }
+        else
+        {
+            services.AddScoped<IEmailService, StubEmailService>();
+        }
+
         services.AddScoped<IBusinessRegistryService, StubBusinessRegistryService>();
 
         // ── Queue state (Sprint 1 stub) ────────────────────────────────────────
         // StubQueueStateService derives position from SQL COUNT queries.
         // Sprint 2+: swap for a Redis-backed implementation — no caller changes needed.
         services.AddScoped<IQueueStateService, StubQueueStateService>();
+        services.AddScoped<IDailyQueueSummaryReportService, DailyQueueSummaryReportService>();
+        services.AddScoped<IQueuePerformanceReportService, QueuePerformanceReportService>();
+        services.AddScoped<IQueuePerformanceExportService, QueuePerformanceExportService>();
 
         return services;
     }

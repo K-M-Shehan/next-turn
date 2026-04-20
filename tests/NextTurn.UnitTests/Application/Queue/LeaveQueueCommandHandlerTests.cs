@@ -1,7 +1,9 @@
 using FluentAssertions;
+using MediatR;
 using Moq;
 using NextTurn.Application.Common.Interfaces;
 using NextTurn.Application.Queue.Commands.LeaveQueue;
+using NextTurn.Application.Queue.Commands.NotifyApproachingTurn;
 using NextTurn.Domain.Common;
 using NextTurn.Domain.Queue.Repositories;
 
@@ -25,6 +27,7 @@ public sealed class LeaveQueueCommandHandlerTests
 
     private readonly Mock<IQueueRepository> _queueRepositoryMock = new();
     private readonly Mock<IApplicationDbContext> _contextMock = new();
+    private readonly Mock<ISender> _senderMock = new();
 
     private readonly LeaveQueueCommandHandler _handler;
 
@@ -43,9 +46,14 @@ public sealed class LeaveQueueCommandHandlerTests
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<NotifyApproachingTurnCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotifyApproachingTurnResult(0, 0));
+
         _handler = new LeaveQueueCommandHandler(
             _queueRepositoryMock.Object,
-            _contextMock.Object);
+            _contextMock.Object,
+            _senderMock.Object);
     }
 
     // ── Happy path ────────────────────────────────────────────────────────────
@@ -75,6 +83,10 @@ public sealed class LeaveQueueCommandHandlerTests
 
         _contextMock.Verify(
             c => c.SaveChangesAsync(It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        _senderMock.Verify(
+            s => s.Send(It.IsAny<NotifyApproachingTurnCommand>(), It.IsAny<CancellationToken>()),
             Times.Once);
     }
 

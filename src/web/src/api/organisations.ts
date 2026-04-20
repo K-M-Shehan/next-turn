@@ -5,6 +5,7 @@
 import { apiClient, parseApiError } from './client'
 import type { OrgRegistrationFormValues } from '../schemas/orgRegistrationSchema'
 import type { ApiError } from '../types/api'
+import { getToken } from '../utils/authToken'
 
 export interface OrgRegistrationPayload {
   orgName: string
@@ -41,6 +42,10 @@ export interface MemberWorkspaceOption {
   slug: string
   loginPath: string
   role: string
+}
+
+export interface QueueNotificationThresholdResult {
+  queueNotificationThreshold: number
 }
 
 /**
@@ -129,6 +134,49 @@ export async function resolveMemberLogin(
       { email },
     )
     return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+export async function getQueueNotificationThreshold(
+  tenantId: string,
+): Promise<QueueNotificationThresholdResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<QueueNotificationThresholdResult>(
+      '/organisations/notification-threshold',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
+    return data
+  } catch (err) {
+    const parsed: ApiError = parseApiError(err)
+    throw parsed
+  }
+}
+
+export async function updateQueueNotificationThreshold(
+  tenantId: string,
+  queueNotificationThreshold: number,
+): Promise<void> {
+  try {
+    const token = getToken()
+    await apiClient.put(
+      '/organisations/notification-threshold',
+      { queueNotificationThreshold },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
   } catch (err) {
     const parsed: ApiError = parseApiError(err)
     throw parsed

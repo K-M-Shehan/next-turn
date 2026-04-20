@@ -48,6 +48,63 @@ export interface CreateQueueBody {
   averageServiceTimeSeconds: number
 }
 
+export interface QueuePerformanceFilterParams {
+  startDate: string
+  endDate: string
+  serviceId?: string
+  officeId?: string
+}
+
+export interface PeakHourSummary {
+  hourOfDay: number
+  servedCount: number
+}
+
+export interface QueuePerformanceReportResult {
+  startDate: string
+  endDate: string
+  serviceId: string | null
+  officeId: string | null
+  totalServed: number
+  averageWaitMinutes: number
+  peakHours: PeakHourSummary[]
+}
+
+export interface DailyQueueMetricTrend {
+  previousDay: number
+  previousWeek: number
+  deltaFromPreviousDay: number
+  deltaFromPreviousWeek: number
+  changePercentFromPreviousDay: number
+  changePercentFromPreviousWeek: number
+}
+
+export interface DailyQueueSummaryRow {
+  officeId: string
+  officeName: string
+  serviceId: string
+  serviceName: string
+  served: number
+  skipped: number
+  noShows: number
+  servedTrend: DailyQueueMetricTrend
+  skippedTrend: DailyQueueMetricTrend
+  noShowsTrend: DailyQueueMetricTrend
+}
+
+export interface DailyQueueSummaryReportResult {
+  date: string
+  previousDayDate: string
+  previousWeekDate: string
+  totalServed: number
+  totalSkipped: number
+  totalNoShows: number
+  totalServedTrend: DailyQueueMetricTrend
+  totalSkippedTrend: DailyQueueMetricTrend
+  totalNoShowsTrend: DailyQueueMetricTrend
+  rows: DailyQueueSummaryRow[]
+}
+
 /**
  * POST /api/queues/{queueId}/join
  *
@@ -172,6 +229,95 @@ export async function getOrgQueues(
         },
       }
     )
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/reports/performance
+ */
+export async function getQueuePerformanceReport(
+  tenantId: string,
+  filter: QueuePerformanceFilterParams,
+): Promise<QueuePerformanceReportResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<QueuePerformanceReportResult>(
+      '/queues/reports/performance',
+      {
+        params: {
+          startDate: filter.startDate,
+          endDate: filter.endDate,
+          serviceId: filter.serviceId,
+          officeId: filter.officeId,
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/reports/daily-summary
+ */
+export async function getDailyQueueSummaryReport(
+  tenantId: string,
+  date: string,
+): Promise<DailyQueueSummaryReportResult> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<DailyQueueSummaryReportResult>(
+      '/queues/reports/daily-summary',
+      {
+        params: { date },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
+
+    return data
+  } catch (err) {
+    throw parseApiError(err)
+  }
+}
+
+/**
+ * GET /api/queues/reports/performance/export
+ */
+export async function exportQueuePerformanceReportCsv(
+  tenantId: string,
+  filter: QueuePerformanceFilterParams,
+): Promise<Blob> {
+  try {
+    const token = getToken()
+    const { data } = await apiClient.get<Blob>(
+      '/queues/reports/performance/export',
+      {
+        params: {
+          startDate: filter.startDate,
+          endDate: filter.endDate,
+          serviceId: filter.serviceId,
+          officeId: filter.officeId,
+        },
+        responseType: 'blob',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Tenant-Id': tenantId,
+        },
+      },
+    )
+
     return data
   } catch (err) {
     throw parseApiError(err)

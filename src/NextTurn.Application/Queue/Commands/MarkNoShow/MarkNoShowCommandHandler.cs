@@ -1,7 +1,10 @@
 using MediatR;
 using NextTurn.Application.Common.Interfaces;
+using NextTurn.Application.Queue.Commands.NotifyApproachingTurn;
 using NextTurn.Application.Queue.Commands;
 using NextTurn.Domain.Common;
+using NextTurn.Domain.Queue.Entities;
+using NextTurn.Domain.Queue.Enums;
 using NextTurn.Domain.Queue.Repositories;
 
 namespace NextTurn.Application.Queue.Commands.MarkNoShow;
@@ -10,13 +13,16 @@ public sealed class MarkNoShowCommandHandler : IRequestHandler<MarkNoShowCommand
 {
     private readonly IQueueRepository _queueRepository;
     private readonly IApplicationDbContext _context;
+    private readonly ISender _sender;
 
     public MarkNoShowCommandHandler(
         IQueueRepository queueRepository,
-        IApplicationDbContext context)
+        IApplicationDbContext context,
+        ISender sender)
     {
         _queueRepository = queueRepository;
         _context = context;
+        _sender = sender;
     }
 
     public async Task<QueueEntryActionResult> Handle(
@@ -32,7 +38,18 @@ public sealed class MarkNoShowCommandHandler : IRequestHandler<MarkNoShowCommand
             throw new DomainException("No entry is currently being served.");
 
         servingEntry.MarkNoShow();
+
+        _context.QueueActionAuditLogs.Add(
+            QueueActionAuditLog.Create(
+                organisationId: queue.OrganisationId,
+                queueId: queue.Id,
+                queueEntryId: servingEntry.Id,
+                performedByUserId: command.PerformedByUserId,
+                actionType: QueueActionType.NoShow,
+                reason: null));
+
         await _context.SaveChangesAsync(cancellationToken);
+        await _sender.Send(new NotifyApproachingTurnCommand(command.QueueId), cancellationToken);
 
         return new QueueEntryActionResult(servingEntry.Id, servingEntry.TicketNumber, servingEntry.Status.ToString());
     }

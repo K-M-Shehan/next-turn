@@ -9,16 +9,21 @@
  *  - After create: shows the shareable link with a copy button
  *  - Per-queue: copy shareable link button
  */
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, type CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   assignStaffToQueue,
   createQueue,
   deleteQueue,
+  getDailyQueueSummaryReport,
   getOrgQueues,
+  getQueuePerformanceReport,
   listQueueStaffAssignments,
   unassignStaffFromQueue,
+  type DailyQueueMetricTrend,
+  type DailyQueueSummaryReportResult,
   type OrgQueueSummary,
+  type QueuePerformanceReportResult,
   type QueueStaffAssignment,
 } from '../../api/queues'
 import {
@@ -47,6 +52,10 @@ import {
   type AppointmentProfileSummary,
   type AppointmentDayRule,
 } from '../../api/appointments'
+import { listServices } from '../../api/services'
+import { OnboardingTour } from '../../components/OnboardingTour'
+import { ROLE_TOUR_CONTENT } from '../../onboarding/roleTours'
+import { useOnboardingTour } from '../../onboarding/useOnboardingTour'
 import { OfficeManagementPage } from '../Offices'
 import { ServiceManagementPage } from '../Services'
 import type { ApiError } from '../../types/api'
@@ -73,6 +82,33 @@ interface StaffProfileForm {
   shiftEnd: string
   officeId: string
 }
+
+type AdminTab = 'home' | 'offices' | 'services' | 'queues' | 'appointments' | 'staff' | 'reports' | 'profile' | 'settings'
+
+function roleBadgeLabel(role: string): { label: string; className: string } {
+  switch (role) {
+    case 'Staff':
+      return { label: 'Staff', className: styles.roleStaff }
+    case 'OrgAdmin':
+      return { label: 'Org Admin', className: styles.roleOrgAdmin }
+    case 'SystemAdmin':
+      return { label: 'System Admin', className: styles.roleSystemAdmin }
+    default:
+      return { label: 'User', className: styles.roleUser }
+  }
+}
+
+const sidebarTabOrder: AdminTab[] = [
+  'home',
+  'queues',
+  'appointments',
+  'services',
+  'offices',
+  'staff',
+  'reports',
+  'profile',
+  'settings',
+]
 
 const defaultForm: CreateForm = {
   name: '',
@@ -133,10 +169,42 @@ function getFirstValidationMessage(apiError: ApiError): string | undefined {
   return undefined
 }
 
+function formatDate(value: Date): string {
+  const year = value.getFullYear()
+  const month = `${value.getMonth() + 1}`.padStart(2, '0')
+  const day = `${value.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function defaultStartDate(): string {
+  const date = new Date()
+  date.setDate(date.getDate() - 7)
+  return formatDate(date)
+}
+
+function defaultEndDate(): string {
+  return formatDate(new Date())
+}
+
+function trendClass(value: number): 'up' | 'down' | 'neutral' {
+  if (value > 0) return 'up'
+  if (value < 0) return 'down'
+  return 'neutral'
+}
+
+function renderTrend(trend: DailyQueueMetricTrend): string {
+  const day = trend.deltaFromPreviousDay
+  const week = trend.deltaFromPreviousWeek
+  const dayLabel = day > 0 ? `+${day}` : `${day}`
+  const weekLabel = week > 0 ? `+${week}` : `${week}`
+  return `D ${dayLabel} | W ${weekLabel}`
+}
+
 export function AdminDashboardPage() {
   const navigate = useNavigate()
   const { tenantId } = useParams<{ tenantId: string }>()
   const payload = getTokenPayload()
+  const onboarding = useOnboardingTour(`admin:${payload?.sub ?? 'anonymous'}:${tenantId ?? 'global'}`)
 
   const [queues, setQueues] = useState<OrgQueueSummary[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -157,7 +225,7 @@ export function AdminDashboardPage() {
   const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null)
   const [copiedAppointmentLink, setCopiedAppointmentLink] = useState(false)
-  const [activeTab, setActiveTab] = useState<'offices' | 'services' | 'queues' | 'appointments' | 'staff'>('queues')
+  const [activeTab, setActiveTab] = useState<AdminTab>('home')
   const [appointmentEditorOpen, setAppointmentEditorOpen] = useState(false)
   const [editingAppointmentProfile, setEditingAppointmentProfile] = useState<AppointmentProfileSummary | null>(null)
   const [editorRules, setEditorRules] = useState<AppointmentDayRule[]>([])
@@ -186,6 +254,21 @@ export function AdminDashboardPage() {
   const [queueDeleteBusyId, setQueueDeleteBusyId] = useState<string | null>(null)
   const [queueAssignmentError, setQueueAssignmentError] = useState<string | null>(null)
   const [queueAssignmentSuccess, setQueueAssignmentSuccess] = useState<string | null>(null)
+  const [homeOfficeCount, setHomeOfficeCount] = useState(0)
+  const [homeServiceCount, setHomeServiceCount] = useState(0)
+  const [reportOfficeOptions, setReportOfficeOptions] = useState<OfficeDto[]>([])
+  const [reportServiceOptions, setReportServiceOptions] = useState<Array<{ serviceId: string; name: string }>>([])
+  const [reportStartDate, setReportStartDate] = useState(defaultStartDate)
+  const [reportEndDate, setReportEndDate] = useState(defaultEndDate)
+  const [reportOfficeId, setReportOfficeId] = useState('')
+  const [reportServiceId, setReportServiceId] = useState('')
+  const [queueReportLoading, setQueueReportLoading] = useState(false)
+  const [queueReportError, setQueueReportError] = useState<string | null>(null)
+  const [queueReport, setQueueReport] = useState<QueuePerformanceReportResult | null>(null)
+  const [dailyReportDate, setDailyReportDate] = useState(defaultEndDate)
+  const [dailyReportLoading, setDailyReportLoading] = useState(false)
+  const [dailyReportError, setDailyReportError] = useState<string | null>(null)
+  const [dailyReport, setDailyReport] = useState<DailyQueueSummaryReportResult | null>(null)
 
   const appointmentSummary = useMemo(() => {
     const enabledDays = editorRules.filter(r => r.isEnabled).length
@@ -229,6 +312,8 @@ export function AdminDashboardPage() {
     return null
   }
 
+  const badge = roleBadgeLabel(payload.role)
+
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (!tenantId) return
@@ -258,6 +343,49 @@ export function AdminDashboardPage() {
       })
       .finally(() => setProfileLoading(false))
   }, [tenantId])
+
+  useEffect(() => {
+    if (!tenantId) return
+
+    listOffices(tenantId, { isActive: true, pageNumber: 1, pageSize: 200 })
+      .then(result => {
+        setHomeOfficeCount(result.totalCount)
+        setReportOfficeOptions(result.items)
+      })
+      .catch(() => {
+        setHomeOfficeCount(0)
+        setReportOfficeOptions([])
+      })
+
+    listStaffUsers(tenantId)
+      .then(result => setStaffAccounts(result))
+      .catch(() => setStaffAccounts([]))
+
+    listServices(tenantId, { activeOnly: true, pageNumber: 1, pageSize: 200 })
+      .then(result => {
+        setHomeServiceCount(result.totalCount)
+        setReportServiceOptions(result.items.map(item => ({ serviceId: item.serviceId, name: item.name })))
+      })
+      .catch(() => {
+        setHomeServiceCount(0)
+        setReportServiceOptions([])
+      })
+  }, [tenantId])
+
+  useEffect(() => {
+    function onAdminShortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented || isTypingTarget(event.target)) return
+
+      const mapped = keyToAdminTab(event.key.toLowerCase())
+      if (!mapped) return
+
+      event.preventDefault()
+      setActiveTab(mapped)
+    }
+
+    window.addEventListener('keydown', onAdminShortcut)
+    return () => window.removeEventListener('keydown', onAdminShortcut)
+  }, [])
 
   function handleLogout() {
     clearToken()
@@ -765,81 +893,403 @@ export function AdminDashboardPage() {
     }
   }
 
+  async function loadQueuePerformanceReportInline() {
+    if (!tenantId) return
+
+    setQueueReportLoading(true)
+    setQueueReportError(null)
+
+    try {
+      const result = await getQueuePerformanceReport(tenantId, {
+        startDate: reportStartDate,
+        endDate: reportEndDate,
+        officeId: reportOfficeId || undefined,
+        serviceId: reportServiceId || undefined,
+      })
+      setQueueReport(result)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setQueueReportError(apiErr.detail ?? 'Could not load queue performance report.')
+      setQueueReport(null)
+    } finally {
+      setQueueReportLoading(false)
+    }
+  }
+
+  async function loadDailySummaryInline() {
+    if (!tenantId) return
+
+    setDailyReportLoading(true)
+    setDailyReportError(null)
+
+    try {
+      const result = await getDailyQueueSummaryReport(tenantId, dailyReportDate)
+      setDailyReport(result)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setDailyReportError(apiErr.detail ?? 'Could not load daily summary report.')
+      setDailyReport(null)
+    } finally {
+      setDailyReportLoading(false)
+    }
+  }
+
+  const activeSidebarIndex = Math.max(sidebarTabOrder.indexOf(activeTab), 0)
+  const sidebarNavStyle = { '--active-index': activeSidebarIndex } as CSSProperties
+
   return (
     <div className={styles.page}>
-      <nav className={styles.topNav}>
-        <img src={logoImg} alt="NextTurn" className={styles.logo} />
-        <button className={styles.logoutBtn} onClick={handleLogout} type="button">
-          Logout
-        </button>
-      </nav>
+      <header className={styles.navbar}>
+        <div className={styles.navInner}>
+          <div className={styles.navBrand}>
+            <img src={logoImg} alt="NextTurn" className={styles.navLogo} />
+          </div>
+
+          <div className={styles.navUser}>
+            <div className={styles.avatarCircle} aria-hidden="true">
+              {payload.name.charAt(0).toUpperCase()}
+            </div>
+            <div className={styles.userMeta}>
+              <span className={styles.userName}>{payload.name}</span>
+              <span className={`${styles.roleBadge} ${badge.className}`}>{badge.label}</span>
+            </div>
+            <button className={styles.logoutBtn} onClick={handleLogout} type="button" aria-label="Sign out">
+              <LogoutIcon />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </div>
+      </header>
 
       <main className={styles.main}>
-        <section className={styles.toolbar}>
-          <div className={styles.toolbarHeader}>
-            <h1 className={styles.pageTitle}>Operations Control Center</h1>
-            <p className={styles.pageSubtitle}>Manage queues and appointment capacity from one place.</p>
-          </div>
-          <div className={styles.tabs} role="tablist" aria-label="Admin sections">
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'offices' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('offices')}
-              role="tab"
-              aria-selected={activeTab === 'offices'}
-            >
-              Offices
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'services' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('services')}
-              role="tab"
-              aria-selected={activeTab === 'services'}
-            >
-              Services
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'queues' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('queues')}
-              role="tab"
-              aria-selected={activeTab === 'queues'}
-            >
-              Queue Management
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'appointments' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('appointments')}
-              role="tab"
-              aria-selected={activeTab === 'appointments'}
-            >
-              Appointment Settings
-            </button>
-            <button
-              type="button"
-              className={`${styles.tabBtn} ${activeTab === 'staff' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('staff')}
-              role="tab"
-              aria-selected={activeTab === 'staff'}
-            >
-              Staff Accounts
-            </button>
-          </div>
-        </section>
+        <div className={styles.workspace}>
+          <aside className={styles.sidebar} aria-label="Admin navigation" data-onboarding="admin-sidebar">
+            <div className={styles.sidebarHeader}>
+              <h1 className={styles.sidebarTitle}>Operations Hub</h1>
+              <p className={styles.sidebarSubtitle}>Manage high-impact admin tasks with less clutter.</p>
+            </div>
+
+            <nav className={styles.sidebarNav} style={sidebarNavStyle}>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'home' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('home')}
+                title="Quick overview of your operations"
+              >
+                Home
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'queues' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('queues')}
+                title="Create and control queues"
+                data-onboarding="admin-queues-tab"
+              >
+                Queue Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'appointments' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('appointments')}
+                title="Configure appointment profiles and schedules"
+                data-onboarding="admin-appointments-tab"
+              >
+                Appointment Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'services' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('services')}
+                title="Manage service catalog and availability"
+                data-onboarding="admin-services-tab"
+              >
+                Service Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'offices' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('offices')}
+                title="Manage office locations and status"
+                data-onboarding="admin-offices-tab"
+              >
+                Office Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'staff' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('staff')}
+                title="Invite and maintain staff access"
+                data-onboarding="admin-staff-tab"
+              >
+                Staff Management
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'reports' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('reports')}
+                title="Open queue and daily summary reports"
+                data-onboarding="admin-reports-tab"
+              >
+                Reports
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'profile' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('profile')}
+                title="View account details"
+              >
+                Profile
+              </button>
+              <button
+                type="button"
+                className={`${styles.sideNavBtn} ${activeTab === 'settings' ? styles.sideNavBtnActive : ''}`}
+                onClick={() => setActiveTab('settings')}
+                title="Open preferences and onboarding settings"
+                data-onboarding="admin-settings-tab"
+              >
+                Settings
+              </button>
+            </nav>
+            <p className={styles.sidebarHint}>Shortcuts: 1-9 or H/Q/A/S/O/T/R/P/G</p>
+          </aside>
+
+          <div className={styles.contentArea}>
+            <section className={styles.toolbar}>
+              <div className={styles.toolbarHeader}>
+                <h2 className={styles.pageTitle}>Operations Control Center</h2>
+                <p className={styles.pageSubtitle}>Manage queues, appointments, people, and operations from one place.</p>
+              </div>
+            </section>
+
+            <div key={activeTab} className={styles.tabPanel}>
+
+            {activeTab === 'home' && (
+              <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>Quick Overview</h2>
+                <p className={styles.sectionHint}>A clean snapshot of your operations. Use the sidebar to dive deeper into each area.</p>
+
+                <div className={styles.homeSummaryGrid}>
+                  <article className={styles.summaryCard} title="Total queues configured for this organisation">
+                    <span className={styles.summaryLabel}>Queues</span>
+                    <strong className={styles.summaryValue}>{queues.length}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Appointment profiles available to end users">
+                    <span className={styles.summaryLabel}>Appointment Profiles</span>
+                    <strong className={styles.summaryValue}>{appointmentProfiles.length}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Active office locations currently configured">
+                    <span className={styles.summaryLabel}>Active Offices</span>
+                    <strong className={styles.summaryValue}>{homeOfficeCount}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Active service offerings available for routing">
+                    <span className={styles.summaryLabel}>Active Services</span>
+                    <strong className={styles.summaryValue}>{homeServiceCount}</strong>
+                  </article>
+                  <article className={styles.summaryCard} title="Total staff users in your organisation">
+                    <span className={styles.summaryLabel}>Staff Accounts</span>
+                    <strong className={styles.summaryValue}>{staffAccounts.length}</strong>
+                  </article>
+                </div>
+
+              </section>
+            )}
+
+            {activeTab === 'profile' && (
+              <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>Profile</h2>
+                <p className={styles.sectionHint}>Your admin account details for this workspace.</p>
+
+                <div className={styles.homeSummaryGrid}>
+                  <article className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>Name</span>
+                    <strong className={styles.summaryValue}>{payload?.name ?? 'Unknown'}</strong>
+                  </article>
+                  <article className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>Email</span>
+                    <strong className={styles.summaryValue}>{payload?.email ?? 'Unknown'}</strong>
+                  </article>
+                  <article className={styles.summaryCard}>
+                    <span className={styles.summaryLabel}>Role</span>
+                    <strong className={styles.summaryValue}>{payload?.role ?? 'Unknown'}</strong>
+                  </article>
+                </div>
+              </section>
+            )}
+
+            {activeTab === 'settings' && (
+              <section className={styles.section} data-onboarding="admin-settings">
+                <h2 className={styles.sectionTitle}>Settings</h2>
+                <p className={styles.sectionHint}>Update workspace preferences and replay guided onboarding.</p>
+
+                <div className={styles.reportCard} data-onboarding="admin-settings-panel">
+                  <h3 className={styles.sectionSubTitle}>Onboarding</h3>
+                  <p className={styles.sectionHint}>Replay the onboarding walkthrough whenever your team needs a refresher.</p>
+                  <button
+                    type="button"
+                    className={styles.createBtn}
+                    onClick={onboarding.restartTour}
+                  >
+                    Restart onboarding tour
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {activeTab === 'reports' && (
+              <section className={styles.section}>
+                <h2 className={styles.sectionTitle}>Reports</h2>
+                <p className={styles.sectionHint}>Generate both report types directly here without leaving the dashboard.</p>
+
+                <div className={styles.reportCard} data-onboarding="admin-report-performance">
+                  <h3 className={styles.sectionSubTitle}>Queue Performance Report</h3>
+                  <p className={styles.sectionHint}>Analyze served volumes, average wait times, and peak-hour demand.</p>
+
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-start-date">Start date</label>
+                      <input id="report-start-date" className={styles.input} type="date" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-end-date">End date</label>
+                      <input id="report-end-date" className={styles.input} type="date" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-service">Service</label>
+                      <select id="report-service" className={styles.input} value={reportServiceId} onChange={e => setReportServiceId(e.target.value)}>
+                        <option value="">All services</option>
+                        {reportServiceOptions.map(service => (
+                          <option key={service.serviceId} value={service.serviceId}>{service.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="report-office">Office</label>
+                      <select id="report-office" className={styles.input} value={reportOfficeId} onChange={e => setReportOfficeId(e.target.value)}>
+                        <option value="">All offices</option>
+                        {reportOfficeOptions.map(office => (
+                          <option key={office.officeId} value={office.officeId}>{office.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button type="button" className={styles.createBtn} onClick={loadQueuePerformanceReportInline} disabled={queueReportLoading}>
+                    {queueReportLoading ? 'Generating...' : 'Generate Queue Performance Report'}
+                  </button>
+
+                  {queueReportError && <div className={styles.errorBanner} role="alert">{queueReportError}</div>}
+
+                  {queueReport && (
+                    <div className={styles.reportMetrics}>
+                      <article className={styles.summaryCard}>
+                        <span className={styles.summaryLabel}>Total Served</span>
+                        <strong className={styles.summaryValue}>{queueReport.totalServed}</strong>
+                      </article>
+                      <article className={styles.summaryCard}>
+                        <span className={styles.summaryLabel}>Average Wait</span>
+                        <strong className={styles.summaryValue}>{queueReport.averageWaitMinutes.toFixed(2)} min</strong>
+                      </article>
+                      <article className={styles.summaryCard}>
+                        <span className={styles.summaryLabel}>Peak Hours</span>
+                        <strong className={styles.summaryValue}>{queueReport.peakHours.length}</strong>
+                      </article>
+                    </div>
+                  )}
+                </div>
+
+                <div className={styles.reportCard} data-onboarding="admin-report-daily">
+                  <h3 className={styles.sectionSubTitle}>Daily Summary Report</h3>
+                  <p className={styles.sectionHint}>Track served, skipped, and no-show counts with trend context.</p>
+
+                  <div className={styles.formGrid}>
+                    <div className={styles.formGroup}>
+                      <label className={styles.label} htmlFor="daily-report-date">Summary date</label>
+                      <input id="daily-report-date" className={styles.input} type="date" value={dailyReportDate} onChange={e => setDailyReportDate(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <button type="button" className={styles.createBtn} onClick={loadDailySummaryInline} disabled={dailyReportLoading}>
+                    {dailyReportLoading ? 'Generating...' : 'Generate Daily Summary'}
+                  </button>
+
+                  {dailyReportError && <div className={styles.errorBanner} role="alert">{dailyReportError}</div>}
+
+                  {dailyReport && (
+                    <>
+                      <div className={styles.reportMetrics}>
+                        <article className={styles.summaryCard}>
+                          <span className={styles.summaryLabel}>Served</span>
+                          <strong className={styles.summaryValue}>{dailyReport.totalServed}</strong>
+                          <span className={styles.sectionHint}>{renderTrend(dailyReport.totalServedTrend)}</span>
+                        </article>
+                        <article className={styles.summaryCard}>
+                          <span className={styles.summaryLabel}>Skipped</span>
+                          <strong className={styles.summaryValue}>{dailyReport.totalSkipped}</strong>
+                          <span className={styles.sectionHint}>{renderTrend(dailyReport.totalSkippedTrend)}</span>
+                        </article>
+                        <article className={styles.summaryCard}>
+                          <span className={styles.summaryLabel}>No-shows</span>
+                          <strong className={styles.summaryValue}>{dailyReport.totalNoShows}</strong>
+                          <span className={styles.sectionHint}>{renderTrend(dailyReport.totalNoShowsTrend)}</span>
+                        </article>
+                      </div>
+
+                      {dailyReport.rows.length > 0 && (
+                        <div className={styles.reportTableWrap}>
+                          <table className={styles.reportTable}>
+                            <thead>
+                              <tr>
+                                <th>Office</th>
+                                <th>Service</th>
+                                <th>Served</th>
+                                <th>Skipped</th>
+                                <th>No-shows</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dailyReport.rows.map(row => (
+                                <tr key={`${row.officeId}:${row.serviceId}`}>
+                                  <td>{row.officeName}</td>
+                                  <td>{row.serviceName}</td>
+                                  <td>
+                                    {row.served}
+                                    <span className={styles.rowTrend}> {renderTrend(row.servedTrend)}</span>
+                                  </td>
+                                  <td>
+                                    {row.skipped}
+                                    <span className={styles.rowTrend}> {renderTrend(row.skippedTrend)}</span>
+                                  </td>
+                                  <td>
+                                    {row.noShows}
+                                    <span className={styles.rowTrend}> {renderTrend(row.noShowsTrend)}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </section>
+            )}
 
         {activeTab === 'offices' && (
-          <OfficeManagementPage embedded />
+          <div data-onboarding="admin-offices-panel">
+            <OfficeManagementPage embedded />
+          </div>
         )}
 
         {activeTab === 'services' && (
-          <ServiceManagementPage embedded />
+          <div data-onboarding="admin-services-panel">
+            <ServiceManagementPage embedded />
+          </div>
         )}
 
         {activeTab === 'queues' && (
           <>
-            <section className={styles.section}>
+            <section className={styles.section} data-onboarding="admin-queue-create-form">
               <h2 className={styles.sectionTitle}>Create a New Queue</h2>
               <p className={styles.sectionHint}>Create and share queue links for customers to join in seconds.</p>
 
@@ -1061,7 +1511,7 @@ export function AdminDashboardPage() {
 
         {activeTab === 'appointments' && (
           <>
-            <section className={styles.section}>
+            <section className={styles.section} data-onboarding="admin-appointment-panel">
               <h2 className={styles.sectionTitle}>Create Appointment Profile</h2>
               <p className={styles.sectionHint}>
                 Create a dedicated appointment link for each service stream.
@@ -1310,7 +1760,7 @@ export function AdminDashboardPage() {
         )}
 
         {activeTab === 'staff' && (
-          <section className={styles.section}>
+          <section className={styles.section} data-onboarding="admin-staff-panel">
             <h2 className={styles.sectionTitle}>Create Staff Account</h2>
             <p className={styles.sectionHint}>
               Staff users are restricted to queue-operations for this organisation.
@@ -1324,7 +1774,7 @@ export function AdminDashboardPage() {
               <div className={styles.successBanner} role="status">{staffSuccess}</div>
             )}
 
-            <form className={styles.createForm} onSubmit={handleCreateStaff} noValidate>
+            <form className={styles.createForm} onSubmit={handleCreateStaff} noValidate data-onboarding="admin-staff-create">
               <div className={styles.formGrid}>
                 <div className={styles.formGroup}>
                   <label className={styles.label} htmlFor="staff-name">Full Name</label>
@@ -1391,7 +1841,7 @@ export function AdminDashboardPage() {
               </div>
             )}
 
-            <div className={styles.staffListBlock}>
+            <div className={styles.staffListBlock} data-onboarding="admin-staff-list">
               <h3 className={styles.sectionSubTitle}>Existing Staff Accounts</h3>
 
               {staffAccountsLoading && (
@@ -1436,6 +1886,7 @@ export function AdminDashboardPage() {
                                 className={styles.copyBtn}
                                 disabled={staffActionUserId === user.userId}
                                 onClick={() => handleStaffStatusToggle(user)}
+                                data-onboarding="admin-staff-toggle-button"
                               >
                                 {staffActionUserId === user.userId
                                   ? 'Updating...'
@@ -1446,6 +1897,7 @@ export function AdminDashboardPage() {
                                 className={styles.copyBtn}
                                 onClick={() => profile && beginEditStaffProfile(profile)}
                                 disabled={!profile}
+                                data-onboarding="admin-staff-edit-button"
                               >
                                 Edit Details
                               </button>
@@ -1459,95 +1911,89 @@ export function AdminDashboardPage() {
               )}
             </div>
 
-            <div className={styles.staffListBlock}>
-              <h3 className={styles.sectionSubTitle}>Staff Profile Management</h3>
-              <p className={styles.sectionHint}>Edit assigned offices, counter and shift details from Staff Accounts.</p>
+            <p className={styles.emptyNote}>Click Edit Details on any account to open the staff profile editor.</p>
 
-              {staffProfilesLoading && (
-                <p className={styles.emptyNote}>Loading staff profile data...</p>
-              )}
-
-              {!staffProfilesLoading && selectedStaffProfileId && (
-                <div className={styles.profileEditorCard}>
-                  <div className={styles.formGrid}>
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-name">Name</label>
-                      <input
-                        id="staff-edit-name"
-                        className={styles.input}
-                        type="text"
-                        value={staffProfileForm.name}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-phone">Phone</label>
-                      <input
-                        id="staff-edit-phone"
-                        className={styles.input}
-                        type="tel"
-                        value={staffProfileForm.phone}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, phone: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-shift-start">Shift Start (HH:mm)</label>
-                      <input
-                        id="staff-edit-shift-start"
-                        className={styles.input}
-                        type="time"
-                        value={staffProfileForm.shiftStart}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftStart: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className={styles.formGroup}>
-                      <label className={styles.label} htmlFor="staff-edit-shift-end">Shift End (HH:mm)</label>
-                      <input
-                        id="staff-edit-shift-end"
-                        className={styles.input}
-                        type="time"
-                        value={staffProfileForm.shiftEnd}
-                        onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftEnd: e.target.value }))}
-                      />
-                    </div>
+            {selectedStaffProfileId && (
+              <div className={styles.appointmentModalOverlay} onClick={resetStaffProfileEditor} role="presentation">
+                <div className={styles.appointmentModal} onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="staff-editor-title">
+                  <div className={styles.appointmentModalHeader}>
+                    <h3 id="staff-editor-title" className={styles.appointmentModalTitle}>Edit Staff Details</h3>
+                    <button className={styles.copyBtn} type="button" onClick={resetStaffProfileEditor} disabled={staffProfileSaving}>Close</button>
                   </div>
 
-                  <div>
-                    <p className={styles.sectionSubTitle}>Assigned Office</p>
-                    {officeOptions.length === 0 ? (
-                      <p className={styles.emptyNote}>No active offices found.</p>
-                    ) : (
+                  <div className={styles.appointmentModalBody}>
+                    <div className={styles.formGrid}>
                       <div className={styles.formGroup}>
-                        <label className={styles.label} htmlFor="staff-edit-office">Office</label>
-                        <select
-                          id="staff-edit-office"
+                        <label className={styles.label} htmlFor="staff-edit-name">Name</label>
+                        <input
+                          id="staff-edit-name"
                           className={styles.input}
-                          value={staffProfileForm.officeId}
-                          onChange={e => setStaffProfileForm(prev => ({ ...prev, officeId: e.target.value }))}
-                        >
-                          <option value="">Select one office</option>
-                          {officeOptions.map(office => (
-                            <option key={office.officeId} value={office.officeId}>
-                              {office.name}
-                            </option>
-                          ))}
-                        </select>
+                          type="text"
+                          value={staffProfileForm.name}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                        />
                       </div>
-                    )}
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-phone">Phone</label>
+                        <input
+                          id="staff-edit-phone"
+                          className={styles.input}
+                          type="tel"
+                          value={staffProfileForm.phone}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-shift-start">Shift Start (HH:mm)</label>
+                        <input
+                          id="staff-edit-shift-start"
+                          className={styles.input}
+                          type="time"
+                          value={staffProfileForm.shiftStart}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftStart: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.label} htmlFor="staff-edit-shift-end">Shift End (HH:mm)</label>
+                        <input
+                          id="staff-edit-shift-end"
+                          className={styles.input}
+                          type="time"
+                          value={staffProfileForm.shiftEnd}
+                          onChange={e => setStaffProfileForm(prev => ({ ...prev, shiftEnd: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className={styles.sectionSubTitle}>Assigned Office</p>
+                      {officeOptions.length === 0 ? (
+                        <p className={styles.emptyNote}>No active offices found.</p>
+                      ) : (
+                        <div className={styles.formGroup}>
+                          <label className={styles.label} htmlFor="staff-edit-office">Office</label>
+                          <select
+                            id="staff-edit-office"
+                            className={styles.input}
+                            value={staffProfileForm.officeId}
+                            onChange={e => setStaffProfileForm(prev => ({ ...prev, officeId: e.target.value }))}
+                          >
+                            <option value="">Select one office</option>
+                            {officeOptions.map(office => (
+                              <option key={office.officeId} value={office.officeId}>
+                                {office.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className={styles.staffEditorActions}>
-                    <button
-                      type="button"
-                      className={styles.createBtn}
-                      onClick={saveStaffProfile}
-                      disabled={staffProfileSaving || !staffProfileForm.name.trim()}
-                    >
-                      {staffProfileSaving ? 'Saving...' : 'Save Staff Details'}
-                    </button>
+                  <div className={styles.appointmentModalActions}>
                     <button
                       type="button"
                       className={styles.copyBtn}
@@ -1556,17 +2002,63 @@ export function AdminDashboardPage() {
                     >
                       Cancel
                     </button>
+                    <button
+                      type="button"
+                      className={styles.createBtn}
+                      onClick={saveStaffProfile}
+                      disabled={staffProfileSaving || !staffProfileForm.name.trim()}
+                    >
+                      {staffProfileSaving ? 'Saving...' : 'Save Staff Details'}
+                    </button>
                   </div>
                 </div>
-              )}
-
-              {!staffProfilesLoading && !selectedStaffProfileId && (
-                <p className={styles.emptyNote}>Choose a staff account above and click Edit Details.</p>
-              )}
-            </div>
+              </div>
+            )}
           </section>
         )}
+            </div>
+
+            <OnboardingTour
+              isOpen={onboarding.isOpen}
+              title="Quick tour: admin dashboard"
+              steps={ROLE_TOUR_CONTENT.admin}
+              onClose={onboarding.completeTour}
+            />
+          </div>
+        </div>
       </main>
     </div>
+  )
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+
+  const tag = target.tagName.toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true
+
+  return target.isContentEditable
+}
+
+function keyToAdminTab(key: string): AdminTab | null {
+  if (key === '1' || key === 'h') return 'home'
+  if (key === '2' || key === 'q') return 'queues'
+  if (key === '3' || key === 'a') return 'appointments'
+  if (key === '4' || key === 's') return 'services'
+  if (key === '5' || key === 'o') return 'offices'
+  if (key === '6' || key === 't') return 'staff'
+  if (key === '7' || key === 'r') return 'reports'
+  if (key === '8' || key === 'p') return 'profile'
+  if (key === '9' || key === 'g') return 'settings'
+  return null
+}
+
+function LogoutIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
   )
 }

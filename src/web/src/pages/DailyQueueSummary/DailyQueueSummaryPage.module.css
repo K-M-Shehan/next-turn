@@ -1,0 +1,181 @@
+.page {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f9f6f1 0%, #f4efe7 100%);
+  color: #1f2f3f;
+}
+
+.topNav {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  width: 120px;
+  height: auto;
+}
+
+.navActions {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 2rem;
+}
+
+.header {
+  margin-bottom: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.subtitle {
+  margin-top: 0.4rem;
+  color: #4f5f70;
+}
+
+.controls {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(24, 39, 75, 0.08);
+  padding: 1rem;
+  display: flex;
+  align-items: end;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.input {
+  border: 1px solid #c8d0d8;
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  border-radius: 999px;
+  padding: 0.55rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryBtn {
+  border: none;
+  background: #0f766e;
+  color: #fff;
+}
+
+.secondaryBtn {
+  border: 1px solid #0f766e;
+  background: #fff;
+  color: #0f766e;
+}
+
+.errorBanner {
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: #ffe8e6;
+  border: 1px solid #f7b3ad;
+  color: #7b1f1f;
+}
+
+.results {
+  margin-top: 1rem;
+}
+
+.summaryCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.8rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.9rem;
+  box-shadow: 0 8px 24px rgba(24, 39, 75, 0.08);
+}
+
+.cardLabel {
+  color: #4f5f70;
+  font-size: 0.85rem;
+}
+
+.cardValue {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.4rem;
+}
+
+.cardTrend {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.tableWrap {
+  margin-top: 1rem;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(24, 39, 75, 0.08);
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.7rem;
+  border-bottom: 1px solid #eceff2;
+  text-align: left;
+}
+
+.table th {
+  font-size: 0.82rem;
+  color: #44576a;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.metricCell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.trendUp {
+  color: #0f766e;
+}
+
+.trendDown {
+  color: #be123c;
+}
+
+.trendNeutral {
+  color: #475569;
+}
+
+.emptyText {
+  margin-top: 1rem;
+  color: #475569;
+}

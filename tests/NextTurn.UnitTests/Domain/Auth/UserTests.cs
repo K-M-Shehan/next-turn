@@ -178,6 +178,46 @@ public sealed class UserTests
         user.MfaEnabled.Should().BeFalse();
     }
 
+    [Fact]
+    public void Create_SetsQueueTurnApproachingNotificationsEnabledToTrue()
+    {
+        var user = User.Create(ValidTenantId, ValidName, ValidEmail, null, ValidPasswordHash);
+
+        user.QueueTurnApproachingNotificationsEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Create_SetsAppointmentNotificationPreferencesToTrue()
+    {
+        var user = User.Create(ValidTenantId, ValidName, ValidEmail, null, ValidPasswordHash);
+
+        user.AppointmentBookedNotificationsEnabled.Should().BeTrue();
+        user.AppointmentRescheduledNotificationsEnabled.Should().BeTrue();
+        user.AppointmentCancelledNotificationsEnabled.Should().BeTrue();
+    }
+
+    [Fact]
+    public void SetQueueTurnApproachingNotificationsEnabled_UpdatesPreference()
+    {
+        var user = User.Create(ValidTenantId, ValidName, ValidEmail, null, ValidPasswordHash);
+
+        user.SetQueueTurnApproachingNotificationsEnabled(false);
+
+        user.QueueTurnApproachingNotificationsEnabled.Should().BeFalse();
+    }
+
+    [Fact]
+    public void SetAppointmentNotificationPreferences_UpdatesAllAppointmentPreferences()
+    {
+        var user = User.Create(ValidTenantId, ValidName, ValidEmail, null, ValidPasswordHash);
+
+        user.SetAppointmentNotificationPreferences(false, true, false);
+
+        user.AppointmentBookedNotificationsEnabled.Should().BeFalse();
+        user.AppointmentRescheduledNotificationsEnabled.Should().BeTrue();
+        user.AppointmentCancelledNotificationsEnabled.Should().BeFalse();
+    }
+
     // ── RecordFailedLogin ─────────────────────────────────────────────────────
 
     [Fact]

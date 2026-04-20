@@ -26,4 +26,38 @@ public interface IEmailService
         string invitePath,
         DateTimeOffset expiresAt,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends a confirmation when a user successfully joins a queue.
+    /// </summary>
+    Task SendQueueJoinedEmailAsync(
+        string toEmail,
+        string queueName,
+        int ticketNumber,
+        int positionInQueue,
+        int estimatedWaitSeconds,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends a queue turn-approaching notification when a user is close to being served.
+    /// </summary>
+    Task SendQueueTurnApproachingEmailAsync(
+        string toEmail,
+        string queueName,
+        int ticketNumber,
+        int positionInQueue,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends appointment status updates (booked, rescheduled, cancelled) with slot and context details.
+    /// </summary>
+    Task SendAppointmentStatusEmailAsync(
+        string toEmail,
+        string userName,
+        string notificationType,
+        DateTimeOffset slotStart,
+        DateTimeOffset slotEnd,
+        string officeName,
+        string serviceName,
+        CancellationToken cancellationToken);
 }

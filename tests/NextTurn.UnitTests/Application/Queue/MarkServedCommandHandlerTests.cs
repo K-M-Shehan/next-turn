@@ -1,7 +1,9 @@
 using FluentAssertions;
+using MediatR;
 using Moq;
 using NextTurn.Application.Common.Interfaces;
 using NextTurn.Application.Queue.Commands.MarkServed;
+using NextTurn.Application.Queue.Commands.NotifyApproachingTurn;
 using NextTurn.Domain.Common;
 using NextTurn.Domain.Queue.Repositories;
 using QueueEntity = NextTurn.Domain.Queue.Entities.Queue;
@@ -13,6 +15,7 @@ public sealed class MarkServedCommandHandlerTests
 {
     private readonly Mock<IQueueRepository> _queueRepositoryMock = new();
     private readonly Mock<IApplicationDbContext> _contextMock = new();
+    private readonly Mock<ISender> _senderMock = new();
 
     private readonly MarkServedCommandHandler _handler;
 
@@ -37,7 +40,11 @@ public sealed class MarkServedCommandHandlerTests
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        _handler = new MarkServedCommandHandler(_queueRepositoryMock.Object, _contextMock.Object);
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<NotifyApproachingTurnCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotifyApproachingTurnResult(0, 0));
+
+        _handler = new MarkServedCommandHandler(_queueRepositoryMock.Object, _contextMock.Object, _senderMock.Object);
     }
 
     [Fact]
@@ -48,6 +55,7 @@ public sealed class MarkServedCommandHandlerTests
         result.Status.Should().Be("Served");
         result.TicketNumber.Should().Be(4);
         _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _senderMock.Verify(s => s.Send(It.IsAny<NotifyApproachingTurnCommand>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

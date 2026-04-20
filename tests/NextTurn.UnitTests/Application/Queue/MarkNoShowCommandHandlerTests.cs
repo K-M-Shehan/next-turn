@@ -1,8 +1,13 @@
 using FluentAssertions;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using NextTurn.Application.Common.Interfaces;
 using NextTurn.Application.Queue.Commands.MarkNoShow;
+using NextTurn.Application.Queue.Commands.NotifyApproachingTurn;
 using NextTurn.Domain.Common;
+using NextTurn.Domain.Queue.Entities;
+using NextTurn.Domain.Queue.Enums;
 using NextTurn.Domain.Queue.Repositories;
 using QueueEntity = NextTurn.Domain.Queue.Entities.Queue;
 using QueueEntry = NextTurn.Domain.Queue.Entities.QueueEntry;
@@ -13,12 +18,15 @@ public sealed class MarkNoShowCommandHandlerTests
 {
     private readonly Mock<IQueueRepository> _queueRepositoryMock = new();
     private readonly Mock<IApplicationDbContext> _contextMock = new();
+    private readonly Mock<ISender> _senderMock = new();
+    private readonly Mock<DbSet<QueueActionAuditLog>> _auditLogSetMock = new();
 
     private readonly MarkNoShowCommandHandler _handler;
 
     private static readonly Guid QueueId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid OrgId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private static readonly Guid UserId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    private static readonly Guid StaffId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
 
     public MarkNoShowCommandHandlerTests()
     {
@@ -37,17 +45,31 @@ public sealed class MarkNoShowCommandHandlerTests
             .Setup(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        _handler = new MarkNoShowCommandHandler(_queueRepositoryMock.Object, _contextMock.Object);
+        _contextMock
+            .Setup(c => c.QueueActionAuditLogs)
+            .Returns(_auditLogSetMock.Object);
+
+        _senderMock
+            .Setup(s => s.Send(It.IsAny<NotifyApproachingTurnCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotifyApproachingTurnResult(0, 0));
+
+        _handler = new MarkNoShowCommandHandler(_queueRepositoryMock.Object, _contextMock.Object, _senderMock.Object);
     }
 
     [Fact]
     public async Task Handle_WithServingEntry_MarksAsNoShow()
     {
-        var result = await _handler.Handle(new MarkNoShowCommand(QueueId), CancellationToken.None);
+        var result = await _handler.Handle(new MarkNoShowCommand(QueueId, StaffId), CancellationToken.None);
 
         result.Status.Should().Be("NoShow");
         result.TicketNumber.Should().Be(4);
+        _auditLogSetMock.Verify(
+            s => s.Add(It.Is<QueueActionAuditLog>(
+                a => a.ActionType == QueueActionType.NoShow
+                     && a.PerformedByUserId == StaffId)),
+            Times.Once);
         _contextMock.Verify(c => c.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _senderMock.Verify(s => s.Send(It.IsAny<NotifyApproachingTurnCommand>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -57,7 +79,7 @@ public sealed class MarkNoShowCommandHandlerTests
             .Setup(r => r.GetByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((QueueEntity?)null);
 
-        var act = async () => await _handler.Handle(new MarkNoShowCommand(QueueId), CancellationToken.None);
+        var act = async () => await _handler.Handle(new MarkNoShowCommand(QueueId, StaffId), CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainException>()
             .WithMessage("Queue not found.");
@@ -70,7 +92,7 @@ public sealed class MarkNoShowCommandHandlerTests
             .Setup(r => r.GetCurrentServingEntryAsync(QueueId, It.IsAny<CancellationToken>()))
             .ReturnsAsync((QueueEntry?)null);
 
-        var act = async () => await _handler.Handle(new MarkNoShowCommand(QueueId), CancellationToken.None);
+        var act = async () => await _handler.Handle(new MarkNoShowCommand(QueueId, StaffId), CancellationToken.None);
 
         await act.Should().ThrowAsync<DomainException>()
             .WithMessage("No entry is currently being served.");

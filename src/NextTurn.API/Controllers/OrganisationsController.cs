@@ -1,8 +1,11 @@
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using NextTurn.API.Models.Organisations;
+using NextTurn.Application.Organisation.Commands.UpdateQueueNotificationThreshold;
 using NextTurn.Application.Organisation.Commands.RegisterOrganisation;
+using NextTurn.Application.Organisation.Queries.GetQueueNotificationThreshold;
 using NextTurn.Application.Organisation.Queries.ResolveMemberLogin;
 using NextTurn.Application.Organisation.Queries.ResolveOrganisationLogin;
 using NextTurn.Application.Organisation.Queries.ResolveOrganisationTenant;
@@ -28,6 +31,12 @@ public sealed class OrganisationsController : ControllerBase
     public OrganisationsController(ISender sender)
     {
         _sender = sender;
+    }
+
+    private bool TryGetOrganisationId(out Guid organisationId)
+    {
+        var tenantIdClaim = User.FindFirstValue("tid");
+        return Guid.TryParse(tenantIdClaim, out organisationId);
     }
 
     /// <summary>
@@ -124,5 +133,45 @@ public sealed class OrganisationsController : ControllerBase
         var query = new ResolveOrganisationTenantQuery(slug);
         var result = await _sender.Send(query, cancellationToken);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Gets queue turn-approaching notification threshold for the authenticated organisation.
+    /// </summary>
+    [HttpGet("notification-threshold")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(typeof(QueueNotificationThresholdResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetQueueNotificationThreshold(CancellationToken cancellationToken)
+    {
+        if (!TryGetOrganisationId(out var organisationId))
+            return Unauthorized();
+
+        var result = await _sender.Send(new GetQueueNotificationThresholdQuery(organisationId), cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Updates queue turn-approaching notification threshold for the authenticated organisation.
+    /// </summary>
+    [HttpPut("notification-threshold")]
+    [Authorize(Roles = "OrgAdmin,SystemAdmin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> UpdateQueueNotificationThreshold(
+        [FromBody] UpdateQueueNotificationThresholdRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetOrganisationId(out var organisationId))
+            return Unauthorized();
+
+        await _sender.Send(
+            new UpdateQueueNotificationThresholdCommand(organisationId, request.QueueNotificationThreshold),
+            cancellationToken);
+
+        return NoContent();
     }
 }

@@ -1,0 +1,6 @@
+results/*.json
+results/*.csv
+results/*.html
+results/PERFORMANCE-TESTING-REPORT.md
+results/qa-*/
+.env.qa

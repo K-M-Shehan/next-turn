@@ -1,49 +1,47 @@
-/**
- * DashboardPage — Sprint 1 protected placeholder.
- *
- * Route: /dashboard/:tenantId  (wrapped by ProtectedRoute)
- *
- * Sprint 1 scope:
- *  - Decode the stored JWT and display the user's name and role
- *  - Provide a working logout button (clearToken + navigate to /)
- *  - Visual placeholder cards for Queue & Appointments (Sprint 2)
- *
- * This page is intentionally minimal. The real dashboard (queue lists,
- * appointment management, staff views) is built in Sprint 2+. The value
- * of this page in Sprint 1 is proving the end-to-end auth flow works:
- *  Register → Login → JWT stored → ProtectedRoute passes → Dashboard shown
- *
- * Sprint 2 additions (NT-XX):
- *  - Replace placeholder cards with real queue / appointment data
- *  - Role-based layout (staff vs user vs admin views)
- *  - Token refresh / 401 interceptor
- */
-import { useState, useEffect } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
-import { clearToken } from '../../utils/authToken'
-import { getTokenPayload } from '../../utils/authToken'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { clearToken, getTokenPayload } from '../../utils/authToken'
+import {
+  getAppointmentNotificationPreferences,
+  getQueueNotificationPreference,
+  updateAppointmentNotificationPreferences,
+  updateQueueNotificationPreference,
+} from '../../api/auth'
+import {
+  listMyNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type InAppNotification,
+} from '../../api/notifications'
 import { getMyQueues, type MyQueueEntry } from '../../api/queues'
 import { cancelAppointment, getMyAppointmentBookings, type MyAppointmentBooking } from '../../api/appointments'
 import type { ApiError } from '../../types/api'
+import { OnboardingTour } from '../../components/OnboardingTour'
+import { ROLE_TOUR_CONTENT } from '../../onboarding/roleTours'
+import { useOnboardingTour } from '../../onboarding/useOnboardingTour'
 import logoImg from '../../assets/nextTurn-logo.png'
 import styles from './DashboardPage.module.css'
 
-/** Human-readable label for the UserRole enum string */
+type DashboardTab = 'home' | 'queues' | 'appointments' | 'notifications' | 'profile' | 'settings'
+
 function roleBadgeLabel(role: string): { label: string; className: string } {
   switch (role) {
-    case 'Staff':       return { label: 'Staff',          className: styles.roleStaff }
-    case 'OrgAdmin':    return { label: 'Org Admin',       className: styles.roleOrgAdmin }
-    case 'SystemAdmin': return { label: 'System Admin',    className: styles.roleSystemAdmin }
-    default:            return { label: 'User',            className: styles.roleUser }
+    case 'Staff':
+      return { label: 'Staff', className: styles.roleStaff }
+    case 'OrgAdmin':
+      return { label: 'Org Admin', className: styles.roleOrgAdmin }
+    case 'SystemAdmin':
+      return { label: 'System Admin', className: styles.roleSystemAdmin }
+    default:
+      return { label: 'User', className: styles.roleUser }
   }
 }
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const payload  = getTokenPayload()
+  const { tenantId: routeTenantId } = useParams<{ tenantId?: string }>()
+  const payload = getTokenPayload()
 
-  // ProtectedRoute guarantees a valid token exists before we render.
-  // If payload decoding fails for any reason, log out defensively.
   if (!payload) {
     clearToken()
     navigate('/', { replace: true })
@@ -52,7 +50,11 @@ export function DashboardPage() {
 
   const { name, email, role } = payload
   const badge = roleBadgeLabel(role)
-  // ── My active queues ──────────────────────────────────────────────────
+
+  const [activeTab, setActiveTab] = useState<DashboardTab>('home')
+  const [showShortcutToast, setShowShortcutToast] = useState(false)
+  const hasShownShortcutToast = useRef(false)
+
   const [queues, setQueues] = useState<MyQueueEntry[]>([])
   const [queuesLoading, setQueuesLoading] = useState(true)
   const [queuesError, setQueuesError] = useState<string | null>(null)
@@ -63,15 +65,103 @@ export function DashboardPage() {
   const [appointmentsSuccess, setAppointmentsSuccess] = useState<string | null>(null)
   const [cancellingAppointmentId, setCancellingAppointmentId] = useState<string | null>(null)
 
+  const [queueNotificationsEnabled, setQueueNotificationsEnabled] = useState(true)
+  const [notificationsLoading, setNotificationsLoading] = useState(true)
+  const [notificationsSaving, setNotificationsSaving] = useState(false)
+  const [notificationsMessage, setNotificationsMessage] = useState<string | null>(null)
+  const [notificationsError, setNotificationsError] = useState<string | null>(null)
+
+  const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([])
+  const [inAppNotificationsLoading, setInAppNotificationsLoading] = useState(true)
+  const [inAppNotificationsError, setInAppNotificationsError] = useState<string | null>(null)
+  const [markingAllRead, setMarkingAllRead] = useState(false)
+  const [markingSingleReadId, setMarkingSingleReadId] = useState<string | null>(null)
+
+  const [appointmentNotificationsLoading, setAppointmentNotificationsLoading] = useState(true)
+  const [appointmentNotificationsSaving, setAppointmentNotificationsSaving] = useState(false)
+  const [appointmentNotificationsMessage, setAppointmentNotificationsMessage] = useState<string | null>(null)
+  const [appointmentNotificationsError, setAppointmentNotificationsError] = useState<string | null>(null)
+  const [appointmentBookedNotificationsEnabled, setAppointmentBookedNotificationsEnabled] = useState(true)
+  const [appointmentRescheduledNotificationsEnabled, setAppointmentRescheduledNotificationsEnabled] = useState(true)
+  const [appointmentCancelledNotificationsEnabled, setAppointmentCancelledNotificationsEnabled] = useState(true)
+
+  const [linkInput, setLinkInput] = useState('')
+  const [linkError, setLinkError] = useState<string | null>(null)
+
+  const [appointmentLinkInput, setAppointmentLinkInput] = useState('')
+  const [appointmentLinkError, setAppointmentLinkError] = useState<string | null>(null)
+
+  const tenantId = routeTenantId ?? (payload.tid === '00000000-0000-0000-0000-000000000000' ? undefined : payload.tid)
+  const onboarding = useOnboardingTour(`citizen:${payload.sub}:${tenantId ?? 'global'}`)
+
   useEffect(() => {
     getMyQueues()
-      .then(data => { setQueues(data); setQueuesLoading(false) })
-      .catch(() => { setQueuesError('Could not load your queues.'); setQueuesLoading(false) })
+      .then(data => {
+        setQueues(data)
+        setQueuesLoading(false)
+      })
+      .catch(() => {
+        setQueuesError('Could not load your queues.')
+        setQueuesLoading(false)
+      })
 
     getMyAppointmentBookings()
-      .then(data => { setAppointments(data); setAppointmentsLoading(false) })
-      .catch(() => { setAppointmentsError('Could not load your appointment bookings.'); setAppointmentsLoading(false) })
-  }, [])
+      .then(data => {
+        setAppointments(data)
+        setAppointmentsLoading(false)
+      })
+      .catch(() => {
+        setAppointmentsError('Could not load your appointment bookings.')
+        setAppointmentsLoading(false)
+      })
+
+    getQueueNotificationPreference(tenantId)
+      .then(data => {
+        setQueueNotificationsEnabled(data.queueTurnApproachingNotificationsEnabled)
+        setNotificationsLoading(false)
+      })
+      .catch(() => {
+        setNotificationsError('Could not load your queue notification setting.')
+        setNotificationsLoading(false)
+      })
+
+    getAppointmentNotificationPreferences(tenantId)
+      .then(data => {
+        setAppointmentBookedNotificationsEnabled(data.appointmentBookedNotificationsEnabled)
+        setAppointmentRescheduledNotificationsEnabled(data.appointmentRescheduledNotificationsEnabled)
+        setAppointmentCancelledNotificationsEnabled(data.appointmentCancelledNotificationsEnabled)
+        setAppointmentNotificationsLoading(false)
+      })
+      .catch(() => {
+        setAppointmentNotificationsError('Could not load your appointment notification settings.')
+        setAppointmentNotificationsLoading(false)
+      })
+
+    listMyNotifications(25, tenantId)
+      .then(data => {
+        setInAppNotifications(data)
+        setInAppNotificationsLoading(false)
+      })
+      .catch(() => {
+        setInAppNotificationsError('Could not load in-app notifications.')
+        setInAppNotificationsLoading(false)
+      })
+  }, [tenantId])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      listMyNotifications(25, tenantId)
+        .then(data => {
+          setInAppNotifications(data)
+          setInAppNotificationsError(null)
+        })
+        .catch(() => {
+          setInAppNotificationsError('Could not refresh in-app notifications.')
+        })
+    }, 30000)
+
+    return () => window.clearInterval(timer)
+  }, [tenantId])
 
   useEffect(() => {
     if (!appointmentsSuccess) return
@@ -83,35 +173,25 @@ export function DashboardPage() {
     return () => window.clearTimeout(timer)
   }, [appointmentsSuccess])
 
-  // ── Join by link ─────────────────────────────────────────────────────
-  const [linkInput, setLinkInput] = useState('')
-  const [linkError, setLinkError] = useState<string | null>(null)
-
-  const [appointmentLinkInput, setAppointmentLinkInput] = useState('')
-  const [appointmentLinkError, setAppointmentLinkError] = useState<string | null>(null)
-
   function handleJoinByLink() {
     setLinkError(null)
     try {
-      // Accept full URLs or just the path segment /queues/:tenantId/:queueId
       const url = new URL(linkInput.includes('://') ? linkInput : `https://x.com${linkInput}`)
       const match = url.pathname.match(/\/queues\/([^/]+)\/([^/]+)/)
       if (!match) throw new Error('invalid')
       const [, linkTenant, linkQueue] = match
       navigate(`/queues/${linkTenant}/${linkQueue}`)
     } catch {
-      setLinkError('Invalid queue link. Paste the full URL or the /queues/… path.')
+      setLinkError('Invalid queue link. Paste the full URL or the /queues/... path.')
     }
   }
 
   function handleOpenAppointmentByLink() {
     setAppointmentLinkError(null)
     try {
-      // Accept full URLs or just /appointments/:tenantId/:appointmentProfileId path.
       const url = new URL(appointmentLinkInput.includes('://') ? appointmentLinkInput : `https://x.com${appointmentLinkInput}`)
       const match = url.pathname.match(/\/appointments\/([^/]+)\/([^/]+)/)
       if (!match) throw new Error('invalid')
-
       const [, linkTenant, linkProfile] = match
       navigate(`/appointments/${linkTenant}/${linkProfile}`)
     } catch {
@@ -122,6 +202,66 @@ export function DashboardPage() {
   function handleLogout() {
     clearToken()
     navigate('/', { replace: true })
+  }
+
+  async function handleSaveNotificationPreference() {
+    setNotificationsError(null)
+    setNotificationsMessage(null)
+    setNotificationsSaving(true)
+
+    try {
+      await updateQueueNotificationPreference(tenantId, queueNotificationsEnabled)
+      setNotificationsMessage('Queue notification preference saved.')
+    } catch (err) {
+      const apiErr = err as ApiError
+      setNotificationsError(apiErr.detail ?? 'Could not save queue notification setting.')
+    } finally {
+      setNotificationsSaving(false)
+    }
+  }
+
+  async function handleSaveAppointmentNotificationPreferences() {
+    setAppointmentNotificationsError(null)
+    setAppointmentNotificationsMessage(null)
+    setAppointmentNotificationsSaving(true)
+
+    try {
+      await updateAppointmentNotificationPreferences(tenantId, {
+        appointmentBookedNotificationsEnabled,
+        appointmentRescheduledNotificationsEnabled,
+        appointmentCancelledNotificationsEnabled,
+      })
+      setAppointmentNotificationsMessage('Appointment notification preferences saved.')
+    } catch (err) {
+      const apiErr = err as ApiError
+      setAppointmentNotificationsError(apiErr.detail ?? 'Could not save appointment notification settings.')
+    } finally {
+      setAppointmentNotificationsSaving(false)
+    }
+  }
+
+  async function handleMarkNotificationRead(notificationId: string) {
+    setMarkingSingleReadId(notificationId)
+    try {
+      await markNotificationRead(notificationId, tenantId)
+      setInAppNotifications(prev => prev.map(n => (n.notificationId === notificationId ? { ...n, isRead: true } : n)))
+    } catch {
+      setInAppNotificationsError('Could not mark notification as read.')
+    } finally {
+      setMarkingSingleReadId(null)
+    }
+  }
+
+  async function handleMarkAllNotificationsRead() {
+    setMarkingAllRead(true)
+    try {
+      await markAllNotificationsRead(tenantId)
+      setInAppNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+    } catch {
+      setInAppNotificationsError('Could not mark all notifications as read.')
+    } finally {
+      setMarkingAllRead(false)
+    }
   }
 
   async function handleCancelAppointment(appointment: MyAppointmentBooking) {
@@ -144,9 +284,48 @@ export function DashboardPage() {
     }
   }
 
+  const unreadNotificationsCount = inAppNotifications.filter(n => !n.isRead).length
+  const sidebarNavStyle = { '--active-index': tabToIndex(activeTab) } as CSSProperties
+
+  useEffect(() => {
+    function handleTabShortcuts(event: KeyboardEvent) {
+      if (event.defaultPrevented || isTypingTarget(event.target)) {
+        return
+      }
+
+      const key = event.key.toLowerCase()
+      const nextTab = keyToDashboardTab(key)
+      if (!nextTab) {
+        return
+      }
+
+      event.preventDefault()
+      setActiveTab(nextTab)
+
+      if (!hasShownShortcutToast.current) {
+        hasShownShortcutToast.current = true
+        setShowShortcutToast(true)
+      }
+    }
+
+    window.addEventListener('keydown', handleTabShortcuts)
+    return () => window.removeEventListener('keydown', handleTabShortcuts)
+  }, [])
+
+  useEffect(() => {
+    if (!showShortcutToast) {
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setShowShortcutToast(false)
+    }, 2600)
+
+    return () => window.clearTimeout(timer)
+  }, [showShortcutToast])
+
   return (
     <div className={styles.page}>
-      {/* ── Top nav ─────────────────────────────────────────────── */}
       <header className={styles.navbar}>
         <div className={styles.navInner}>
           <div className={styles.navBrand}>
@@ -161,12 +340,7 @@ export function DashboardPage() {
               <span className={styles.userName}>{name}</span>
               <span className={`${styles.roleBadge} ${badge.className}`}>{badge.label}</span>
             </div>
-            <button
-              className={styles.logoutBtn}
-              onClick={handleLogout}
-              type="button"
-              aria-label="Sign out"
-            >
+            <button className={styles.logoutBtn} onClick={handleLogout} type="button" aria-label="Sign out">
               <LogoutIcon />
               <span>Sign out</span>
             </button>
@@ -174,194 +348,621 @@ export function DashboardPage() {
         </div>
       </header>
 
-      {/* ── Main content ────────────────────────────────────────── */}
       <main className={styles.main}>
-        <div className={styles.contentInner}>
-
-          {/* Welcome banner */}
-          <div className={styles.welcome}>
-            <div>
-              <h1 className={styles.welcomeHeading}>Welcome back, {name.split(' ')[0]}!</h1>
-              <p className={styles.welcomeSub}>{email}</p>
-            </div>
-          </div>
-
-          {/* ── My active queues ─────────────────────────────────── */}
-          <section className={styles.queueSection} aria-label="My active queues">
-            <div className={styles.sectionHeader}>
-              <QueueIcon />
-              <h2 className={styles.sectionTitle}>My Active Queues</h2>
+        <div className={styles.workspace}>
+          <aside className={styles.sidebar} aria-label="Dashboard navigation" data-onboarding="citizen-sidebar">
+            <div className={styles.sidebarHeader}>
+              <p className={styles.sidebarTitle}>Dashboard</p>
+              <p className={styles.sidebarSubtitle}>Everything in one place</p>
             </div>
 
-            {queuesLoading && (
-              <div className={styles.queuePlaceholder}>
-                <span className={styles.queueSpinner} aria-hidden="true" />
-                <span>Loading queues…</span>
+            <nav className={styles.sidebarNav} style={sidebarNavStyle}>
+              <span className={styles.navIndicator} aria-hidden="true" />
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'home' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('home')}
+                aria-keyshortcuts="1 h"
+              >
+                <HomeIcon />
+                <span>Home</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'queues' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('queues')}
+                aria-keyshortcuts="2 q"
+                data-onboarding="citizen-queues-tab"
+              >
+                <QueueIcon />
+                <span>Queues</span>
+                <span className={styles.navCount}>{queues.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'appointments' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('appointments')}
+                aria-keyshortcuts="3 a"
+                data-onboarding="citizen-appointments-tab"
+              >
+                <CalendarIcon />
+                <span>Appointments</span>
+                <span className={styles.navCount}>{appointments.length}</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'notifications' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('notifications')}
+                aria-keyshortcuts="4 n"
+                data-onboarding="citizen-notifications-tab"
+              >
+                <BellIcon />
+                <span>Notifications</span>
+                <span className={styles.navCount}>{unreadNotificationsCount}</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'profile' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('profile')}
+                aria-keyshortcuts="5 p"
+              >
+                <UserIcon />
+                <span>Profile</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.navItem} ${activeTab === 'settings' ? styles.navItemActive : ''}`}
+                onClick={() => setActiveTab('settings')}
+                aria-keyshortcuts="6 s"
+                data-onboarding="citizen-settings-tab"
+              >
+                <CogIcon />
+                <span>Settings</span>
+              </button>
+            </nav>
+
+            <p className={styles.shortcutHint}>Shortcuts: 1/2/3/4/5/6 or H/Q/A/N/P/S</p>
+          </aside>
+
+          <div className={styles.contentInner}>
+            <div className={styles.welcome}>
+              <div>
+                <h1 className={styles.welcomeHeading}>Welcome back, {name.split(' ')[0]}!</h1>
+                <p className={styles.welcomeSub}>{email}</p>
               </div>
-            )}
 
-            {!queuesLoading && queuesError && (
-              <p className={styles.queueError}>{queuesError}</p>
-            )}
+              <div className={styles.activeTabBadge}>
+                {activeTab === 'home' && 'Home'}
+                {activeTab === 'queues' && 'Queues'}
+                {activeTab === 'appointments' && 'Appointments'}
+                {activeTab === 'notifications' && 'Notifications'}
+                {activeTab === 'profile' && 'Profile'}
+                {activeTab === 'settings' && 'Settings'}
+              </div>
+            </div>
 
-            {!queuesLoading && !queuesError && queues.length === 0 && (
-              <p className={styles.queueEmpty}>You haven't joined any queues yet.</p>
-            )}
+            <div key={activeTab} className={styles.tabPanel}>
+              {activeTab === 'home' && (
+                <>
+                <section className={styles.quickStats} aria-label="Quick overview">
+                  <article className={styles.statCard}>
+                    <p className={styles.statLabel}>Active queues</p>
+                    <p className={styles.statValue}>{queues.length}</p>
+                  </article>
+                  <article className={styles.statCard}>
+                    <p className={styles.statLabel}>Active appointments</p>
+                    <p className={styles.statValue}>{appointments.length}</p>
+                  </article>
+                  <article className={styles.statCard}>
+                    <p className={styles.statLabel}>Unread notifications</p>
+                    <p className={styles.statValue}>{unreadNotificationsCount}</p>
+                  </article>
+                </section>
 
-            {!queuesLoading && queues.length > 0 && (
-              <ul className={styles.queueList}>
-                {queues.map(q => (
-                  <li key={q.queueId} className={styles.queueCard}>
-                    <div className={styles.queueCardInfo}>
-                      <span className={styles.queueCardName}>{q.queueName}</span>
-                      <QueueStatusBadge status={q.queueStatus} />
-                      <span className={styles.ticketChip}>#{q.ticketNumber}</span>
-                    </div>
-                    <Link
-                      to={`/queues/${q.organisationId}/${q.queueId}`}
-                      className={styles.queueJoinLink}
-                      aria-label={`View queue ${q.queueName}`}
+                <section className={styles.joinWidget} aria-label="Join a queue by link" data-onboarding="citizen-queue-link">
+                  <div className={styles.sectionHeader}>
+                    <LinkIcon />
+                    <h2 className={styles.sectionTitle}>Join Queue by Link</h2>
+                  </div>
+                  <p className={styles.joinWidgetDesc}>Paste a queue URL to jump in immediately.</p>
+                  <div className={styles.joinWidgetRow}>
+                    <input
+                      className={styles.joinWidgetInput}
+                      type="text"
+                      placeholder="https://... or /queues/tenant/queue"
+                      value={linkInput}
+                      onChange={e => {
+                        setLinkInput(e.target.value)
+                        setLinkError(null)
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && handleJoinByLink()}
+                      aria-label="Queue link"
+                    />
+                    <button className={styles.joinWidgetBtn} onClick={handleJoinByLink} type="button" disabled={!linkInput.trim()}>
+                      Open
+                    </button>
+                  </div>
+                  {linkError && <p className={styles.joinWidgetError}>{linkError}</p>}
+                </section>
+
+                <section className={styles.joinWidget} aria-label="Open appointment booking by link">
+                  <div className={styles.sectionHeader}>
+                    <CalendarIcon />
+                    <h2 className={styles.sectionTitle}>Open Appointment by Link</h2>
+                  </div>
+                  <p className={styles.joinWidgetDesc}>Paste an appointment booking URL to continue quickly.</p>
+                  <div className={styles.joinWidgetRow}>
+                    <input
+                      className={styles.joinWidgetInput}
+                      type="text"
+                      placeholder="https://... or /appointments/tenant/profile"
+                      value={appointmentLinkInput}
+                      onChange={e => {
+                        setAppointmentLinkInput(e.target.value)
+                        setAppointmentLinkError(null)
+                      }}
+                      onKeyDown={e => e.key === 'Enter' && handleOpenAppointmentByLink()}
+                      aria-label="Appointment link"
+                    />
+                    <button
+                      className={styles.joinWidgetBtn}
+                      onClick={handleOpenAppointmentByLink}
+                      type="button"
+                      disabled={!appointmentLinkInput.trim()}
                     >
-                      View &rarr;
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+                      Open
+                    </button>
+                  </div>
+                  {appointmentLinkError && <p className={styles.joinWidgetError}>{appointmentLinkError}</p>}
+                </section>
+                </>
+              )}
 
-          <section className={styles.queueSection} aria-label="My active appointment bookings">
-            <div className={styles.sectionHeader}>
-              <CalendarIcon />
-              <h2 className={styles.sectionTitle}>My Active Appointment Bookings</h2>
-            </div>
+              {activeTab === 'queues' && (
+                <section className={styles.queueSection} aria-label="My active queues" data-onboarding="citizen-queues-list">
+                <div className={styles.sectionHeader}>
+                  <QueueIcon />
+                  <h2 className={styles.sectionTitle}>My Active Queues</h2>
+                </div>
 
-            {appointmentsLoading && (
-              <div className={styles.queuePlaceholder}>
-                <span className={styles.queueSpinner} aria-hidden="true" />
-                <span>Loading bookings…</span>
-              </div>
-            )}
+                {queuesLoading && (
+                  <div className={styles.queuePlaceholder}>
+                    <span className={styles.queueSpinner} aria-hidden="true" />
+                    <span>Loading queues...</span>
+                  </div>
+                )}
 
-            {!appointmentsLoading && appointmentsError && (
-              <p className={styles.queueError}>{appointmentsError}</p>
-            )}
+                {!queuesLoading && queuesError && <p className={styles.queueError}>{queuesError}</p>}
 
-            {!appointmentsLoading && !appointmentsError && appointmentsSuccess && (
-              <p className={styles.queueSuccess}>{appointmentsSuccess}</p>
-            )}
+                {!queuesLoading && !queuesError && queues.length === 0 && (
+                  <p className={styles.queueEmpty}>You haven't joined any queues yet.</p>
+                )}
 
-            {!appointmentsLoading && !appointmentsError && appointments.length === 0 && (
-              <p className={styles.queueEmpty}>You don't have any active appointment bookings yet.</p>
-            )}
+                {!queuesLoading && queues.length > 0 && (
+                  <ul className={styles.queueList}>
+                    {queues.map(q => (
+                      <li key={q.queueId} className={styles.queueCard}>
+                        <div className={styles.queueCardInfo}>
+                          <span className={styles.queueCardName}>{q.queueName}</span>
+                          <QueueStatusBadge status={q.queueStatus} />
+                          <span className={styles.ticketChip}>#{q.ticketNumber}</span>
+                        </div>
+                        <Link to={`/queues/${q.organisationId}/${q.queueId}`} className={styles.queueJoinLink}>
+                          View &rarr;
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                </section>
+              )}
 
-            {!appointmentsLoading && appointments.length > 0 && (
-              <ul className={styles.queueList}>
-                {appointments.map(a => (
-                  <li key={a.appointmentId} className={styles.appointmentCard}>
-                    <div className={styles.appointmentInfo}>
-                      <span className={styles.queueCardName}>{a.appointmentProfileName}</span>
-                      <span className={styles.appointmentMeta}>{a.organisationName}</span>
-                      <span className={styles.appointmentMeta}>
-                        {formatDashboardSlot(a.slotStart, a.slotEnd)}
-                      </span>
+              {activeTab === 'appointments' && (
+                <section className={styles.queueSection} aria-label="My active appointment bookings" data-onboarding="citizen-appointments-list">
+                <div className={styles.sectionHeader}>
+                  <CalendarIcon />
+                  <h2 className={styles.sectionTitle}>My Active Appointment Bookings</h2>
+                </div>
+
+                {appointmentsLoading && (
+                  <div className={styles.queuePlaceholder}>
+                    <span className={styles.queueSpinner} aria-hidden="true" />
+                    <span>Loading bookings...</span>
+                  </div>
+                )}
+
+                {!appointmentsLoading && appointmentsError && <p className={styles.queueError}>{appointmentsError}</p>}
+
+                {!appointmentsLoading && !appointmentsError && appointmentsSuccess && (
+                  <p className={styles.queueSuccess}>{appointmentsSuccess}</p>
+                )}
+
+                {!appointmentsLoading && !appointmentsError && appointments.length === 0 && (
+                  <p className={styles.queueEmpty}>You don't have any active appointment bookings yet.</p>
+                )}
+
+                {!appointmentsLoading && appointments.length > 0 && (
+                  <ul className={styles.queueList}>
+                    {appointments.map(a => (
+                      <li key={a.appointmentId} className={styles.appointmentCard}>
+                        <div className={styles.appointmentInfo}>
+                          <span className={styles.queueCardName}>{a.appointmentProfileName}</span>
+                          <span className={styles.appointmentMeta}>{a.organisationName}</span>
+                          <span className={styles.appointmentMeta}>{formatDashboardSlot(a.slotStart, a.slotEnd)}</span>
+                        </div>
+
+                        <div className={styles.appointmentActions}>
+                          <Link to={`/appointments/${a.organisationId}/${a.appointmentProfileId}`} className={styles.queueJoinLink}>
+                            View &rarr;
+                          </Link>
+                          <button
+                            type="button"
+                            className={styles.appointmentCancelBtn}
+                            onClick={() => handleCancelAppointment(a)}
+                            disabled={cancellingAppointmentId === a.appointmentId}
+                          >
+                            {cancellingAppointmentId === a.appointmentId ? 'Cancelling...' : 'Cancel'}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                </section>
+              )}
+
+              {activeTab === 'notifications' && (
+                <>
+                <section className={styles.settingsSection} aria-label="In-app notifications" data-onboarding="citizen-inapp-notifications">
+                  <div className={styles.sectionHeaderRow}>
+                    <div className={styles.sectionHeader}>
+                      <BellIcon />
+                      <h2 className={styles.sectionTitle}>In-App Notifications</h2>
                     </div>
 
-                    <div className={styles.appointmentActions}>
-                      <Link
-                        to={`/appointments/${a.organisationId}/${a.appointmentProfileId}`}
-                        className={styles.queueJoinLink}
-                        aria-label={`View appointment booking ${a.appointmentProfileName}`}
-                      >
-                        View &rarr;
-                      </Link>
+                    <button
+                      type="button"
+                      className={styles.settingsSaveBtn}
+                      onClick={handleMarkAllNotificationsRead}
+                      disabled={markingAllRead || inAppNotifications.length === 0}
+                    >
+                      {markingAllRead ? 'Marking...' : 'Mark all as read'}
+                    </button>
+                  </div>
+
+                  {inAppNotificationsLoading && <p className={styles.queueEmpty}>Loading notifications...</p>}
+                  {!inAppNotificationsLoading && inAppNotificationsError && (
+                    <p className={styles.queueError}>{inAppNotificationsError}</p>
+                  )}
+                  {!inAppNotificationsLoading && !inAppNotificationsError && inAppNotifications.length === 0 && (
+                    <p className={styles.queueEmpty}>No notifications yet.</p>
+                  )}
+
+                  {!inAppNotificationsLoading && inAppNotifications.length > 0 && (
+                    <ul className={styles.notificationsList}>
+                      {inAppNotifications.map(notification => (
+                        <li
+                          key={notification.notificationId}
+                          className={`${styles.notificationCard} ${notification.isRead ? styles.notificationRead : styles.notificationUnread}`}
+                        >
+                          <div className={styles.notificationBody}>
+                            <p className={styles.notificationTitle}>{notification.title}</p>
+                            <p className={styles.notificationMessage}>{notification.message}</p>
+                            <span className={styles.notificationTime}>{formatRelativeTime(notification.createdAt)}</span>
+                          </div>
+
+                          {!notification.isRead && (
+                            <button
+                              type="button"
+                              className={styles.notificationReadBtn}
+                              onClick={() => handleMarkNotificationRead(notification.notificationId)}
+                              disabled={markingSingleReadId === notification.notificationId}
+                            >
+                              {markingSingleReadId === notification.notificationId ? 'Saving...' : 'Mark read'}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+
+                <section className={styles.settingsSection} aria-label="Queue notification settings">
+                  <div className={styles.sectionHeader}>
+                    <BellIcon />
+                    <h2 className={styles.sectionTitle}>Queue Notification Settings</h2>
+                  </div>
+
+                  {notificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!notificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={queueNotificationsEnabled}
+                          onChange={e => {
+                            setQueueNotificationsEnabled(e.target.checked)
+                            setNotificationsMessage(null)
+                            setNotificationsError(null)
+                          }}
+                        />
+                        <span>Notify me by email when my queue turn is approaching.</span>
+                      </label>
+
                       <button
                         type="button"
-                        className={styles.appointmentCancelBtn}
-                        onClick={() => handleCancelAppointment(a)}
-                        disabled={cancellingAppointmentId === a.appointmentId}
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveNotificationPreference}
+                        disabled={notificationsSaving}
                       >
-                        {cancellingAppointmentId === a.appointmentId ? 'Cancelling...' : 'Cancel'}
+                        {notificationsSaving ? 'Saving...' : 'Save preference'}
                       </button>
+
+                      {notificationsMessage && <p className={styles.queueSuccess}>{notificationsMessage}</p>}
+                      {notificationsError && <p className={styles.queueError}>{notificationsError}</p>}
+                    </>
+                  )}
+                </section>
+
+                <section className={styles.settingsSection} aria-label="Appointment notification settings">
+                  <div className={styles.sectionHeader}>
+                    <CalendarIcon />
+                    <h2 className={styles.sectionTitle}>Appointment Notification Settings</h2>
+                  </div>
+
+                  {appointmentNotificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!appointmentNotificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentBookedNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentBookedNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me booking confirmations.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentRescheduledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentRescheduledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are rescheduled.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentCancelledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentCancelledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are cancelled.</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveAppointmentNotificationPreferences}
+                        disabled={appointmentNotificationsSaving}
+                      >
+                        {appointmentNotificationsSaving ? 'Saving...' : 'Save preferences'}
+                      </button>
+
+                      {appointmentNotificationsMessage && <p className={styles.queueSuccess}>{appointmentNotificationsMessage}</p>}
+                      {appointmentNotificationsError && <p className={styles.queueError}>{appointmentNotificationsError}</p>}
+                    </>
+                  )}
+                </section>
+
+                </>
+              )}
+
+              {activeTab === 'profile' && (
+                <section className={styles.settingsSection} aria-label="User profile details">
+                  <div className={styles.sectionHeader}>
+                    <UserIcon />
+                    <h2 className={styles.sectionTitle}>Profile</h2>
+                  </div>
+                  <p className={styles.queueEmpty}>Name: <strong>{name}</strong></p>
+                  <p className={styles.queueEmpty}>Email: <strong>{email}</strong></p>
+                  <p className={styles.queueEmpty}>Role: <strong>{role}</strong></p>
+
+                  <div className={styles.authCard} role="note">
+                    <CheckCircleIcon />
+                    <div>
+                      <p className={styles.authCardTitle}>You're signed in securely</p>
+                      <p className={styles.authCardBody}>Use the left sidebar to switch between features.</p>
                     </div>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                </section>
+              )}
+
+              {activeTab === 'settings' && (
+                <>
+                <section className={styles.settingsSection} aria-label="Queue notification settings" data-onboarding="citizen-queue-settings">
+                  <div className={styles.sectionHeader}>
+                    <BellIcon />
+                    <h2 className={styles.sectionTitle}>Queue Notification Settings</h2>
+                  </div>
+
+                  {notificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!notificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={queueNotificationsEnabled}
+                          onChange={e => {
+                            setQueueNotificationsEnabled(e.target.checked)
+                            setNotificationsMessage(null)
+                            setNotificationsError(null)
+                          }}
+                        />
+                        <span>Notify me by email when my queue turn is approaching.</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveNotificationPreference}
+                        disabled={notificationsSaving}
+                      >
+                        {notificationsSaving ? 'Saving...' : 'Save preference'}
+                      </button>
+
+                      {notificationsMessage && <p className={styles.queueSuccess}>{notificationsMessage}</p>}
+                      {notificationsError && <p className={styles.queueError}>{notificationsError}</p>}
+                    </>
+                  )}
+                </section>
+
+                <section className={styles.settingsSection} aria-label="Appointment notification settings" data-onboarding="citizen-appointment-settings">
+                  <div className={styles.sectionHeader}>
+                    <CalendarIcon />
+                    <h2 className={styles.sectionTitle}>Appointment Notification Settings</h2>
+                  </div>
+
+                  {appointmentNotificationsLoading && <p className={styles.queueEmpty}>Loading settings...</p>}
+
+                  {!appointmentNotificationsLoading && (
+                    <>
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentBookedNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentBookedNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me booking confirmations.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentRescheduledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentRescheduledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are rescheduled.</span>
+                      </label>
+
+                      <label className={styles.settingsToggle}>
+                        <input
+                          type="checkbox"
+                          checked={appointmentCancelledNotificationsEnabled}
+                          onChange={e => {
+                            setAppointmentCancelledNotificationsEnabled(e.target.checked)
+                            setAppointmentNotificationsMessage(null)
+                            setAppointmentNotificationsError(null)
+                          }}
+                        />
+                        <span>Email me when appointments are cancelled.</span>
+                      </label>
+
+                      <button
+                        type="button"
+                        className={styles.settingsSaveBtn}
+                        onClick={handleSaveAppointmentNotificationPreferences}
+                        disabled={appointmentNotificationsSaving}
+                      >
+                        {appointmentNotificationsSaving ? 'Saving...' : 'Save preferences'}
+                      </button>
+
+                      {appointmentNotificationsMessage && <p className={styles.queueSuccess}>{appointmentNotificationsMessage}</p>}
+                      {appointmentNotificationsError && <p className={styles.queueError}>{appointmentNotificationsError}</p>}
+                    </>
+                  )}
+                </section>
+
+                <section className={styles.settingsSection} aria-label="Profile and onboarding settings" data-onboarding="citizen-settings">
+                  <div className={styles.sectionHeader}>
+                    <CheckCircleIcon />
+                    <h2 className={styles.sectionTitle}>Profile and Onboarding</h2>
+                  </div>
+                  <p className={styles.queueEmpty}>Need a refresher? Replay the guided tour at any time.</p>
+                  <button
+                    type="button"
+                    className={styles.settingsSaveBtn}
+                    onClick={onboarding.restartTour}
+                  >
+                    Restart onboarding tour
+                  </button>
+                </section>
+                </>
+              )}
+            </div>
+
+            {showShortcutToast && (
+              <div className={styles.shortcutToast} role="status" aria-live="polite">
+                Tip: Use 1/2/3/4/5/6 or H/Q/A/N/P/S to switch tabs faster.
+              </div>
             )}
-          </section>
 
-          {/* ── Join by link ─────────────────────────────────────────── */}
-          <section className={styles.joinWidget} aria-label="Join a queue by link">
-            <div className={styles.sectionHeader}>
-              <LinkIcon />
-              <h2 className={styles.sectionTitle}>Join by Link</h2>
-            </div>
-            <p className={styles.joinWidgetDesc}>Have a queue URL? Paste it below to jump straight in.</p>
-            <div className={styles.joinWidgetRow}>
-              <input
-                className={styles.joinWidgetInput}
-                type="text"
-                placeholder="https://… or /queues/tenant/queue"
-                value={linkInput}
-                onChange={e => { setLinkInput(e.target.value); setLinkError(null) }}
-                onKeyDown={e => e.key === 'Enter' && handleJoinByLink()}
-                aria-label="Queue link"
-              />
-              <button
-                className={styles.joinWidgetBtn}
-                onClick={handleJoinByLink}
-                type="button"
-                disabled={!linkInput.trim()}
-              >
-                Go
-              </button>
-            </div>
-            {linkError && <p className={styles.joinWidgetError}>{linkError}</p>}
-          </section>
-
-          <section className={styles.joinWidget} aria-label="Open appointment booking by link">
-            <div className={styles.sectionHeader}>
-              <CalendarIcon />
-              <h2 className={styles.sectionTitle}>Open Appointment by Link</h2>
-            </div>
-            <p className={styles.joinWidgetDesc}>Have an appointment booking URL? Paste it here.</p>
-            <div className={styles.joinWidgetRow}>
-              <input
-                className={styles.joinWidgetInput}
-                type="text"
-                placeholder="https://… or /appointments/tenant/profile"
-                value={appointmentLinkInput}
-                onChange={e => { setAppointmentLinkInput(e.target.value); setAppointmentLinkError(null) }}
-                onKeyDown={e => e.key === 'Enter' && handleOpenAppointmentByLink()}
-                aria-label="Appointment link"
-              />
-              <button
-                className={styles.joinWidgetBtn}
-                onClick={handleOpenAppointmentByLink}
-                type="button"
-                disabled={!appointmentLinkInput.trim()}
-              >
-                Go
-              </button>
-            </div>
-            {appointmentLinkError && <p className={styles.joinWidgetError}>{appointmentLinkError}</p>}
-          </section>
-
-          {/* Auth flow confirmation — useful during demo / grading */}
-          <div className={styles.authCard} role="note">
-            <CheckCircleIcon />
-            <div>
-              <p className={styles.authCardTitle}>Authentication successful</p>
-              <p className={styles.authCardBody}>
-                JWT verified · Role: <strong>{role}</strong> · Token stored in localStorage
-              </p>
-            </div>
+            <OnboardingTour
+              isOpen={onboarding.isOpen}
+              title="Quick tour: citizen dashboard"
+              steps={ROLE_TOUR_CONTENT.citizen}
+              onClose={onboarding.completeTour}
+            />
           </div>
-
         </div>
       </main>
     </div>
   )
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  const tagName = target.tagName.toLowerCase()
+  if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+    return true
+  }
+
+  return target.isContentEditable
+}
+
+function keyToDashboardTab(key: string): DashboardTab | null {
+  if (key === '1' || key === 'h') return 'home'
+  if (key === '2' || key === 'q') return 'queues'
+  if (key === '3' || key === 'a') return 'appointments'
+  if (key === '4' || key === 'n') return 'notifications'
+  if (key === '5' || key === 'p') return 'profile'
+  if (key === '6' || key === 's') return 'settings'
+  return null
+}
+
+function tabToIndex(tab: DashboardTab): number {
+  if (tab === 'home') return 0
+  if (tab === 'queues') return 1
+  if (tab === 'appointments') return 2
+  if (tab === 'notifications') return 3
+  if (tab === 'profile') return 4
+  return 5
 }
 
 function formatDashboardSlot(slotStart: string, slotEnd: string): string {
@@ -372,77 +973,130 @@ function formatDashboardSlot(slotStart: string, slotEnd: string): string {
   const from = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const to = end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
-  return `${date} · ${from} - ${to}`
+  return `${date} - ${from} to ${to}`
 }
 
-/* ------------------------------------------------------------------ */
-/* Queue status badge                                                   */
-/* ------------------------------------------------------------------ */
+function formatRelativeTime(input: string): string {
+  const value = new Date(input).getTime()
+  const now = Date.now()
+  const diffMs = now - value
+
+  const minutes = Math.floor(diffMs / 60000)
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 function QueueStatusBadge({ status }: { status: string }) {
   const cls =
-    status === 'Active'  ? styles.queueStatusActive :
-    status === 'Paused'  ? styles.queueStatusPaused :
-                           styles.queueStatusClosed
+    status === 'Active'
+      ? styles.queueStatusActive
+      : status === 'Paused'
+        ? styles.queueStatusPaused
+        : styles.queueStatusClosed
   return <span className={`${styles.queueStatusBadge} ${cls}`}>{status}</span>
 }
 
-/* ------------------------------------------------------------------ */
-/* SVG icons                                                            */
-/* ------------------------------------------------------------------ */
 function LogoutIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-      <polyline points="16 17 21 12 16 7"/>
-      <line x1="21" y1="12" x2="9" y2="12"/>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  )
+}
+
+function HomeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 10.5 12 3l9 7.5" />
+      <path d="M5 9.5V21h14V9.5" />
+      <path d="M10 21v-6h4v6" />
     </svg>
   )
 }
 
 function QueueIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="8" y1="6" x2="21" y2="6"/>
-      <line x1="8" y1="12" x2="21" y2="12"/>
-      <line x1="8" y1="18" x2="21" y2="18"/>
-      <line x1="3" y1="6" x2="3.01" y2="6"/>
-      <line x1="3" y1="12" x2="3.01" y2="12"/>
-      <line x1="3" y1="18" x2="3.01" y2="18"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" />
+      <line x1="8" y1="12" x2="21" y2="12" />
+      <line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" />
+      <line x1="3" y1="12" x2="3.01" y2="12" />
+      <line x1="3" y1="18" x2="3.01" y2="18" />
     </svg>
   )
 }
 
 function LinkIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
-      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
     </svg>
   )
 }
 
 function CalendarIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   )
 }
 
 function CheckCircleIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={{ flexShrink: 0, color: 'var(--color-primary)' }}>
-      <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-      <polyline points="22 4 12 14.01 9 11.01"/>
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flexShrink: 0, color: 'var(--color-primary)' }}
+    >
+      <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  )
+}
+
+function BellIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 01-3.46 0" />
+    </svg>
+  )
+}
+
+function UserIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21a8 8 0 0 0-16 0" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  )
+}
+
+function CogIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
   )
 }

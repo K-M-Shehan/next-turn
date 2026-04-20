@@ -1,0 +1,3 @@
+namespace NextTurn.Application.Organisation.Queries.GetQueueNotificationThreshold;
+
+public sealed record QueueNotificationThresholdResult(int QueueNotificationThreshold);
