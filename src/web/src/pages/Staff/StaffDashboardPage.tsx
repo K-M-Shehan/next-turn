@@ -30,7 +30,7 @@ export function StaffDashboardPage() {
   const [actionBusy, setActionBusy] = useState<'serve-next' | 'skip' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-  const onboarding = useOnboardingTour(`staff:${payload.sub}:${tenantId ?? 'global'}`)
+  const onboarding = useOnboardingTour(`staff:${payload?.sub ?? 'anonymous'}:${tenantId ?? 'global'}`)
 
   if (!payload) {
     clearToken()
