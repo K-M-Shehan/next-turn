@@ -186,12 +186,6 @@ function defaultEndDate(): string {
   return formatDate(new Date())
 }
 
-function trendClass(value: number): 'up' | 'down' | 'neutral' {
-  if (value > 0) return 'up'
-  if (value < 0) return 'down'
-  return 'neutral'
-}
-
 function renderTrend(trend: DailyQueueMetricTrend): string {
   const day = trend.deltaFromPreviousDay
   const week = trend.deltaFromPreviousWeek
@@ -242,7 +236,7 @@ export function AdminDashboardPage() {
   const [staffAccountsLoading, setStaffAccountsLoading] = useState(false)
   const [staffActionUserId, setStaffActionUserId] = useState<string | null>(null)
   const [staffProfiles, setStaffProfiles] = useState<StaffDto[]>([])
-  const [staffProfilesLoading, setStaffProfilesLoading] = useState(false)
+  const [, setStaffProfilesLoading] = useState(false)
   const [officeOptions, setOfficeOptions] = useState<OfficeDto[]>([])
   const [selectedStaffProfileId, setSelectedStaffProfileId] = useState<string | null>(null)
   const [staffProfileForm, setStaffProfileForm] = useState<StaffProfileForm>(defaultStaffProfileForm)
