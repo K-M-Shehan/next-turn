@@ -29,22 +29,48 @@ jobs:
           dotnet test tests/NextTurn.UnitTests/NextTurn.UnitTests.csproj \
             --configuration Release \
             --no-restore \
+            --settings tests/NextTurn.UnitTests/coverlet.runsettings \
+            --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults/unit \
             --logger "trx;LogFileName=unit-tests.trx"
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Generate unit coverage report
+        if: always()
+        run: |
+          reportgenerator \
+            -reports:"./TestResults/unit/**/coverage.cobertura.xml" \
+            -targetdir:"./coverage/unit/report" \
+            -reporttypes:"Html;Cobertura;Badges;MarkdownSummaryGithub;TextSummary"
+
+      - name: Write unit coverage summary to job summary
+        if: always()
+        run: |
+          if [ -f "./coverage/unit/report/SummaryGithub.md" ]; then
+            echo "### Unit Coverage" >> $GITHUB_STEP_SUMMARY
+            cat ./coverage/unit/report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Unit Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "- Coverage summary unavailable" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload unit test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-results
-          path: ./TestResults/unit
+          path: |
+            ./TestResults/unit
+            ./coverage/unit/report
 
       - name: Unit summary
         if: always()
         run: |
           echo "### Unit Tests" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifact: unit-test-results" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: unit-test-results (TRX + coverage HTML/Cobertura/Badges)" >> $GITHUB_STEP_SUMMARY
 
   critical-integration-tests:
     name: Critical Integration Tests
@@ -68,15 +94,40 @@ jobs:
             --configuration Release \
             --no-restore \
             --filter "Suite=Regression&Layer=Integration" \
+            --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults/integration \
             --logger "trx;LogFileName=critical-integration-tests.trx"
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Generate integration coverage report
+        if: always()
+        run: |
+          reportgenerator \
+            -reports:"./TestResults/integration/**/coverage.cobertura.xml" \
+            -targetdir:"./coverage/integration/report" \
+            -reporttypes:"Html;Cobertura;Badges;MarkdownSummaryGithub;TextSummary"
+
+      - name: Write integration coverage summary to job summary
+        if: always()
+        run: |
+          if [ -f "./coverage/integration/report/SummaryGithub.md" ]; then
+            echo "### Critical Integration Coverage" >> $GITHUB_STEP_SUMMARY
+            cat ./coverage/integration/report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Critical Integration Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "- Coverage summary unavailable" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Upload critical integration results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: critical-integration-test-results
-          path: ./TestResults/integration
+          path: |
+            ./TestResults/integration
+            ./coverage/integration/report
 
       - name: Integration summary
         if: always()
@@ -84,7 +135,7 @@ jobs:
           echo "### Critical Integration Tests" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- Filter: Suite=Regression & Layer=Integration" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifact: critical-integration-test-results" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: critical-integration-test-results (TRX + coverage HTML/Cobertura/Badges)" >> $GITHUB_STEP_SUMMARY
 
   newman-contract-tests:
     name: Newman Contract Tests
@@ -110,15 +161,17 @@ jobs:
 
       - name: Install Newman
         if: steps.detect_collection.outputs.exists == 'true'
-        run: npm install --global newman
+        run: npm install --global newman newman-reporter-htmlextra
 
       - name: Run Newman contract suite
         if: steps.detect_collection.outputs.exists == 'true'
         run: |
+          mkdir -p TestResults/newman
           newman run postman/NextTurn.postman_collection.json \
             --environment postman/nextturn.postman_environment.json \
-            --reporters cli,junit \
-            --reporter-junit-export TestResults/newman/newman-results.xml
+            --reporters cli,junit,htmlextra \
+            --reporter-junit-export TestResults/newman/newman-results.xml \
+            --reporter-htmlextra-export TestResults/newman/newman-results.html
 
       - name: Skip note when collection missing
         if: steps.detect_collection.outputs.exists != 'true'
@@ -138,7 +191,7 @@ jobs:
           echo "- Collection present: ${{ steps.detect_collection.outputs.exists }}" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.detect_collection.outputs.exists }}" = "true" ]; then
             echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-            echo "- Artifact: newman-contract-test-results" >> $GITHUB_STEP_SUMMARY
+            echo "- Artifact: newman-contract-test-results (JUnit XML + HTML report)" >> $GITHUB_STEP_SUMMARY
           else
             echo "- Status: skipped (collection not found)" >> $GITHUB_STEP_SUMMARY
           fi
@@ -192,6 +245,7 @@ jobs:
           python3 - <<'PY'
           import glob
           import html
+          import json
           import os
           import xml.etree.ElementTree as ET
 
@@ -220,6 +274,8 @@ jobs:
 
           os.makedirs('tests/e2e-playwright/test-results/smoke/playwright-report', exist_ok=True)
           report_path = 'tests/e2e-playwright/test-results/smoke/playwright-report/index.html'
+          summary_md_path = 'tests/e2e-playwright/test-results/smoke/playwright-report/summary.md'
+          summary_json_path = 'tests/e2e-playwright/test-results/smoke/playwright-report/summary.json'
 
           with open(report_path, 'w', encoding='utf-8') as f:
               f.write('<!doctype html><html><head><meta charset="utf-8"><title>Playwright Smoke Report</title>')
@@ -232,6 +288,22 @@ jobs:
                   css = 'pass' if outcome.lower() == 'passed' else ('fail' if outcome.lower() == 'failed' else '')
                   f.write(f'<tr><td>{html.escape(test_name)}</td><td class="{css}">{html.escape(outcome)}</td><td>{html.escape(duration)}</td></tr>')
               f.write('</tbody></table></body></html>')
+
+              with open(summary_md_path, 'w', encoding='utf-8') as f:
+                f.write('# Playwright Smoke Summary\n\n')
+                f.write(f'- Total: {total}\n')
+                f.write(f'- Passed: {passed}\n')
+                f.write(f'- Failed: {failed}\n')
+                f.write(f'- Skipped: {skipped}\n')
+
+              with open(summary_json_path, 'w', encoding='utf-8') as f:
+                json.dump({
+                  'suite': 'playwright-smoke',
+                  'total': total,
+                  'passed': passed,
+                  'failed': failed,
+                  'skipped': skipped,
+                }, f, indent=2)
           PY
 
       - name: Upload Playwright smoke artifacts
@@ -251,7 +323,7 @@ jobs:
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- Filter: NUnit.Where cat == Smoke (login + book + serve)" >> $GITHUB_STEP_SUMMARY
           echo "- Timeout gate: 5 minutes" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifact: playwright-smoke-artifacts (includes TRX + HTML + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: playwright-smoke-artifacts (includes TRX + HTML + Markdown/JSON summary + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
 
   playwright-full-regression:
     name: Playwright Full Regression
@@ -301,6 +373,7 @@ jobs:
           python3 - <<'PY'
           import glob
           import html
+          import json
           import os
           import xml.etree.ElementTree as ET
 
@@ -329,6 +402,8 @@ jobs:
 
           os.makedirs('tests/e2e-playwright/test-results/regression/playwright-report', exist_ok=True)
           report_path = 'tests/e2e-playwright/test-results/regression/playwright-report/index.html'
+          summary_md_path = 'tests/e2e-playwright/test-results/regression/playwright-report/summary.md'
+          summary_json_path = 'tests/e2e-playwright/test-results/regression/playwright-report/summary.json'
 
           with open(report_path, 'w', encoding='utf-8') as f:
               f.write('<!doctype html><html><head><meta charset="utf-8"><title>Playwright Full Regression Report</title>')
@@ -341,6 +416,22 @@ jobs:
                   css = 'pass' if outcome.lower() == 'passed' else ('fail' if outcome.lower() == 'failed' else '')
                   f.write(f'<tr><td>{html.escape(test_name)}</td><td class="{css}">{html.escape(outcome)}</td><td>{html.escape(duration)}</td></tr>')
               f.write('</tbody></table></body></html>')
+
+              with open(summary_md_path, 'w', encoding='utf-8') as f:
+                f.write('# Playwright Full Regression Summary\n\n')
+                f.write(f'- Total: {total}\n')
+                f.write(f'- Passed: {passed}\n')
+                f.write(f'- Failed: {failed}\n')
+                f.write(f'- Skipped: {skipped}\n')
+
+              with open(summary_json_path, 'w', encoding='utf-8') as f:
+                json.dump({
+                  'suite': 'playwright-regression',
+                  'total': total,
+                  'passed': passed,
+                  'failed': failed,
+                  'skipped': skipped,
+                }, f, indent=2)
           PY
 
       - name: Upload Playwright full regression artifacts
@@ -359,7 +450,7 @@ jobs:
           echo "### Playwright Full Regression" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- Filter: NUnit.Where cat == Regression (all journeys)" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifact: playwright-regression-artifacts (includes TRX + HTML + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: playwright-regression-artifacts (includes TRX + HTML + Markdown/JSON summary + screenshots + traces)" >> $GITHUB_STEP_SUMMARY
 
   regression-summary:
     name: Regression Summary
@@ -373,6 +464,11 @@ jobs:
       - playwright-full-regression
 
     steps:
+      - name: Download all suite artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
       - name: Publish pipeline summary
         run: |
           echo "## Regression Suite Overview" >> $GITHUB_STEP_SUMMARY
@@ -382,6 +478,86 @@ jobs:
           echo "- Playwright Smoke: ${{ needs.playwright-smoke.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Playwright Full Regression: ${{ needs.playwright-full-regression.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Artifacts page: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Build consolidated artifact index
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import os
+          import xml.etree.ElementTree as ET
+
+          ns = {'trx': 'http://microsoft.com/schemas/VisualStudio/TeamTest/2010'}
+
+          def trx_totals(pattern: str):
+              total = passed = failed = skipped = 0
+              for path in glob.glob(pattern, recursive=True):
+                  try:
+                      root = ET.parse(path).getroot()
+                      counters = root.find('.//trx:ResultSummary/trx:Counters', ns)
+                      if counters is None:
+                          continue
+                      total += int(counters.attrib.get('total', 0))
+                      passed += int(counters.attrib.get('passed', 0))
+                      failed += int(counters.attrib.get('failed', 0))
+                      skipped += int(counters.attrib.get('notExecuted', 0))
+                  except Exception:
+                      continue
+              return total, passed, failed, skipped
+
+          def xml_totals(pattern: str):
+              tests = failures = errors = skipped = 0
+              for path in glob.glob(pattern, recursive=True):
+                  try:
+                      root = ET.parse(path).getroot()
+                      tests += int(root.attrib.get('tests', 0))
+                      failures += int(root.attrib.get('failures', 0))
+                      errors += int(root.attrib.get('errors', 0))
+                      skipped += int(root.attrib.get('skipped', 0))
+                  except Exception:
+                      continue
+              failed = failures + errors
+              passed = max(tests - failed - skipped, 0)
+              return tests, passed, failed, skipped
+
+          os.makedirs('artifacts/test-reports/summary', exist_ok=True)
+          index_path = 'artifacts/test-reports/summary/README.md'
+
+          unit = trx_totals('artifacts/**/unit-tests.trx')
+          integration = trx_totals('artifacts/**/critical-integration-tests.trx')
+          smoke = trx_totals('artifacts/**/playwright-smoke.trx')
+          regression = trx_totals('artifacts/**/playwright-regression.trx')
+          newman = xml_totals('artifacts/**/newman-results.xml')
+
+          with open(index_path, 'w', encoding='utf-8') as f:
+              f.write('# QA Test Report Bundle\n\n')
+              f.write('## Suite Status\n')
+              f.write('- Unit Tests: ${{ needs.unit-tests.result }}\n')
+              f.write('- Critical Integration Tests: ${{ needs.critical-integration-tests.result }}\n')
+              f.write('- Newman Contract Tests: ${{ needs.newman-contract-tests.result }}\n')
+              f.write('- Playwright Smoke: ${{ needs.playwright-smoke.result }}\n')
+              f.write('- Playwright Full Regression: ${{ needs.playwright-full-regression.result }}\n\n')
+
+              f.write('## Parsed Totals\n')
+              f.write(f'- Unit: total={unit[0]}, passed={unit[1]}, failed={unit[2]}, skipped={unit[3]}\n')
+              f.write(f'- Critical Integration: total={integration[0]}, passed={integration[1]}, failed={integration[2]}, skipped={integration[3]}\n')
+              f.write(f'- Playwright Smoke: total={smoke[0]}, passed={smoke[1]}, failed={smoke[2]}, skipped={smoke[3]}\n')
+              f.write(f'- Playwright Full Regression: total={regression[0]}, passed={regression[1]}, failed={regression[2]}, skipped={regression[3]}\n')
+              f.write(f'- Newman: total={newman[0]}, passed={newman[1]}, failed={newman[2]}, skipped={newman[3]}\n\n')
+
+              f.write('## Artifact Directories\n')
+              for item in sorted(glob.glob('artifacts/*')):
+                  f.write(f'- {item}\n')
+
+          print(f'Wrote {index_path}')
+          PY
+
+      - name: Upload consolidated QA test report bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-test-report-bundle
+          path: ./artifacts
 
       - name: Fail when any suite failed
         if: |
