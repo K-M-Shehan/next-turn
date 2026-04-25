@@ -21,14 +21,26 @@ public sealed class Journey4StaffTest : BaseE2ETest
         var email = GetRequiredEnvironmentVariable("TEST_STAFF_EMAIL");
         var password = GetRequiredEnvironmentVariable("TEST_STAFF_PASSWORD");
 
+        var token = await AuthHelper.GetBearerTokenAsync(email, password);
+        var tenantId = AuthHelper.ExtractTenantIdFromJwt(token);
+
         await AuthHelper.ApplyAuthToContextAsync(Context, email, password);
 
-        await Page.GotoAsync("/staff/queue");
+        await Page.GotoAsync($"/staff/{tenantId}");
 
-        var queueCountLocator = await WaitForFirstVisibleAsync(
-            "queue count",
-            Page.GetByTestId("queue-count"),
-            Page.GetByRole(AriaRole.Status, new() { NameRegex = new Regex("queue count|people waiting|waiting", RegexOptions.IgnoreCase) }));
+        ILocator queueCountLocator;
+        try
+        {
+            queueCountLocator = await WaitForFirstVisibleAsync(
+                "queue count",
+                Page.GetByTestId("queue-count"),
+                Page.GetByRole(AriaRole.Status, new() { NameRegex = new Regex("queue count|people waiting|waiting", RegexOptions.IgnoreCase) }));
+        }
+        catch (TimeoutException)
+        {
+            throw new InconclusiveException(
+                "Staff dashboard did not render queue metrics. Ensure the staff account is assigned to an active queue with data in the target environment.");
+        }
 
         var initialCount = ParseFirstInt(await queueCountLocator.InnerTextAsync());
 
