@@ -21,8 +21,8 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
     [Retry(GlobalSetup.Retries)]
     public async Task CitizenCanBookAndCancelAppointmentAsync()
     {
-        var citizenEmail = GetRequiredEnvironmentVariable("TEST_CITIZEN_EMAIL");
-        var citizenPassword = GetRequiredEnvironmentVariable("TEST_CITIZEN_PASSWORD");
+        var citizenEmail = $"appt_e2e_{Guid.NewGuid():N}@nextturn.com";
+        var citizenPassword = $"Nt_{Guid.NewGuid():N}!A1";
         var adminEmail = GetRequiredEnvironmentVariable("TEST_ADMIN_EMAIL");
         var adminPassword = GetRequiredEnvironmentVariable("TEST_ADMIN_PASSWORD");
 
@@ -31,23 +31,21 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
         var appointmentProfileId = await CreateAppointmentProfileAsync(adminToken, tenantId);
         await ConfigureAlwaysOnScheduleAsync(adminToken, tenantId, appointmentProfileId);
 
+        await RegisterGlobalCitizenAsync(citizenEmail, citizenPassword);
         var citizenToken = await AuthHelper.GetBearerTokenAsync(citizenEmail, citizenPassword);
-        var slot = await FindFirstAvailableSlotAsync(citizenToken, tenantId, appointmentProfileId);
-
-        if (slot is null)
+        var appointmentId = await BookFirstAvailableAppointmentAsync(citizenToken, tenantId, appointmentProfileId);
+        if (string.IsNullOrWhiteSpace(appointmentId))
         {
             throw new InconclusiveException(
-                "Could not find an available appointment slot for the seeded profile within the next 14 days.");
+            "Could not create an appointment booking for the seeded profile within the next 14 days.");
         }
 
-        var appointmentId = await BookAppointmentAsync(
-            citizenToken,
-            tenantId,
-            appointmentProfileId,
-            slot.SlotStart,
-            slot.SlotEnd);
-
         await AuthHelper.ApplyAuthToContextAsync(Context, citizenEmail, citizenPassword);
+        await Context.SetExtraHTTPHeadersAsync(new Dictionary<string, string>
+        {
+            ["Authorization"] = $"Bearer {citizenToken}",
+            ["X-Tenant-Id"] = tenantId,
+        });
 
         await Page.GotoAsync($"/appointments/{tenantId}/{appointmentProfileId}");
 
@@ -148,10 +146,37 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
         }
     }
 
+    private static async Task RegisterGlobalCitizenAsync(string email, string password)
+    {
+        var apiBaseUrl = GetRequiredEnvironmentVariable("PLAYWRIGHT_API_URL").TrimEnd('/');
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{apiBaseUrl}/api/auth/register-global")
+        {
+            Content = JsonContent.Create(new
+            {
+                name = "E2E Citizen",
+                email,
+                phone = "0771234567",
+                password,
+            }),
+        };
+
+        using var response = await client.SendAsync(request);
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var payload = await response.Content.ReadAsStringAsync();
+        throw new InconclusiveException(
+            $"Could not register test global citizen account. Status={(int)response.StatusCode}, Body={payload}");
+    }
+
     private static async Task<AvailableSlotDto?> FindFirstAvailableSlotAsync(
         string citizenToken,
         string tenantId,
-        string appointmentProfileId)
+        string appointmentProfileId,
+        IReadOnlySet<DateOnly>? excludedDates = null)
     {
         var apiBaseUrl = GetRequiredEnvironmentVariable("PLAYWRIGHT_API_URL").TrimEnd('/');
         using var client = new HttpClient();
@@ -159,6 +184,11 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
         for (var offset = 0; offset < 14; offset++)
         {
             var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(offset));
+            if (excludedDates?.Contains(date) == true)
+            {
+                continue;
+            }
+
             var dateParam = date.ToString("yyyy-MM-dd");
 
             using var request = new HttpRequestMessage(
@@ -190,7 +220,51 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
         return null;
     }
 
-    private static async Task<string> BookAppointmentAsync(
+    private static async Task<string?> BookFirstAvailableAppointmentAsync(
+        string citizenToken,
+        string tenantId,
+        string appointmentProfileId)
+    {
+        var excludedDates = new HashSet<DateOnly>();
+
+        while (excludedDates.Count < 14)
+        {
+            var slot = await FindFirstAvailableSlotAsync(citizenToken, tenantId, appointmentProfileId, excludedDates);
+            if (slot is null)
+            {
+                return null;
+            }
+
+            var attempt = await TryBookAppointmentAsync(
+                citizenToken,
+                tenantId,
+                appointmentProfileId,
+                slot.SlotStart,
+                slot.SlotEnd);
+
+            if (attempt.Success)
+            {
+                return attempt.AppointmentId;
+            }
+
+            if (attempt.OnePerDay)
+            {
+                excludedDates.Add(DateOnly.FromDateTime(DateTimeOffset.Parse(slot.SlotStart).DateTime));
+                continue;
+            }
+
+            if (attempt.SlotConflict)
+            {
+                continue;
+            }
+
+            throw new InconclusiveException(attempt.ErrorMessage);
+        }
+
+        return null;
+    }
+
+    private static async Task<BookAttemptResult> TryBookAppointmentAsync(
         string citizenToken,
         string tenantId,
         string appointmentProfileId,
@@ -216,22 +290,56 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
         using var response = await client.SendAsync(request);
         var payload = await response.Content.ReadAsStringAsync();
 
-        if (!response.IsSuccessStatusCode)
+        if (response.IsSuccessStatusCode)
         {
-            throw new InconclusiveException(
-                $"Could not create appointment booking for smoke test. " +
-                $"Status={(int)response.StatusCode}, Body={payload}");
+            var booked = JsonSerializer.Deserialize<BookAppointmentResultDto>(payload,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (booked is null || string.IsNullOrWhiteSpace(booked.AppointmentId))
+            {
+                return new BookAttemptResult(
+                    Success: false,
+                    AppointmentId: null,
+                    OnePerDay: false,
+                    SlotConflict: false,
+                    ErrorMessage: "Book appointment response did not include appointmentId.");
+            }
+
+            return new BookAttemptResult(
+                Success: true,
+                AppointmentId: booked.AppointmentId,
+                OnePerDay: false,
+                SlotConflict: false,
+                ErrorMessage: null);
         }
 
-        var booked = JsonSerializer.Deserialize<BookAppointmentResultDto>(payload,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-        if (booked is null || string.IsNullOrWhiteSpace(booked.AppointmentId))
+        if ((int)response.StatusCode == 400 &&
+            payload.Contains("one appointment per day", StringComparison.OrdinalIgnoreCase))
         {
-            throw new AssertionException("Book appointment response did not include appointmentId.");
+            return new BookAttemptResult(
+                Success: false,
+                AppointmentId: null,
+                OnePerDay: true,
+                SlotConflict: false,
+                ErrorMessage: null);
         }
 
-        return booked.AppointmentId;
+        if ((int)response.StatusCode == 409)
+        {
+            return new BookAttemptResult(
+                Success: false,
+                AppointmentId: null,
+                OnePerDay: false,
+                SlotConflict: true,
+                ErrorMessage: null);
+        }
+
+        return new BookAttemptResult(
+            Success: false,
+            AppointmentId: null,
+            OnePerDay: false,
+            SlotConflict: false,
+            ErrorMessage: $"Could not create appointment booking for smoke test. Status={(int)response.StatusCode}, Body={payload}");
     }
 
     private sealed record ConfigureScheduleRequest(IReadOnlyList<AppointmentDayRuleDto> DayRules);
@@ -248,4 +356,11 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
     private sealed record AvailableSlotDto(string SlotStart, string SlotEnd, bool IsBooked);
 
     private sealed record BookAppointmentResultDto(string AppointmentId);
+
+    private sealed record BookAttemptResult(
+        bool Success,
+        string? AppointmentId,
+        bool OnePerDay,
+        bool SlotConflict,
+        string? ErrorMessage);
 }
