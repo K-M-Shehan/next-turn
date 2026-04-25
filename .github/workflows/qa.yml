@@ -231,7 +231,7 @@ jobs:
             --logger "trx;LogFileName=playwright-smoke.trx"
         env:
           CI: true
-          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
@@ -359,7 +359,7 @@ jobs:
             --logger "trx;LogFileName=playwright-regression.trx"
         env:
           CI: true
-          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
