@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Playwright;
 using NUnit.Framework;
@@ -27,45 +28,36 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
 
         var adminToken = await AuthHelper.GetBearerTokenAsync(adminEmail, adminPassword);
         var tenantId = AuthHelper.ExtractTenantIdFromJwt(adminToken);
-        var appointmentProfileId = await GetFirstActiveAppointmentProfileIdAsync(adminToken, tenantId);
+        var appointmentProfileId = await CreateAppointmentProfileAsync(adminToken, tenantId);
+        await ConfigureAlwaysOnScheduleAsync(adminToken, tenantId, appointmentProfileId);
 
-        if (string.IsNullOrWhiteSpace(appointmentProfileId))
+        var citizenToken = await AuthHelper.GetBearerTokenAsync(citizenEmail, citizenPassword);
+        var slot = await FindFirstAvailableSlotAsync(citizenToken, tenantId, appointmentProfileId);
+
+        if (slot is null)
         {
             throw new InconclusiveException(
-                "No active appointment profile is available for the configured tenant. " +
-                "Seed at least one active appointment profile before running smoke tests.");
+                "Could not find an available appointment slot for the seeded profile within the next 14 days.");
         }
+
+        var appointmentId = await BookAppointmentAsync(
+            citizenToken,
+            tenantId,
+            appointmentProfileId,
+            slot.SlotStart,
+            slot.SlotEnd);
 
         await AuthHelper.ApplyAuthToContextAsync(Context, citizenEmail, citizenPassword);
 
         await Page.GotoAsync($"/appointments/{tenantId}/{appointmentProfileId}");
 
-        var availableSlot = await WaitForFirstVisibleAsync(
-            "available appointment slot",
-            Page.Locator("button:not([disabled])").Filter(new()
-            {
-                HasTextRegex = new Regex(@"\d{1,2}:\d{2}", RegexOptions.IgnoreCase),
-            }).First,
-            Page.Locator("button:has-text('-'):not([disabled])").First);
+        var currentAppointmentCard = await WaitForFirstVisibleAsync(
+            "current appointment card",
+            Page.GetByTestId("current-appointment-card"),
+            Page.GetByText(new Regex("Current appointment", RegexOptions.IgnoreCase)));
 
-        await availableSlot.ClickAsync();
-
-        await ClickFirstAvailableAsync(
-            "confirm appointment",
-            Page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex("confirm appointment|confirm reschedule", RegexOptions.IgnoreCase) }));
-
-        var confirmationMessage = await WaitForFirstVisibleAsync(
-            "booking confirmation",
-            Page.GetByText(new Regex("Appointment (confirmed|rescheduled)", RegexOptions.IgnoreCase)),
-            Page.GetByText(new Regex("ID:\\s*[0-9a-f-]{36}", RegexOptions.IgnoreCase)));
-
-        await Expect(confirmationMessage).ToBeVisibleAsync();
-
-        var confirmationText = await confirmationMessage.InnerTextAsync();
-        Assert.That(
-            Regex.IsMatch(confirmationText, @"(?i)(appointment (confirmed|rescheduled)|\bid\b)"),
-            Is.True,
-            "Confirmation message should include booking success text and ID.");
+        await Expect(currentAppointmentCard).ToBeVisibleAsync();
+        await Expect(currentAppointmentCard).ToContainTextAsync(appointmentId);
 
         await ClickFirstAvailableAsync(
             "open cancel modal",
@@ -85,12 +77,17 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
         await Expect(cancellationMessage).ToBeVisibleAsync();
     }
 
-    private static async Task<string?> GetFirstActiveAppointmentProfileIdAsync(string adminToken, string tenantId)
+    private static async Task<string> CreateAppointmentProfileAsync(string adminToken, string tenantId)
     {
         var apiBaseUrl = GetRequiredEnvironmentVariable("PLAYWRIGHT_API_URL").TrimEnd('/');
-
         using var client = new HttpClient();
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{apiBaseUrl}/api/appointments/profiles");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{apiBaseUrl}/api/appointments/profiles")
+        {
+            Content = JsonContent.Create(new
+            {
+                name = $"E2E Smoke {Guid.NewGuid():N}",
+            }),
+        };
 
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
         request.Headers.Add("X-Tenant-Id", tenantId);
@@ -101,16 +98,154 @@ public sealed class Journey2AppointmentTest : BaseE2ETest
         if (!response.IsSuccessStatusCode)
         {
             throw new AssertionException(
-                $"Unable to list appointment profiles for tenant '{tenantId}'. " +
+                $"Unable to create appointment profile for tenant '{tenantId}'. " +
                 $"Status={(int)response.StatusCode}, Body={payload}");
         }
 
-        var profiles = JsonSerializer.Deserialize<List<AppointmentProfileDto>>(payload,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-            ?? [];
+        var created = JsonSerializer.Deserialize<AppointmentProfileDto>(payload,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-        return profiles.FirstOrDefault(p => p.IsActive)?.AppointmentProfileId;
+        if (created is null || string.IsNullOrWhiteSpace(created.AppointmentProfileId))
+        {
+            throw new AssertionException("Create profile response did not include appointmentProfileId.");
+        }
+
+        return created.AppointmentProfileId;
     }
 
+    private static async Task ConfigureAlwaysOnScheduleAsync(string adminToken, string tenantId, string appointmentProfileId)
+    {
+        var apiBaseUrl = GetRequiredEnvironmentVariable("PLAYWRIGHT_API_URL").TrimEnd('/');
+        using var client = new HttpClient();
+
+        var dayRules = Enumerable.Range(0, 7)
+            .Select(day => new AppointmentDayRuleDto(
+                DayOfWeek: day,
+                IsEnabled: true,
+                StartTime: "00:00:00",
+                EndTime: "23:59:00",
+                SlotDurationMinutes: 30))
+            .ToArray();
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            $"{apiBaseUrl}/api/appointments/config?appointmentProfileId={appointmentProfileId}")
+        {
+            Content = JsonContent.Create(new ConfigureScheduleRequest(dayRules)),
+        };
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+        request.Headers.Add("X-Tenant-Id", tenantId);
+
+        using var response = await client.SendAsync(request);
+        var payload = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new AssertionException(
+                $"Unable to configure appointment schedule for tenant '{tenantId}'. " +
+                $"Status={(int)response.StatusCode}, Body={payload}");
+        }
+    }
+
+    private static async Task<AvailableSlotDto?> FindFirstAvailableSlotAsync(
+        string citizenToken,
+        string tenantId,
+        string appointmentProfileId)
+    {
+        var apiBaseUrl = GetRequiredEnvironmentVariable("PLAYWRIGHT_API_URL").TrimEnd('/');
+        using var client = new HttpClient();
+
+        for (var offset = 0; offset < 14; offset++)
+        {
+            var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(offset));
+            var dateParam = date.ToString("yyyy-MM-dd");
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{apiBaseUrl}/api/appointments/slots?organisationId={tenantId}&appointmentProfileId={appointmentProfileId}&date={dateParam}");
+
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", citizenToken);
+            request.Headers.Add("X-Tenant-Id", tenantId);
+
+            using var response = await client.SendAsync(request);
+            var payload = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                continue;
+            }
+
+            var slots = JsonSerializer.Deserialize<List<AvailableSlotDto>>(payload,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? [];
+
+            var candidate = slots.FirstOrDefault(s => !s.IsBooked);
+            if (candidate is not null)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<string> BookAppointmentAsync(
+        string citizenToken,
+        string tenantId,
+        string appointmentProfileId,
+        string slotStart,
+        string slotEnd)
+    {
+        var apiBaseUrl = GetRequiredEnvironmentVariable("PLAYWRIGHT_API_URL").TrimEnd('/');
+        using var client = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{apiBaseUrl}/api/appointments")
+        {
+            Content = JsonContent.Create(new
+            {
+                organisationId = tenantId,
+                appointmentProfileId,
+                slotStart,
+                slotEnd,
+            }),
+        };
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", citizenToken);
+        request.Headers.Add("X-Tenant-Id", tenantId);
+
+        using var response = await client.SendAsync(request);
+        var payload = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InconclusiveException(
+                $"Could not create appointment booking for smoke test. " +
+                $"Status={(int)response.StatusCode}, Body={payload}");
+        }
+
+        var booked = JsonSerializer.Deserialize<BookAppointmentResultDto>(payload,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        if (booked is null || string.IsNullOrWhiteSpace(booked.AppointmentId))
+        {
+            throw new AssertionException("Book appointment response did not include appointmentId.");
+        }
+
+        return booked.AppointmentId;
+    }
+
+    private sealed record ConfigureScheduleRequest(IReadOnlyList<AppointmentDayRuleDto> DayRules);
+
+    private sealed record AppointmentDayRuleDto(
+        int DayOfWeek,
+        bool IsEnabled,
+        string StartTime,
+        string EndTime,
+        int SlotDurationMinutes);
+
     private sealed record AppointmentProfileDto(string AppointmentProfileId, string Name, bool IsActive, string ShareableLink);
+
+    private sealed record AvailableSlotDto(string SlotStart, string SlotEnd, bool IsBooked);
+
+    private sealed record BookAppointmentResultDto(string AppointmentId);
 }
