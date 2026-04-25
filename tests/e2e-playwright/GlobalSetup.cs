@@ -17,6 +17,12 @@ public sealed class GlobalSetup
     public static readonly bool Headless =
         string.Equals(Environment.GetEnvironmentVariable("CI"), "true", StringComparison.OrdinalIgnoreCase);
 
+    public static readonly string Browser =
+        (Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSER") ?? "chromium").Trim().ToLowerInvariant();
+
+    public static readonly string? BrowserExecutablePath =
+        Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSER_EXECUTABLE_PATH");
+
     [OneTimeSetUp]
     public async Task Initialize()
     {
@@ -27,6 +33,11 @@ public sealed class GlobalSetup
 
         TestContext.Progress.WriteLine($"Playwright Base URL: {BaseUrl}");
         TestContext.Progress.WriteLine($"Playwright Headless: {Headless}");
+        TestContext.Progress.WriteLine($"Playwright Browser: {Browser}");
+        if (!string.IsNullOrWhiteSpace(BrowserExecutablePath))
+        {
+            TestContext.Progress.WriteLine($"Playwright Browser Executable: {BrowserExecutablePath}");
+        }
         TestContext.Progress.WriteLine($"Retries per test: {Retries}");
         TestContext.Progress.WriteLine($"Default timeout (ms): {TimeoutMs}");
         TestContext.Progress.WriteLine($"Playwright Base URL reachable: {IsBaseUrlReachable}");

@@ -8,6 +8,11 @@ namespace NextTurn.E2E.Playwright;
 public abstract class BaseE2ETest
 {
     private IPlaywright? _playwright;
+    private static readonly string BrowserName =
+        (Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSER") ?? "chromium").Trim().ToLowerInvariant();
+
+    private static readonly string? BrowserExecutablePath =
+        ResolveBrowserExecutablePath();
 
     protected IBrowser Browser { get; private set; } = null!;
 
@@ -29,10 +34,23 @@ public abstract class BaseE2ETest
         }
 
         _playwright = await Microsoft.Playwright.Playwright.CreateAsync();
-        Browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        var launchOptions = new BrowserTypeLaunchOptions
         {
             Headless = GlobalSetup.Headless,
-        });
+        };
+
+        if (!string.IsNullOrWhiteSpace(BrowserExecutablePath))
+        {
+            launchOptions.ExecutablePath = BrowserExecutablePath;
+        }
+
+        Browser = BrowserName switch
+        {
+            "firefox" => await _playwright.Firefox.LaunchAsync(launchOptions),
+            "chromium" => await _playwright.Chromium.LaunchAsync(launchOptions),
+            _ => throw new InconclusiveException(
+                "Invalid PLAYWRIGHT_BROWSER value. Supported values are 'chromium' and 'firefox'.")
+        };
 
         Context = await Browser.NewContextAsync(new BrowserNewContextOptions
         {
@@ -174,5 +192,33 @@ public abstract class BaseE2ETest
         }
 
         return value;
+    }
+
+    private static string? ResolveBrowserExecutablePath()
+    {
+        var explicitPath = Environment.GetEnvironmentVariable("PLAYWRIGHT_BROWSER_EXECUTABLE_PATH");
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+        {
+            return explicitPath;
+        }
+
+        if (BrowserName != "firefox" || !OperatingSystem.IsLinux())
+        {
+            return null;
+        }
+
+        // Linux local-dev fallback: detect Zen Flatpak binary automatically.
+        var stableRoot = "/var/lib/flatpak/app/app.zen_browser.zen/x86_64/stable";
+        if (!Directory.Exists(stableRoot))
+        {
+            return null;
+        }
+
+        var candidate = Directory
+            .EnumerateDirectories(stableRoot)
+            .Select(hashDir => Path.Combine(hashDir, "files", "zen", "zen"))
+            .FirstOrDefault(File.Exists);
+
+        return candidate;
     }
 }
