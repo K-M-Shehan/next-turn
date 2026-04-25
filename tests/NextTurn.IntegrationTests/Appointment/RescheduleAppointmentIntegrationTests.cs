@@ -49,7 +49,7 @@ public sealed class RescheduleAppointmentIntegrationTests
         var ownerId = Guid.NewGuid();
         var ownerClient = AuthenticatedClient(UserRole.User, ownerId, _tenantId);
 
-        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var date = NextBusinessDate();
         var (oldStart, oldEnd) = SlotAt(date, 10, 0);
         var (newStart, newEnd) = SlotAt(date, 11, 0);
 
@@ -120,6 +120,17 @@ public sealed class RescheduleAppointmentIntegrationTests
         var slotStart = new DateTimeOffset(date.ToDateTime(new TimeOnly(hour, minute)), TimeSpan.Zero);
         var slotEnd = slotStart.AddMinutes(30);
         return (slotStart, slotEnd);
+    }
+
+    private static DateOnly NextBusinessDate()
+    {
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        while (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            date = date.AddDays(1);
+        }
+
+        return date;
     }
 
     private sealed record BookAppointmentApiResult(Guid AppointmentId);

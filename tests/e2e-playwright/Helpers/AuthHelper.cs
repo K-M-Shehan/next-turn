@@ -20,6 +20,10 @@ public static class AuthHelper
         Environment.GetEnvironmentVariable("PLAYWRIGHT_BASE_URL")?.TrimEnd('/')
         ?? "http://localhost:5173";
 
+    private static readonly string ApiBaseUrl =
+        Environment.GetEnvironmentVariable("PLAYWRIGHT_API_URL")?.TrimEnd('/')
+        ?? BaseUrl;
+
     public static async Task<string> GetBearerTokenAsync(string username, string password, CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{username}:{password}";
@@ -30,11 +34,11 @@ public static class AuthHelper
 
         var requestBody = new
         {
-            username,
+            email = username,
             password,
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(BaseUrl), "/api/auth/login"))
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(ApiBaseUrl), "/api/auth/login"))
         {
             Content = JsonContent.Create(requestBody),
         };

@@ -193,10 +193,21 @@ public sealed class BookAppointmentIntegrationTests
 
     private static (DateTimeOffset SlotStart, DateTimeOffset SlotEnd) SlotForTomorrow(int hour, int minute)
     {
-        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        var date = NextBusinessDate();
         var slotStart = new DateTimeOffset(date.ToDateTime(new TimeOnly(hour, minute)), TimeSpan.Zero);
         var slotEnd = slotStart.AddMinutes(30);
         return (slotStart, slotEnd);
+    }
+
+    private static DateOnly NextBusinessDate()
+    {
+        var date = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        while (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        {
+            date = date.AddDays(1);
+        }
+
+        return date;
     }
 
     private sealed record BookAppointmentApiResult(Guid AppointmentId);

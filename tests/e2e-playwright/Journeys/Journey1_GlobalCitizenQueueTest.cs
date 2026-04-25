@@ -89,6 +89,13 @@ public sealed class Journey1GlobalCitizenQueueTest : BaseE2ETest
 
         await Page.GotoAsync("/queues");
 
+        var joinButton = Page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex("join queue|join", RegexOptions.IgnoreCase) }).First;
+        if (!await joinButton.IsEnabledAsync())
+        {
+            throw new InconclusiveException(
+                "Join Queue button is disabled. Provide a joinable queue in the target environment before running citizen smoke tests.");
+        }
+
         await ClickFirstAvailableAsync(
             "join queue",
             Page.GetByRole(AriaRole.Button, new() { NameRegex = new Regex("join queue|join", RegexOptions.IgnoreCase) }),

@@ -40,7 +40,7 @@ jobs:
       - name: Generate unit coverage report
         if: always()
         run: |
-          reportgenerator \
+          $HOME/.dotnet/tools/reportgenerator \
             -reports:"./TestResults/unit/**/coverage.cobertura.xml" \
             -targetdir:"./coverage/unit/report" \
             -reporttypes:"Html;Cobertura;Badges;MarkdownSummaryGithub;TextSummary"
@@ -104,7 +104,7 @@ jobs:
       - name: Generate integration coverage report
         if: always()
         run: |
-          reportgenerator \
+          $HOME/.dotnet/tools/reportgenerator \
             -reports:"./TestResults/integration/**/coverage.cobertura.xml" \
             -targetdir:"./coverage/integration/report" \
             -reporttypes:"Html;Cobertura;Badges;MarkdownSummaryGithub;TextSummary"
@@ -232,6 +232,7 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_API_URL: ${{ secrets.PLAYWRIGHT_API_URL != '' && secrets.PLAYWRIGHT_API_URL || secrets.VITE_API_URL != '' && secrets.VITE_API_URL || secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
@@ -360,6 +361,7 @@ jobs:
         env:
           CI: true
           PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_API_URL: ${{ secrets.PLAYWRIGHT_API_URL != '' && secrets.PLAYWRIGHT_API_URL || secrets.VITE_API_URL != '' && secrets.VITE_API_URL || secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
