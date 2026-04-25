@@ -24,6 +24,10 @@ public static class AuthHelper
         Environment.GetEnvironmentVariable("PLAYWRIGHT_API_URL")?.TrimEnd('/')
         ?? BaseUrl;
 
+    private static readonly string? TenantId =
+        Environment.GetEnvironmentVariable("PLAYWRIGHT_TENANT_ID")
+        ?? Environment.GetEnvironmentVariable("TEST_TENANT_ID");
+
     public static async Task<string> GetBearerTokenAsync(string username, string password, CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{username}:{password}";
@@ -44,12 +48,24 @@ public static class AuthHelper
         };
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        if (!string.IsNullOrWhiteSpace(TenantId))
+        {
+            request.Headers.Add("X-Tenant-Id", TenantId);
+        }
 
         using var response = await Client.SendAsync(request, cancellationToken);
         var content = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
+            if ((int)response.StatusCode == 400 &&
+                content.Contains("X-Tenant-Id", StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrWhiteSpace(TenantId))
+            {
+                throw new AssertionException(
+                    "Authentication failed because tenant context is missing. Set PLAYWRIGHT_TENANT_ID (or TEST_TENANT_ID) in CI secrets/environment.");
+            }
+
             throw new AssertionException(
                 $"Authentication failed with status code {(int)response.StatusCode}. Body: {content}");
         }

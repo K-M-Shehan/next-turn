@@ -233,6 +233,7 @@ jobs:
           CI: true
           PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
           PLAYWRIGHT_API_URL: ${{ secrets.PLAYWRIGHT_API_URL != '' && secrets.PLAYWRIGHT_API_URL || secrets.VITE_API_URL != '' && secrets.VITE_API_URL || secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_TENANT_ID: ${{ secrets.PLAYWRIGHT_TENANT_ID }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
@@ -362,6 +363,7 @@ jobs:
           CI: true
           PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
           PLAYWRIGHT_API_URL: ${{ secrets.PLAYWRIGHT_API_URL != '' && secrets.PLAYWRIGHT_API_URL || secrets.VITE_API_URL != '' && secrets.VITE_API_URL || secrets.PLAYWRIGHT_BASE_URL_PROD != '' && secrets.PLAYWRIGHT_BASE_URL_PROD || secrets.PLAYWRIGHT_BASE_URL }}
+          PLAYWRIGHT_TENANT_ID: ${{ secrets.PLAYWRIGHT_TENANT_ID }}
           TEST_ADMIN_EMAIL: ${{ secrets.TEST_ADMIN_EMAIL }}
           TEST_ADMIN_PASSWORD: ${{ secrets.TEST_ADMIN_PASSWORD }}
           TEST_STAFF_EMAIL: ${{ secrets.TEST_STAFF_EMAIL }}
