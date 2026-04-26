@@ -135,17 +135,19 @@ public static class AuthHelper
     public static async Task ApplyAuthToContextAsync(IBrowserContext context, string username, string password, CancellationToken cancellationToken = default)
     {
         var token = await GetBearerTokenAsync(username, password, cancellationToken);
+        // Escape the token for use in JavaScript by wrapping in quotes
+        var escapedToken = token.Replace("\\", "\\\\").Replace("'", "\\'");
 
         await context.SetExtraHTTPHeadersAsync(new Dictionary<string, string>
         {
             ["Authorization"] = $"Bearer {token}",
         });
 
-        var serializedToken = JsonSerializer.Serialize(token);
         await context.AddInitScriptAsync(
-            $"window.localStorage.setItem('token', {serializedToken});" +
-            $"window.localStorage.setItem('accessToken', {serializedToken});" +
-            $"window.localStorage.setItem('authToken', {serializedToken});");
+            $"window.localStorage.setItem('nt_access_token', '{escapedToken}');" +
+            $"window.localStorage.setItem('token', '{escapedToken}');" +
+            $"window.localStorage.setItem('accessToken', '{escapedToken}');" +
+            $"window.localStorage.setItem('authToken', '{escapedToken}');");
     }
 
     private static string ExtractToken(string content)
