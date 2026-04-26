@@ -89,7 +89,7 @@ describe('ProtectedRoute — unauthenticated', () => {
     expect(screen.queryByText('Protected Content')).not.toBeInTheDocument()
   })
 
-  it('redirects to / when tenantId is absent from the URL', () => {
+  it('redirects to /login with returnTo when tenantId is absent from the URL', () => {
     render(
       <MemoryRouter initialEntries={['/dashboard']}>
         <Routes>
@@ -102,11 +102,11 @@ describe('ProtectedRoute — unauthenticated', () => {
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<div>Welcome Page</div>} />
+          <Route path="/login" element={<div>Login Page</div>} />
         </Routes>
       </MemoryRouter>
     )
-    expect(screen.getByText('Welcome Page')).toBeInTheDocument()
+    expect(screen.getByText('Login Page')).toBeInTheDocument()
   })
 })
 
